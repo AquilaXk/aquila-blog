@@ -1,5 +1,6 @@
 package com.back.global.revalidate.adapter.event
 
+import com.back.boundedContexts.member.application.event.MemberPublicProfileChangedEvent
 import com.back.boundedContexts.post.event.PostDeletedEvent
 import com.back.boundedContexts.post.event.PostModifiedEvent
 import com.back.boundedContexts.post.event.PostWrittenEvent
@@ -34,6 +35,21 @@ class RevalidateEventListener(
     )
     fun handle(event: PostDeletedEvent) = enqueueRevalidatePaths(event.uid, event.aggregateType, event.aggregateId)
 
+    @TransactionalEventListener(
+        phase = TransactionPhase.AFTER_COMMIT,
+    )
+    fun handle(event: MemberPublicProfileChangedEvent) =
+        enqueueRevalidatePaths(
+            sourceEventUid = UUID.randomUUID(),
+            aggregateType = "Member",
+            aggregateId = event.memberId,
+            pathsToRevalidate =
+                linkedSetOf(
+                    "/",
+                    "/about",
+                ),
+        )
+
     @TaskHandler
     fun handle(payload: RevalidateHomePayload) {
         revalidateService.revalidatePathOrThrow(payload.path)
@@ -43,14 +59,13 @@ class RevalidateEventListener(
         sourceEventUid: UUID,
         aggregateType: String,
         aggregateId: Long,
-    ) {
-        val pathsToRevalidate =
+        pathsToRevalidate: Set<String> =
             linkedSetOf(
                 "/",
                 "/posts/$aggregateId",
                 "/sitemap.xml",
-            )
-
+            ),
+    ) {
         val failures = mutableListOf<Throwable>()
         pathsToRevalidate.forEach { path ->
             runCatching {

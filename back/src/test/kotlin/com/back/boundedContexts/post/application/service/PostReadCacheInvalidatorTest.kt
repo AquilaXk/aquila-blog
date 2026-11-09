@@ -55,19 +55,35 @@ class PostReadCacheInvalidatorTest {
         // given
         val callbackCalls = mutableListOf<Unit>()
         put(PostQueryCacheNames.FEED, "page=1:size=30:sort=CREATED_AT")
+        put(PostQueryCacheNames.FEED, "page=1:size=30:sort=CREATED_AT_ASC")
         put(PostQueryCacheNames.FEED, "page=1:size=30:sort=HIT_COUNT")
         put(PostQueryCacheNames.FEED, "page=1:size=30:sort=LIKES_COUNT")
+        put(PostQueryCacheNames.FEED, "page=2:size=10:sort=CREATED_AT")
         put(PostQueryCacheNames.EXPLORE, "page=1:size=30:sort=CREATED_AT:kw=_:tag=_")
+        put(PostQueryCacheNames.EXPLORE, "page=1:size=30:sort=CREATED_AT_ASC:kw=_:tag=_")
         put(PostQueryCacheNames.EXPLORE, "page=1:size=30:sort=CREATED_AT:kw=_:tag=kotlin")
+        put(PostQueryCacheNames.EXPLORE, "page=1:size=30:sort=CREATED_AT_ASC:kw=_:tag=kotlin")
+        put(PostQueryCacheNames.EXPLORE, "page=3:size=10:sort=CREATED_AT_ASC:kw=_:tag=other")
         put(PostQueryCacheNames.FEED_CURSOR_FIRST, "size=30:sort=CREATED_AT")
+        put(PostQueryCacheNames.FEED_CURSOR_FIRST, "size=30:sort=CREATED_AT_ASC")
         put(PostQueryCacheNames.FEED_CURSOR_FIRST, "size=30:sort=HIT_COUNT")
         put(PostQueryCacheNames.FEED_CURSOR_FIRST, "size=30:sort=LIKES_COUNT")
         put(PostQueryCacheNames.EXPLORE_CURSOR_FIRST, "size=30:sort=CREATED_AT:tag=kotlin")
+        put(PostQueryCacheNames.EXPLORE_CURSOR_FIRST, "size=30:sort=CREATED_AT_ASC:tag=_")
+        put(PostQueryCacheNames.EXPLORE_CURSOR_FIRST, "size=30:sort=CREATED_AT_ASC:tag=kotlin")
         put(PostQueryCacheNames.EXPLORE_CURSOR_FIRST, "size=30:sort=HIT_COUNT:tag=_")
         put(PostQueryCacheNames.EXPLORE_CURSOR_FIRST, "size=30:sort=LIKES_COUNT:tag=_")
         put(
             PostQueryCacheNames.BOOTSTRAP,
             PostPublicReadQueryService.buildBootstrapCacheKey(30, PostSearchSortType1.CREATED_AT, "Kotlin"),
+        )
+        put(
+            PostQueryCacheNames.BOOTSTRAP,
+            PostPublicReadQueryService.buildBootstrapCacheKey(30, PostSearchSortType1.CREATED_AT_ASC, ""),
+        )
+        put(
+            PostQueryCacheNames.BOOTSTRAP,
+            PostPublicReadQueryService.buildBootstrapCacheKey(30, PostSearchSortType1.CREATED_AT_ASC, "Kotlin"),
         )
         put(
             PostQueryCacheNames.BOOTSTRAP,
@@ -108,20 +124,40 @@ class PostReadCacheInvalidatorTest {
         // then
         assertThat(callbackCalls).hasSize(1)
         assertThat(get(PostQueryCacheNames.FEED, "page=1:size=30:sort=CREATED_AT")).isNull()
+        assertThat(get(PostQueryCacheNames.FEED, "page=1:size=30:sort=CREATED_AT_ASC")).isNull()
         assertThat(get(PostQueryCacheNames.FEED, "page=1:size=30:sort=HIT_COUNT")).isNull()
         assertThat(get(PostQueryCacheNames.FEED, "page=1:size=30:sort=LIKES_COUNT")).isNull()
+        assertThat(get(PostQueryCacheNames.FEED, "page=2:size=10:sort=CREATED_AT")).isNull()
         assertThat(get(PostQueryCacheNames.EXPLORE, "page=1:size=30:sort=CREATED_AT:kw=_:tag=_")).isNull()
+        assertThat(get(PostQueryCacheNames.EXPLORE, "page=1:size=30:sort=CREATED_AT_ASC:kw=_:tag=_")).isNull()
         assertThat(get(PostQueryCacheNames.EXPLORE, "page=1:size=30:sort=CREATED_AT:kw=_:tag=kotlin")).isNull()
+        assertThat(get(PostQueryCacheNames.EXPLORE, "page=1:size=30:sort=CREATED_AT_ASC:kw=_:tag=kotlin")).isNull()
+        assertThat(get(PostQueryCacheNames.EXPLORE, "page=3:size=10:sort=CREATED_AT_ASC:kw=_:tag=other")).isNull()
         assertThat(get(PostQueryCacheNames.FEED_CURSOR_FIRST, "size=30:sort=CREATED_AT")).isNull()
+        assertThat(get(PostQueryCacheNames.FEED_CURSOR_FIRST, "size=30:sort=CREATED_AT_ASC")).isNull()
         assertThat(get(PostQueryCacheNames.FEED_CURSOR_FIRST, "size=30:sort=HIT_COUNT")).isNull()
         assertThat(get(PostQueryCacheNames.FEED_CURSOR_FIRST, "size=30:sort=LIKES_COUNT")).isNull()
         assertThat(get(PostQueryCacheNames.EXPLORE_CURSOR_FIRST, "size=30:sort=CREATED_AT:tag=kotlin")).isNull()
+        assertThat(get(PostQueryCacheNames.EXPLORE_CURSOR_FIRST, "size=30:sort=CREATED_AT_ASC:tag=_")).isNull()
+        assertThat(get(PostQueryCacheNames.EXPLORE_CURSOR_FIRST, "size=30:sort=CREATED_AT_ASC:tag=kotlin")).isNull()
         assertThat(get(PostQueryCacheNames.EXPLORE_CURSOR_FIRST, "size=30:sort=HIT_COUNT:tag=_")).isNull()
         assertThat(get(PostQueryCacheNames.EXPLORE_CURSOR_FIRST, "size=30:sort=LIKES_COUNT:tag=_")).isNull()
         assertThat(
             get(
                 PostQueryCacheNames.BOOTSTRAP,
                 PostPublicReadQueryService.buildBootstrapCacheKey(30, PostSearchSortType1.CREATED_AT, "Kotlin"),
+            ),
+        ).isNull()
+        assertThat(
+            get(
+                PostQueryCacheNames.BOOTSTRAP,
+                PostPublicReadQueryService.buildBootstrapCacheKey(30, PostSearchSortType1.CREATED_AT_ASC, ""),
+            ),
+        ).isNull()
+        assertThat(
+            get(
+                PostQueryCacheNames.BOOTSTRAP,
+                PostPublicReadQueryService.buildBootstrapCacheKey(30, PostSearchSortType1.CREATED_AT_ASC, "Kotlin"),
             ),
         ).isNull()
         assertThat(

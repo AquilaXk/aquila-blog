@@ -199,6 +199,52 @@ class PostApplicationServiceAfterCommitTest : BasePostApplicationServiceAfterCom
     }
 
     @Test
+    @DisplayName("조회수·좋아요 증감 commit 직후 비동기 task 실행 전이라도 상세 카운터 캐시를 즉시 무효화한다")
+    fun incrementHitAndLikeCommitEvictPublicDetailCountersImmediatelyBeforeTaskHandlerRuns() {
+        val admin = actorApplicationService.findByEmail("admin@test.com")!!
+        val post =
+            requireNotNull(
+                transactionTemplate.execute {
+                    postApplicationService.write(
+                        author = admin,
+                        title = "immediate counter cache eviction source",
+                        content = "immediate counter cache eviction content",
+                        published = true,
+                        listed = true,
+                        summaryMode = PostSummaryMode.AUTO,
+                    )
+                },
+            )
+
+        clearSideEffectMocks()
+        transactionTemplate.executeWithoutResult {
+            postApplicationService.incrementHit(postApplicationService.findById(post.id)!!)
+        }
+        assertThat(cacheLookupNames()).contains(
+            PostQueryCacheNames.DETAIL_PUBLIC_SNAPSHOT,
+            PostQueryCacheNames.DETAIL_PUBLIC_META,
+        )
+
+        clearSideEffectMocks()
+        transactionTemplate.executeWithoutResult {
+            postApplicationService.incrementLike(postApplicationService.findById(post.id)!!)
+        }
+        assertThat(cacheLookupNames()).contains(
+            PostQueryCacheNames.DETAIL_PUBLIC_SNAPSHOT,
+            PostQueryCacheNames.DETAIL_PUBLIC_META,
+        )
+
+        clearSideEffectMocks()
+        transactionTemplate.executeWithoutResult {
+            postApplicationService.decrementLike(postApplicationService.findById(post.id)!!)
+        }
+        assertThat(cacheLookupNames()).contains(
+            PostQueryCacheNames.DETAIL_PUBLIC_SNAPSHOT,
+            PostQueryCacheNames.DETAIL_PUBLIC_META,
+        )
+    }
+
+    @Test
     @DisplayName("글 작성 트랜잭션이 commit되면 durable task 실행으로 첨부파일·추천 후속 작업을 처리한다")
     fun writeCommitRunsSideEffects() {
         // given

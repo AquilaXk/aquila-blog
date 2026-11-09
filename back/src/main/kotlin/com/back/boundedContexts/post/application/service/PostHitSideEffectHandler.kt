@@ -19,8 +19,6 @@ class PostHitSideEffectHandler(
             payload.reason,
             listOf(targetSort),
         )
-        if (payload.reason == "like" || payload.reason == "unlike") {
-            postReadCacheInvalidator.invalidatePublicDetailCounters(payload.postId, payload.reason)
-        }
+        postReadCacheInvalidator.invalidatePublicDetailCounters(payload.postId, payload.reason)
     }
 }

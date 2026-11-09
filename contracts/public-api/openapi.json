@@ -3797,6 +3797,12 @@
               "UNKNOWN",
               "REJECTED"
             ]
+          },
+          "thumbnail": {
+            "type": [
+              "string",
+              "null"
+            ]
           }
         }
       },

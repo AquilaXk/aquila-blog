@@ -34,6 +34,7 @@ data class PostWithContentDto(
     @field:Schema(allowableValues = [HtmlContentSanitizer.CURRENT_POLICY_VERSION])
     val contentHtmlSanitizerPolicyVersion: String? = null,
     val contentHtmlTrustState: ContentHtmlTrustState = ContentHtmlTrustState.UNKNOWN,
+    val thumbnail: String? = null,
 ) {
     private constructor(post: Post, contentHtmlTrust: ContentHtmlTrustResult) : this(
         post.id,
@@ -58,6 +59,7 @@ data class PostWithContentDto(
         contentHtmlHash = contentHtmlTrust.contentHtmlHash,
         contentHtmlSanitizerPolicyVersion = contentHtmlTrust.contentHtmlSanitizerPolicyVersion,
         contentHtmlTrustState = contentHtmlTrust.contentHtmlTrustState,
+        thumbnail = post.thumbnail ?: runCatching { PostPreviewExtractor.extractThumbnail(post.content) }.getOrNull(),
     )
 
     constructor(post: Post) : this(

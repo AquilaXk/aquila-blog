@@ -1,5 +1,6 @@
 package com.back.global.revalidate
 
+import com.back.boundedContexts.member.application.event.MemberPublicProfileChangedEvent
 import com.back.boundedContexts.member.application.service.MemberApplicationService
 import com.back.boundedContexts.member.dto.MemberDto
 import com.back.boundedContexts.post.application.service.PostApplicationService
@@ -88,5 +89,47 @@ class RevalidateEventListenerTest : BaseSeededIntegrationTest() {
         assertThat(revalidateTasks.map { it.status }).allMatch { status ->
             status in listOf(TaskStatus.PENDING, TaskStatus.PROCESSING, TaskStatus.COMPLETED)
         }
+    }
+
+    @Test
+    fun `공개 프로필 변경 시 홈과 소개 페이지 revalidate task가 큐에 적재된다`() {
+        val testId = UUID.randomUUID().toString().take(8)
+        val member =
+            memberApplicationService.join(
+                username = "revalidate-profile-$testId",
+                password = "Abcd1234!",
+                nickname = "프로필작성자-$testId",
+                profileImgUrl = null,
+                email = "revalidate-profile-$testId@example.com",
+            )
+
+        val previousTaskIds = taskRepository.findAll().map { it.id }.toSet()
+        revalidateEventListener.handle(
+            MemberPublicProfileChangedEvent(
+                memberId = member.id,
+                previousNickname = member.nickname,
+                currentNickname = "새닉네임-$testId",
+                previousProfileImgUrl = "",
+                currentProfileImgUrl = "",
+            ),
+        )
+
+        val revalidateTasks =
+            taskRepository
+                .findAll()
+                .filter { task ->
+                    task.id !in previousTaskIds &&
+                        task.taskType == "global.revalidate.home" &&
+                        task.aggregateType == "Member" &&
+                        task.aggregateId == member.id
+                }
+
+        assertThat(revalidateTasks).hasSize(2)
+        val paths =
+            revalidateTasks.map { task ->
+                val envelope = objectMapper.readValue(task.payload, TaskPayloadEnvelope::class.java)
+                objectMapper.readValue(envelope.payloadJson, RevalidateHomePayload::class.java).path
+            }
+        assertThat(paths).containsExactlyInAnyOrder("/", "/about")
     }
 }

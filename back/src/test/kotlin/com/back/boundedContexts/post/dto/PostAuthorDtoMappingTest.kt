@@ -96,6 +96,40 @@ class PostAuthorDtoMappingTest {
     }
 
     @Test
+    @DisplayName("detail DTO 및 공개 상세 캐시 DTO는 명시 썸네일과 본문 추출 썸네일을 보존한다")
+    fun mapsAndPreservesDetailThumbnailAcrossCacheDtos() {
+        val markdownThumbnailPost =
+            postByAuthor(username = "aquila-login", nickname = "아퀼라").apply {
+                content = "본문 앞단\n\n![대표 이미지](https://cdn.example.com/posts/10/cover.webp)\n\n본문 뒷단"
+            }
+
+        val extractedDetail = PostWithContentDto(markdownThumbnailPost)
+        val mergedFromMetaAndContent =
+            PublicPostDetailMetaCacheDto
+                .from(markdownThumbnailPost)
+                .merge(PublicPostDetailContentCacheDto.from(markdownThumbnailPost))
+        val restoredFromSnapshot =
+            PublicPostDetailSnapshotCacheDto
+                .from(extractedDetail)
+                .toPostWithContentDto()
+
+        assertThat(extractedDetail.thumbnail).isEqualTo("https://cdn.example.com/posts/10/cover.webp")
+        assertThat(mergedFromMetaAndContent.thumbnail).isEqualTo("https://cdn.example.com/posts/10/cover.webp")
+        assertThat(restoredFromSnapshot.thumbnail).isEqualTo("https://cdn.example.com/posts/10/cover.webp")
+
+        val explicitThumbnailPost =
+            postByAuthor(username = "aquila-login", nickname = "아퀼라").apply {
+                thumbnail = "https://cdn.example.com/posts/10/explicit.webp"
+                content = "![본문 이미지](https://cdn.example.com/posts/10/cover.webp)"
+            }
+
+        assertThat(PostWithContentDto(explicitThumbnailPost).thumbnail)
+            .isEqualTo("https://cdn.example.com/posts/10/explicit.webp")
+        assertThat(PublicPostDetailMetaCacheDto.from(explicitThumbnailPost).thumbnail)
+            .isEqualTo("https://cdn.example.com/posts/10/explicit.webp")
+    }
+
+    @Test
     @DisplayName("action log DTO는 canonical summary 원문을 제거한다")
     fun removesCanonicalSummaryFromEventLogDto() {
         val eventLogDto =

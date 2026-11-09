@@ -94,6 +94,7 @@ class OpenApiContractExportTest : BaseControllerIntegrationTest() {
         assertThat(schemas.has("PostSummaryPreviewResponse")).isFalse()
         assertThat(schemas.has("PostSummaryBackfillRequest")).isFalse()
         assertThat(schemas.has("PostSummaryBackfillResponse")).isFalse()
+        assertTypeSet(propertySchema(openApiNode, "PostWithContentDto", "thumbnail"), "string", "null")
         assertTypeSet(propertySchema(openApiNode, "PostWithContentDto", "contentHtmlHash"), "string", "null")
         val contentHtmlSanitizerPolicyVersion =
             propertySchema(openApiNode, "PostWithContentDto", "contentHtmlSanitizerPolicyVersion")

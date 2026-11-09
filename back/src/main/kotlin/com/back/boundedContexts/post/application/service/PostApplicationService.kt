@@ -493,18 +493,21 @@ class PostApplicationService(
     override fun incrementHit(post: Post) {
         postCounterService.incrementHit(post)
         postHitSideEffectQueue.enqueue(post.id)
+        invalidatePublicDetailCountersAfterCommit(post.id, "hit")
     }
 
     @Transactional
     override fun incrementLike(post: Post) {
         postCounterService.incrementLike(post)
         postHitSideEffectQueue.enqueue(post.id, "like")
+        invalidatePublicDetailCountersAfterCommit(post.id, "like")
     }
 
     @Transactional
     override fun decrementLike(post: Post) {
         postCounterService.decrementLike(post)
         postHitSideEffectQueue.enqueue(post.id, "unlike")
+        invalidatePublicDetailCountersAfterCommit(post.id, "unlike")
     }
 
     override fun findPagedByKw(
@@ -923,6 +926,40 @@ class PostApplicationService(
                 logger.warn(
                     "Immediate post read cache invalidation failed for postId={}; async task will retry",
                     command.postId,
+                    exception,
+                )
+            }
+        }
+    }
+
+    private fun invalidatePublicDetailCountersAfterCommit(
+        postId: Long,
+        reason: String,
+    ) {
+        val invalidator = postReadCacheInvalidator ?: return
+        if (TransactionSynchronizationManager.isSynchronizationActive()) {
+            TransactionSynchronizationManager.registerSynchronization(
+                object : TransactionSynchronization {
+                    override fun afterCommit() {
+                        runCatching {
+                            invalidator.invalidatePublicDetailCounters(postId, reason)
+                        }.onFailure { exception ->
+                            logger.warn(
+                                "Immediate post detail counter cache invalidation after commit failed for postId={}; async task will retry",
+                                postId,
+                                exception,
+                            )
+                        }
+                    }
+                },
+            )
+        } else {
+            runCatching {
+                invalidator.invalidatePublicDetailCounters(postId, reason)
+            }.onFailure { exception ->
+                logger.warn(
+                    "Immediate post detail counter cache invalidation failed for postId={}; async task will retry",
+                    postId,
                     exception,
                 )
             }

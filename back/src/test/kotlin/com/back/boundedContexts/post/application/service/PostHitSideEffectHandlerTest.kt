@@ -26,6 +26,7 @@ class PostHitSideEffectHandlerTest {
             "hit",
             listOf(PostSearchSortType1.HIT_COUNT),
         )
+        verify(postReadCacheInvalidator).invalidatePublicDetailCounters(10L, "hit")
     }
 
     @Test

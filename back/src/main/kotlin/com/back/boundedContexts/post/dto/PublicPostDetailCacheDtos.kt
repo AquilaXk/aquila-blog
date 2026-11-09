@@ -27,6 +27,7 @@ data class PublicPostDetailMetaCacheDto(
     var hitCount: Int = 0,
     var summary: String = "",
     var summarySource: PostSummarySource = PostSummarySource.NONE,
+    var thumbnail: String? = null,
 ) {
     fun merge(content: PublicPostDetailContentCacheDto): PostWithContentDto {
         val contentHtmlTrust = content.verifyContentHtmlTrust()
@@ -52,6 +53,7 @@ data class PublicPostDetailMetaCacheDto(
             contentHtmlHash = contentHtmlTrust.contentHtmlHash,
             contentHtmlSanitizerPolicyVersion = contentHtmlTrust.contentHtmlSanitizerPolicyVersion,
             contentHtmlTrustState = contentHtmlTrust.contentHtmlTrustState,
+            thumbnail = thumbnail,
         )
     }
 
@@ -75,6 +77,7 @@ data class PublicPostDetailMetaCacheDto(
                 hitCount = post.hitCount,
                 summary = post.summaryText.orEmpty(),
                 summarySource = post.summarySource,
+                thumbnail = post.thumbnail ?: runCatching { PostPreviewExtractor.extractThumbnail(post.content) }.getOrNull(),
             )
         }
     }
@@ -129,6 +132,7 @@ data class PublicPostDetailSnapshotCacheDto(
     var hitCount: Int = 0,
     var summary: String = "",
     var summarySource: PostSummarySource = PostSummarySource.NONE,
+    var thumbnail: String? = null,
 ) {
     fun toPostWithContentDto(): PostWithContentDto {
         val contentHtmlTrust =
@@ -160,6 +164,7 @@ data class PublicPostDetailSnapshotCacheDto(
             contentHtmlHash = contentHtmlTrust.contentHtmlHash,
             contentHtmlSanitizerPolicyVersion = contentHtmlTrust.contentHtmlSanitizerPolicyVersion,
             contentHtmlTrustState = contentHtmlTrust.contentHtmlTrustState,
+            thumbnail = thumbnail,
         )
     }
 
@@ -187,6 +192,7 @@ data class PublicPostDetailSnapshotCacheDto(
                 hitCount = detail.hitCount,
                 summary = detail.summary,
                 summarySource = detail.summarySource,
+                thumbnail = detail.thumbnail,
             )
     }
 }

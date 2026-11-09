@@ -25,6 +25,7 @@ class PostReadCacheInvalidator(
     private val hotSorts =
         listOf(
             PostSearchSortType1.CREATED_AT,
+            PostSearchSortType1.CREATED_AT_ASC,
             PostSearchSortType1.HIT_COUNT,
             PostSearchSortType1.LIKES_COUNT,
         )
@@ -204,6 +205,12 @@ class PostReadCacheInvalidator(
         searchCache: Cache?,
         searchNegativeCache: Cache?,
     ) {
+        if (includeHotReadPages) {
+            feedCache?.clear()
+            recordCacheEvict(PostQueryCacheNames.FEED, "clear", evictReason)
+            exploreCache?.clear()
+            recordCacheEvict(PostQueryCacheNames.EXPLORE, "clear", evictReason)
+        }
         hotPageSizes.forEach { pageSize ->
             sorts.forEach { sort ->
                 val sortName = sort.name

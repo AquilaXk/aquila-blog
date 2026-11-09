@@ -8,6 +8,7 @@ import com.back.global.task.application.TaskHandlerRegistry
 import com.back.global.task.application.TaskHandlerRegistry.Companion.CURRENT_TASK_PAYLOAD_SCHEMA_VERSION
 import com.back.global.task.application.TaskRetryPolicy
 import com.back.standard.dto.TaskPayload
+import org.springframework.aop.framework.AopProxyUtils
 import org.springframework.beans.factory.config.ConfigurableListableBeanFactory
 import org.springframework.context.ApplicationContext
 import org.springframework.context.ApplicationListener
@@ -24,8 +25,9 @@ class TaskHandlerConfigurer(
         applicationContext.beanDefinitionNames.forEach { beanName ->
             if (beanFactory != null && !beanFactory.isSingleton(beanName)) return@forEach
             val bean = applicationContext.getBean(beanName)
+            val targetClass = AopProxyUtils.ultimateTargetClass(bean)
 
-            bean::class.java.methods
+            targetClass.methods
                 .filter { it.isAnnotationPresent(TaskHandler::class.java) }
                 .forEach { method ->
                     val parameterTypes = method.parameterTypes

@@ -21,7 +21,7 @@ const readChangedFiles = (args) => {
 
 const isDocsFile = (file) =>
   file.startsWith("docs/") ||
-  ["AGENTS.md", "CLAUDE.md", "GEMINI.md", "CURSOR.md", "COPILOT.md", "README.md"].includes(file)
+  ["AGENTS.md", "CLAUDE.md", "GEMINI.md", "CURSOR.md", "COPILOT.md", "README.md", "TODO.md"].includes(file)
 
 const isBackendFile = (file) =>
   file === "restore-privacy-gate.sh" ||
@@ -37,7 +37,7 @@ const isPlatformFile = (file) =>
   file.startsWith("tools/") ||
   file.startsWith(".github/workflows/") ||
   file.startsWith(".githooks/") ||
-  [".coderabbit.yaml", ".github/dependabot.yml", "sonar-project.properties"].includes(file)
+  [".github/dependabot.yml", "sonar-project.properties"].includes(file)
 
 const isPipelineFile = (file) =>
   file.startsWith(".github/workflows/") ||

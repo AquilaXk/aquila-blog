@@ -1,5 +1,0 @@
-blank_issues_enabled: false
-contact_links:
-  - name: "🔒 Private vulnerability report"
-    url: https://github.com/AquilaXk/aquila-blog/security/advisories/new
-    about: Send vulnerability details through GitHub's private reporting form instead of a public Issue.

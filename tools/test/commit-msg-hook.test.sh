@@ -4,8 +4,6 @@ set -euo pipefail
 repo_root="$(git rev-parse --show-toplevel)"
 cd "${repo_root}"
 
-# .githooks/commit-msg is tracked, so a missing file means the checkout is incomplete
-# rather than a developer-local setup step being skipped.
 hook=".githooks/commit-msg"
 if [ ! -f "${hook}" ]; then
   echo "[test] ${hook} is missing from the repository checkout" >&2
@@ -33,9 +31,6 @@ msg_file="${workdir}/COMMIT_EDITMSG"
 hook_output="${workdir}/hook-output"
 filter_marker="${workdir}/filter-invoked"
 
-# The hook reads hooks.commitMsgFilter and core.commentChar from git config, so run it in a
-# throwaway repository instead of this checkout: no developer setting leaks into the run and
-# nothing is written back here.
 sandbox="${workdir}/sandbox"
 mkdir -p "${sandbox}"
 git -c init.defaultBranch=main init -q "${sandbox}"
@@ -54,7 +49,6 @@ cat > "${recording_filter}" <<'STUB'
 STUB
 chmod +x "${recording_filter}"
 
-# Same filter without the executable bit: the hook must skip it instead of failing.
 unexecutable_filter="${filters}/unexecutable-filter.sh"
 cp "${recording_filter}" "${unexecutable_filter}"
 chmod -x "${unexecutable_filter}"
@@ -89,13 +83,6 @@ run_hook_message() {
   local status=$?
   set -e
   return "${status}"
-}
-
-run_hook() {
-  local subject="$1"
-  shift
-  printf '%s\n' "${subject}" > "${msg_file}"
-  run_hook_message "$@"
 }
 
 expect_accepted_message() {
@@ -141,16 +128,17 @@ expect_rejected() {
 }
 
 reason_format="[commit-msg] commit message format violation"
-reason_english="[commit-msg] summary must use printable ASCII and include an English letter"
 
 english_subject="fix(hooks): allow concise English commit subjects"
+korean_bracket_subject="[Chore] 1인 프로젝트 방식으로 전환"
 
 clear_filter
 
 expect_accepted "English conventional subject" "${english_subject}" LANG="${base_locale}"
-expect_rejected "non-ASCII conventional subject" "${reason_english}" \
-  "fix(hooks): 커밋 메시지 검사 강화" LANG="${validation_locale}"
-expect_rejected "subject without conventional type" "${reason_format}" \
+expect_accepted "Korean conventional subject" "fix(hooks): 커밋 메시지 검사 정리" LANG="${validation_locale}"
+expect_accepted "Korean bracket subject" "${korean_bracket_subject}" LANG="${validation_locale}"
+expect_accepted "English bracket subject" "[Fix] relax steady-state guard cron schedule" LANG="${base_locale}"
+expect_rejected "subject without type prefix" "${reason_format}" \
   "missing conventional type" LANG="${base_locale}"
 
 expect_accepted "merge commit subject" "Merge pull request #1 from AquilaXk/topic" LANG="${base_locale}"
@@ -159,7 +147,6 @@ expect_accepted "fixup commit subject" "fixup! ${english_subject}" LANG="${base_
 expect_accepted "squash commit subject" "squash! ${english_subject}" LANG="${base_locale}"
 expect_accepted "amend commit subject" "amend! ${english_subject}" LANG="${base_locale}"
 
-# The subject is the first line git would keep, not literally the first line of the file.
 printf '%s\n' "" "   " "# comment lines are not subjects" "${english_subject}" > "${msg_file}"
 expect_accepted_message "subject after blank and comment lines" LANG="${base_locale}"
 
@@ -176,8 +163,6 @@ printf '%s\n' "# hash is a subject when the comment character is semicolon" "${e
 expect_rejected_message "hash line is a subject when core.commentChar is ;" "${reason_format}" LANG="${base_locale}"
 git -C "${sandbox}" config --unset core.commentChar
 
-# hooks.commitMsgFilter is an optional per-machine script: unset, missing, present,
-# non-executable, and failing must all leave the commit message rules working.
 clear_filter
 rm -f "${filter_marker}"
 expect_accepted "English subject without a configured filter" "${english_subject}" LANG="${base_locale}"
@@ -205,7 +190,6 @@ if [ "$(sed -n '1p' "${filter_marker}")" != "${msg_file}" ]; then
   echo "[test] expected the filter to receive the commit message file" >&2
   exit 1
 fi
-# The filter must not receive a locale override from the hook.
 if ! grep -qxF "LC_ALL=unset" "${filter_marker}"; then
   echo "[test] expected the filter to run without the hook's LC_ALL pin" >&2
   cat "${filter_marker}" >&2

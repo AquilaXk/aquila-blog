@@ -14,7 +14,7 @@ is_allowed_markdown() {
   case "$1" in
     README.md|\
     CHANGELOG.md|\
-    .github/pull_request_template.md|\
+    TODO.md|\
     SECURITY.md|\
     back/PERF_SANITY_REPORT.md|\
     back/README.md|\
@@ -23,8 +23,6 @@ is_allowed_markdown() {
     docs/README.md|\
     perf/k6/README.md|\
     perf/k6/cloud-launch-criteria.md|\
-    tools/templates/agent-plan.compact.md|\
-    tools/templates/bug-report.compact.md|\
     docs/design/*.md|\
     docs/ops/*.md)
       return 0

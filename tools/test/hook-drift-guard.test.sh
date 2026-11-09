@@ -157,7 +157,7 @@ mkdir -p "${route_repo}/.githooks"
 cp "${repo_root}/.githooks/pre-commit" "${route_repo}/.githooks/pre-commit"
 chmod +x "${route_repo}/.githooks/pre-commit"
 
-for guard in check-forbidden-tracked-files.sh check-current-task-state.sh check-current-task-scope.sh; do
+for guard in check-forbidden-tracked-files.sh; do
   write_shell_stub "${route_repo}/tools/guards/${guard}"
 done
 write_node_stub "${route_repo}/tools/repo-boundary/check-platform-boundary.mjs"

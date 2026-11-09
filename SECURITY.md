@@ -6,11 +6,16 @@
 
 ## Reporting a Vulnerability
 
-보안 이슈는 공개 이슈로 올리지 말고, 아래 순서로 제보해 주세요.
+보안 취약점은 공개 이슈(Public Issue)로 올리지 말고 GitHub Security Advisories 비공개 제보 폼으로만 접수해 주세요:
 
-1. GitHub Security Advisory(Private Report)로 제보
-2. 재현 절차, 영향 범위, 임시 우회 방법(있다면) 포함
-3. POC가 있다면 최소 재현 형태로 첨부
+- Private report URL: https://github.com/AquilaXk/aquila-blog/security/advisories/new
+- Do not include vulnerability details, reproduction steps, PoCs, or secrets in public Issues.
+- Public evidence must include only information with tokens, cookies, personal data, and internal URLs removed or redacted.
+
+제보 시 포함할 내용:
+
+1. 재현 절차, 영향 범위, 임시 우회 방법(있다면)
+2. 최소 재현 형태의 PoC
 
 운영자가 확인 후 우선순위를 분류해 대응합니다.
 
@@ -35,5 +40,5 @@
 - 기본값은 최소 노출(예: production actuator는 `health`만 노출)
 - 민감 설정은 코드에 하드코딩하지 않고 secret/env로 주입
 - DB 스키마 변경은 Flyway migration으로 이력 관리
-- CI 필수 게이트(`ktlint`, 테스트, 프론트 lint/build/smoke)를 통과해야 배포
-- 취약점 머지 게이트는 `docs/ops/security-scan-merge-gate.md`를 따른다. PR는 dependency review·frontend audit/OSV·container High/Critical·SBOM을 막고, full NVD `dependency-check`는 `main` push/주간 schedule 게이트다(#1344)
+- CI 필수 게이트(`ktlint`, 테스트, 컨테이너/의존성 스캔, SBOM)를 통과해야 배포
+- 취약점 게이트는 `docs/ops/security-scan-merge-gate.md`를 따른다

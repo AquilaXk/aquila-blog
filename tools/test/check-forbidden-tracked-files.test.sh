@@ -17,6 +17,7 @@ run_with_temp_index() {
   GIT_INDEX_FILE="${tmp_index}" git rm -r --cached --ignore-unmatch front >/dev/null
   GIT_INDEX_FILE="${tmp_index}" git rm -r --cached --ignore-unmatch docs/legal >/dev/null
   GIT_INDEX_FILE="${tmp_index}" git rm -r --cached --ignore-unmatch infra >/dev/null
+  GIT_INDEX_FILE="${tmp_index}" git rm -r --cached --ignore-unmatch .github/pull_request_template.md tools/templates >/dev/null
   set +e
   GIT_INDEX_FILE="${tmp_index}" bash -c "${command}"
   local status=$?
@@ -82,6 +83,11 @@ fi
 
 if ! run_with_temp_index "git update-index --add --cacheinfo 100644 '${readme_blob}' docs/ops/cloud-transfer-limits-and-recovery.md && bash '${guard}' --staged >'${guard_output}' 2>&1"; then
   echo "[test] expected staged docs/ops/cloud-transfer-limits-and-recovery.md to be allowed" >&2
+  exit 1
+fi
+
+if ! run_with_temp_index "git update-index --add --cacheinfo 100644 '${readme_blob}' TODO.md && bash '${guard}' --staged >'${guard_output}' 2>&1"; then
+  echo "[test] expected staged TODO.md to be allowed" >&2
   exit 1
 fi
 

@@ -5459,18 +5459,5 @@ test("setup_hardening.sh restricts SSH UFW allowance to tailscale0 interface", (
   assert.doesNotMatch(hardeningScript, /^\s*ufw allow "\$\{SSH_PORT\}\/tcp"\s*$/m)
 })
 
-test("release-please workflow pins release-please-action to an immutable commit SHA and automerge-queue requires review on current HEAD", () => {
-  const releasePlease = readFileSync(path.join(repoRoot, ".github/workflows/release-please.yml"), "utf8")
-  const automergeQueue = readFileSync(path.join(repoRoot, ".github/workflows/automerge-queue.yml"), "utf8")
-
-  assert.match(
-    releasePlease,
-    /uses:\s*googleapis\/release-please-action@5c625bfb5d1ff62eadeeb3772007f7f66fdcf071\b/,
-  )
-  assert.doesNotMatch(releasePlease, /uses:\s*googleapis\/release-please-action@v4\b/)
-
-  assert.match(automergeQueue, /\(\.commit_id == \$head\) and/)
-  assert.doesNotMatch(automergeQueue, /\$commit_ids \| index\(\$review_commit\) != null/)
-})
 
 

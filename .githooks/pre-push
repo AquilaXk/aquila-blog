@@ -4,25 +4,12 @@ set -euo pipefail
 # bash resolves regex ranges such as [a-z0-9] through locale collation, so under a
 # single-byte locale like en_US.ISO8859-1 those ranges also match uppercase and the branch
 # rules below stop blocking anything they were written to block. Pin LC_ALL (not only
-# LC_COLLATE) because an exported LC_ALL would otherwise override the pin. Same reasoning as
-# .githooks/commit-msg, which pins the locale for its Hangul range.
+# LC_COLLATE) because an exported LC_ALL would otherwise override the pin.
 export LC_ALL=C
 
-protected_branches_regex='^main$'
+main_branch_regex='^main$'
 work_branch_regex='^(feat|fix|refactor|chore|docs|style|test|perf|build|ci|revert|hotfix)/[a-z0-9]+(-[a-z0-9]+)*$'
-# Dependabot pushes through the GitHub API and never runs this hook, so its branch names
-# were never negotiable here. A human adding a correction commit to such a PR does run the
-# hook, and dependabot/<ecosystem>/<path>/<dependency>-<version> keeps the dots and slashes
-# that the work branch rule forbids. Allow that one namespace with an explicit shape instead
-# of loosening the work branch rule.
-#
-# Accepted trade-off: the namespace is reachable by people too. This hook runs on the client
-# and cannot tell who is pushing, so someone can name a branch dependabot/<ecosystem>/<x> and
-# skip the work branch rule entirely. Closing that would mean refusing the pushes this rule
-# exists to allow, so issue #1528 took the opening over an unusable gate. `main` stays
-# blocked either way, and server-side branch protection is the control that
-# does not depend on the pusher running a hook at all.
-bot_branch_regex='^(dependabot/[a-z0-9_]+(/[A-Za-z0-9][A-Za-z0-9._-]*)+|release-please--.+)$'
+bot_branch_regex='^dependabot/[a-z0-9_]+(/[A-Za-z0-9][A-Za-z0-9._-]*)+$'
 zero_sha='0000000000000000000000000000000000000000'
 
 branch_name_from_ref() {
@@ -39,8 +26,8 @@ violations=()
 validate_branch() {
   local branch="${1:-}"
 
-  if [[ "${branch}" =~ ${protected_branches_regex} ]]; then
-    return 1
+  if [[ "${branch}" =~ ${main_branch_regex} ]]; then
+    return 0
   fi
 
   if [[ "${branch}" =~ ${bot_branch_regex} ]]; then
@@ -61,12 +48,16 @@ while read -r local_ref local_sha remote_ref remote_sha; do
     if ! validate_branch "${local_branch}"; then
       violations+=("local:${local_branch}")
     fi
+  elif [[ "${local_ref}" == "HEAD" && "${remote_ref}" == "refs/heads/main" ]]; then
+    :
   elif [[ "${local_sha}" != "${zero_sha}" ]]; then
     violations+=("local-ref:${local_ref}")
   fi
 
   if remote_branch="$(branch_name_from_ref "${remote_ref}")"; then
-    if ! validate_branch "${remote_branch}"; then
+    if [[ "${local_sha}" == "${zero_sha}" && "${remote_branch}" =~ ${main_branch_regex} ]]; then
+      violations+=("delete:${remote_branch}")
+    elif ! validate_branch "${remote_branch}"; then
       violations+=("remote:${remote_branch}")
     fi
   elif [[ "${remote_sha}" != "${zero_sha}" ]]; then
@@ -76,16 +67,14 @@ done
 
 if [[ "${#violations[@]}" -gt 0 ]]; then
   {
-    echo "[pre-push] main 직접 push 는 금지됩니다."
-    echo "[pre-push] 허용 브랜치 형식: type/short-description"
+    echo "[pre-push] 허용되지 않은 브랜치/ref push 또는 main 삭제가 감지되었습니다."
+    echo "[pre-push] 허용 브랜치 형식: main 또는 type/short-description"
     echo "[pre-push] 허용 type: feat|fix|refactor|chore|docs|style|test|perf|build|ci|revert|hotfix"
     echo "[pre-push] 허용 bot 브랜치: dependabot/<ecosystem>/<path>/<dependency>-<version>"
     echo "[pre-push] 차단된 ref:"
     for violation in "${violations[@]}"; do
       echo "  - ${violation}"
     done
-    echo "[pre-push] 예시: feat/search-issue-workflow"
-    echo "[pre-push] 권장 흐름: issue 생성 -> work branch 작업 -> main 대상 PR"
   } >&2
   exit 1
 fi

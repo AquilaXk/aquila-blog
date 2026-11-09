@@ -25,9 +25,8 @@ test("Platform quality configuration owns only Platform surfaces", () => {
   const security = read(".github/workflows/security.yml")
   const sonar = read("sonar-project.properties")
   const automaticSonar = read(".sonarcloud.properties")
-  const codeRabbit = read(".coderabbit.yaml")
   const dependabot = read(".github/dependabot.yml")
-  const combined = [security, sonar, automaticSonar, codeRabbit, dependabot].join("\n")
+  const combined = [security, sonar, automaticSonar, dependabot].join("\n")
 
   assert.match(security, /java-kotlin/)
   assert.match(security, /dependencyCheckAnalyze/)
@@ -38,7 +37,6 @@ test("Platform quality configuration owns only Platform surfaces", () => {
   assert.match(sonar, /^sonar\.tests=back\/src\/test$/m)
   assert.match(automaticSonar, /^sonar\.sources=back\/src\/main$/m)
   assert.match(automaticSonar, /^sonar\.tests=back\/src\/test$/m)
-  assert.match(codeRabbit, /path: "back\/\*\*"/)
   assert.match(dependabot, /package-ecosystem: "gradle"/)
   assert.match(dependabot, /package-ecosystem: "github-actions"/)
   assert.doesNotMatch(dependabot, /package-ecosystem: "npm"/)
@@ -65,19 +63,13 @@ test("security artifacts keep explicit fourteen-day retention", () => {
   }
 })
 
-test("public issue guidance sends vulnerability details only to the private report form", () => {
-  const chooser = read(".github/ISSUE_TEMPLATE/config.yml")
-  const operations = read(".github/ISSUE_TEMPLATE/ops_security_data.yml")
-  const workflow = read("docs/design/issue-pr-workflow.md")
-  const combined = [chooser, operations, workflow].join("\n")
+test("security policy sends vulnerability details only to the private report form", () => {
+  const securityPolicy = read("SECURITY.md")
 
-  assert.match(chooser, /blank_issues_enabled: false/)
-  assert.match(chooser, new RegExp(privateReportUrl.replaceAll("/", "\\/")))
-  assert.match(workflow, new RegExp(privateReportUrl.replaceAll("/", "\\/")))
-  assert.match(operations, new RegExp(privateReportUrl.replaceAll("/", "\\/")))
-  assert.match(operations, /Do not include vulnerability details, reproduction steps, PoCs, or secrets in public Issues/)
-  assert.match(operations, /Public evidence must include only information with tokens, cookies, personal data, and internal URLs removed or redacted/)
-  assert.doesNotMatch(combined, /CODE_OF_CONDUCT\.md#enforcement|maintainer private contact/i)
+  assert.match(securityPolicy, new RegExp(privateReportUrl.replaceAll("/", "\\/")))
+  assert.match(securityPolicy, /Do not include vulnerability details, reproduction steps, PoCs, or secrets in public Issues/)
+  assert.match(securityPolicy, /Public evidence must include only information with tokens, cookies, personal data, and internal URLs removed or redacted/)
+  assert.doesNotMatch(securityPolicy, /CODE_OF_CONDUCT\.md#enforcement|maintainer private contact/i)
 })
 
 test("Platform boundary scanner is symlink-safe and rejects foreign Web workflow ownership", (t) => {

@@ -427,12 +427,20 @@ class CloudFileService(
     private fun readZipEntryNames(file: Path): Set<String> =
         runCatching {
             ZipFile(file.toFile()).use { zip ->
-                zip
-                    .entries()
-                    .asSequence()
-                    .map { it.name.replace('\\', '/') }
-                    .toSet()
+                val names = LinkedHashSet<String>()
+                val entries = zip.entries()
+                var count = 0
+                while (entries.hasMoreElements()) {
+                    count += 1
+                    if (count > MAX_ZIP_ENTRIES) {
+                        throw AppException(ErrorCode.BAD_REQUEST, "ZIP 아카이브 엔트리 수가 허용 상한을 초과했습니다.")
+                    }
+                    names.add(entries.nextElement().name.replace('\\', '/'))
+                }
+                names
             }
+        }.onFailure { ex ->
+            if (ex is AppException) throw ex
         }.getOrDefault(emptySet())
 
     private data class DetectedContent(
@@ -450,6 +458,7 @@ class CloudFileService(
         private const val ZIP_CONTENT_TYPE = "application/zip"
         private const val HWPX_MANIFEST_ENTRY = "Contents/content.hpf"
         private const val ZIP_EOCD_MIN_SIZE = 22
+        private const val MAX_ZIP_ENTRIES = 10_000
         private val HWPX_DOCUMENT_ENTRIES =
             setOf(
                 "Contents/header.xml",

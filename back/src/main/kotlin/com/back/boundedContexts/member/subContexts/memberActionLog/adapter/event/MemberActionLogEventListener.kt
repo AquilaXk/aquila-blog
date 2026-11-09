@@ -7,6 +7,8 @@ import com.back.global.task.annotation.TaskHandler
 import com.back.global.task.application.TaskFacade
 import com.back.standard.dto.EventPayload
 import org.springframework.stereotype.Component
+import org.springframework.transaction.annotation.Propagation
+import org.springframework.transaction.annotation.Transactional
 import org.springframework.transaction.event.TransactionPhase
 import org.springframework.transaction.event.TransactionalEventListener
 
@@ -20,12 +22,15 @@ class MemberActionLogEventListener(
     private val taskFacade: TaskFacade,
 ) {
     // AFTER_COMMIT enqueue 실패는 alternate 실행 없이 event dispatch 실패로 드러낸다.
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
     @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
     fun handle(event: PostWrittenEvent) = addTask(event)
 
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
     @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
     fun handle(event: PostModifiedEvent) = addTask(event)
 
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
     @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
     fun handle(event: PostDeletedEvent) = addTask(event)
 

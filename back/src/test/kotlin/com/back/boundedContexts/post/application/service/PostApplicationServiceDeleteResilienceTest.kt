@@ -474,7 +474,7 @@ class PostApplicationServiceDeleteResilienceTest {
     }
 
     @Test
-    @DisplayName("관리자 비공개 글 영구삭제는 공개 읽기 캐시를 무효화하지 않는다")
+    @DisplayName("관리자 비공개 글 영구삭제는 관리자 목록 캐시만 비우고 공개 피드 캐시는 무효화하지 않는다")
     fun skipPublicReadCacheInvalidationForPrivateHardDelete() {
         // given
         val snapshot =
@@ -496,7 +496,8 @@ class PostApplicationServiceDeleteResilienceTest {
         postWriteSideEffectHandler.handle(payload)
 
         // then
-        verifyNoInteractions(cacheManager)
+        then(cacheManager).should().getCache(PostQueryCacheNames.ADMIN_POSTS_FIRST_PAGE)
+        then(cacheManager).shouldHaveNoMoreInteractions()
         then(uploadedFileRetentionService).should().scheduleDeletedPostAttachmentKeys(emptyList(), emptyList())
         then(postRecommendFeatureStoreService).should().evict(23)
     }
@@ -506,7 +507,7 @@ class PostApplicationServiceDeleteResilienceTest {
         "true,false",
         "false,true",
     )
-    @DisplayName("관리자 부분공개 상태 영구삭제는 공개 읽기 캐시를 무효화하지 않는다")
+    @DisplayName("관리자 부분공개 상태 영구삭제는 공개 목록 캐시를 무효화하지 않고 관리자 목록/상세 캐시만 비운다")
     fun skipPublicReadCacheInvalidationForPartiallyPublicHardDelete(
         published: Boolean,
         listed: Boolean,
@@ -531,7 +532,14 @@ class PostApplicationServiceDeleteResilienceTest {
         postWriteSideEffectHandler.handle(payload)
 
         // then
-        verifyNoInteractions(cacheManager)
+        if (published && !listed) {
+            then(cacheManager).should().getCache(PostQueryCacheNames.DETAIL_PUBLIC_SNAPSHOT)
+            then(cacheManager).should().getCache(PostQueryCacheNames.DETAIL_PUBLIC_META)
+            then(cacheManager).should().getCache(PostQueryCacheNames.DETAIL_PUBLIC_CONTENT)
+            then(cacheManager).should().getCache(PostQueryCacheNames.DETAIL_PUBLIC_NEGATIVE)
+        }
+        then(cacheManager).should().getCache(PostQueryCacheNames.ADMIN_POSTS_FIRST_PAGE)
+        then(cacheManager).shouldHaveNoMoreInteractions()
         then(uploadedFileRetentionService).should().scheduleDeletedPostAttachmentKeys(emptyList(), emptyList())
         then(postRecommendFeatureStoreService).should().evict(24)
     }

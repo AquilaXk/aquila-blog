@@ -9,6 +9,8 @@ import com.back.global.task.annotation.TaskHandler
 import com.back.global.task.application.TaskFacade
 import org.slf4j.LoggerFactory
 import org.springframework.stereotype.Component
+import org.springframework.transaction.annotation.Propagation
+import org.springframework.transaction.annotation.Transactional
 import org.springframework.transaction.event.TransactionPhase
 import org.springframework.transaction.event.TransactionalEventListener
 import java.nio.charset.StandardCharsets
@@ -22,10 +24,12 @@ class CdnCachePurgeEventListener(
     private val taskFacade: TaskFacade,
     private val cdnCachePurgeService: CdnCachePurgeService,
 ) {
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
     @TransactionalEventListener(
         phase = TransactionPhase.AFTER_COMMIT,
     )
-    fun handle(event: PostWrittenEvent) =
+    fun handle(event: PostWrittenEvent) {
+        if (!event.postDto.published) return
         enqueue(
             aggregateType = event.aggregateType,
             sourceEventUid = event.uid,
@@ -33,11 +37,14 @@ class CdnCachePurgeEventListener(
             beforeTags = event.beforeTags,
             afterTags = event.afterTags,
         )
+    }
 
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
     @TransactionalEventListener(
         phase = TransactionPhase.AFTER_COMMIT,
     )
-    fun handle(event: PostModifiedEvent) =
+    fun handle(event: PostModifiedEvent) {
+        if (!event.wasPublic && !event.postDto.published) return
         enqueue(
             aggregateType = event.aggregateType,
             sourceEventUid = event.uid,
@@ -45,11 +52,14 @@ class CdnCachePurgeEventListener(
             beforeTags = event.beforeTags,
             afterTags = event.afterTags,
         )
+    }
 
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
     @TransactionalEventListener(
         phase = TransactionPhase.AFTER_COMMIT,
     )
-    fun handle(event: PostDeletedEvent) =
+    fun handle(event: PostDeletedEvent) {
+        if (!event.postDto.published) return
         enqueue(
             aggregateType = event.aggregateType,
             sourceEventUid = event.uid,
@@ -57,6 +67,7 @@ class CdnCachePurgeEventListener(
             beforeTags = event.beforeTags,
             afterTags = event.afterTags,
         )
+    }
 
     @TaskHandler
     fun handle(payload: PurgePostReadCachesPayload) {

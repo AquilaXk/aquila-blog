@@ -162,6 +162,32 @@ class UploadedFileRetentionServiceTest : BaseUploadedFileRetentionServiceIntegra
     }
 
     @Test
+    fun `과거 프로필 이미지가 게시글 본문에서 참조 중이면 S3 객체를 삭제하지 않고 게시글 소유로 전환한다`() {
+        val sharedKey = "posts/2026/03/profile-delete-referenced-by-post.png"
+        val newKey = "posts/2026/03/profile-delete-current.png"
+        val sharedUrl = UploadedFileUrlCodec.buildImageUrl(sharedKey)
+        val newUrl = UploadedFileUrlCodec.buildImageUrl(newKey)
+
+        uploadedFileRetentionService.registerTempUpload(sharedKey, "image/png", 100, UploadedFilePurpose.PROFILE_IMAGE)
+        uploadedFileRetentionService.registerTempUpload(newKey, "image/png", 200, UploadedFilePurpose.PROFILE_IMAGE)
+        uploadedFileRetentionService.syncProfileImage(7, previousProfileImgUrl = null, currentProfileImgUrl = sharedUrl)
+
+        given(postRepository.existsImageReferenceByObjectKey(sharedKey)).willReturn(true)
+        given(postRepository.findFirstReferencingPostId(sharedKey)).willReturn(77L)
+        uploadedFileRetentionService.syncProfileImage(7, previousProfileImgUrl = sharedUrl, currentProfileImgUrl = newUrl)
+
+        val sharedFile = uploadedFileRepository.findByObjectKey(sharedKey)!!
+        uploadedFileRetentionService.deleteProfileImage(7, sharedFile.id, protectedProfileImgUrls = listOf(newUrl))
+
+        val reloaded = uploadedFileRepository.findByObjectKey(sharedKey)!!
+        assertThat(reloaded.status).isEqualTo(UploadedFileStatus.ACTIVE)
+        assertThat(reloaded.purpose).isEqualTo(UploadedFilePurpose.POST_IMAGE)
+        assertThat(reloaded.ownerType).isEqualTo(UploadedFileOwnerType.POST)
+        assertThat(reloaded.ownerId).isEqualTo(77L)
+        then(postImageStoragePort).should(never()).deletePostImage(sharedKey)
+    }
+
+    @Test
     fun `존재하지 않는 프로필 이미지는 삭제할 수 없다`() {
         assertThatThrownBy {
             uploadedFileRetentionService.deleteProfileImage(

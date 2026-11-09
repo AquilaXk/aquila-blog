@@ -72,6 +72,41 @@ class CustomAuthenticationFilterHardeningTest {
     }
 
     @Test
+    @DisplayName("게시글 상세 및 이미지 조회 경로는 만료된 accessToken에서도 sessionKey와 refreshToken으로 관리자 인증을 복원한다")
+    fun `dual access post detail and image paths allow refresh token rotation`() {
+        val fixture = CustomAuthenticationFilterTest.CustomAuthenticationFilterFixture()
+        val filter = fixture.authenticationFilter()
+        val sessionKey = "admin-session"
+        val refreshToken = "valid-refresh-token"
+        val admin = Member(54L, "internal-admin", null, "aquila", "admin@test.com").also { it.grantAdmin() }
+        val memberSession = MemberSession(id = 10L, member = admin, sessionKey = sessionKey)
+        fixture.givenEmptyAuthorizationHeader()
+        fixture.givenCookieTokens(sessionKey = sessionKey, refreshToken = refreshToken)
+        given(fixture.memberSessionUseCase.rotateRefreshToken(sessionKey, refreshToken))
+            .willReturn(MemberSessionWithRefreshToken(memberSession, "rotated-refresh-token"))
+        given(fixture.actorApplicationService.findById(admin.id)).willReturn(admin)
+        given(fixture.actorApplicationService.genAccessToken(admin, sessionKey, true, false, null))
+            .willReturn("new-access-token")
+
+        for (path in listOf("/post/api/v1/posts/452", "/post/api/v1/images/2026/04/temp.png")) {
+            val request = MockHttpServletRequest("GET", path)
+            val response = MockHttpServletResponse()
+            fixture.givenPublicRequest(request)
+            fixture.givenClientIp(request, "203.0.113.10")
+
+            try {
+                filter.doFilter(request, response, MockFilterChain())
+                assertThat(response.status).isEqualTo(HttpServletResponse.SC_OK)
+            } finally {
+                SecurityContextHolder.clearContext()
+            }
+        }
+
+        verify(fixture.memberSessionUseCase, org.mockito.Mockito.times(2))
+            .rotateRefreshToken(sessionKey, refreshToken)
+    }
+
+    @Test
     @DisplayName("ApiDefaultCacheControlFilter는 Set-Cookie 또는 Authorization 헤더가 있으면 기존 public Cache-Control도 private no-store로 강제 강등한다")
     fun `api default cache control filter downgrades public cache when set cookie or authorization is present`() {
         val filter = ApiDefaultCacheControlFilter()

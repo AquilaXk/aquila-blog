@@ -182,6 +182,8 @@ internal sealed class PostReadCacheInvalidationScope(
                 if (
                     impacts.any {
                         it == PostPublicChangeImpact.LISTING_VISIBILITY ||
+                            it == PostPublicChangeImpact.TITLE ||
+                            it == PostPublicChangeImpact.CONTENT ||
                             it == PostPublicChangeImpact.TAG ||
                             it == PostPublicChangeImpact.SUMMARY
                     }

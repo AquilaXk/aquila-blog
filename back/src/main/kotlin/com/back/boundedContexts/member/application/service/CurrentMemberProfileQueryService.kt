@@ -6,6 +6,8 @@ import com.back.boundedContexts.member.domain.shared.memberMixin.normalizeMember
 import com.back.boundedContexts.member.dto.MemberProfileWorkspaceContentDto
 import com.back.boundedContexts.member.dto.MemberProfileWorkspaceResponseDto
 import com.back.boundedContexts.member.dto.MemberWithUsernameDto
+import com.back.global.exception.application.AppException
+import com.back.global.exception.application.ErrorCode
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
 
@@ -39,5 +41,10 @@ class CurrentMemberProfileQueryService(
         )
     }
 
-    private fun findHydratedMember(id: Long) = memberProfileHydrator.hydrate(memberRepository.findById(id).orElseThrow())
+    private fun findHydratedMember(id: Long) =
+        memberProfileHydrator.hydrate(
+            memberRepository.findById(id).orElseThrow {
+                AppException(ErrorCode.NOT_FOUND, "존재하지 않는 회원입니다.")
+            },
+        )
 }

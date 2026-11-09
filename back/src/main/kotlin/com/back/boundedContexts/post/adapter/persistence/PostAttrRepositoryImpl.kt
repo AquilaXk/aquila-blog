@@ -5,7 +5,6 @@ import com.back.boundedContexts.post.domain.PostAttr
 import jakarta.persistence.EntityManager
 import jakarta.persistence.FlushModeType
 import jakarta.persistence.PersistenceContext
-import jakarta.persistence.PersistenceException
 import org.hibernate.Session
 import java.time.Instant
 
@@ -53,36 +52,34 @@ class PostAttrRepositoryImpl : PostAttrRepositoryCustom {
         val updatedValues = updateIntValue(subject.id, name, delta)
         if (updatedValues.isNotEmpty()) return updatedValues.max()
 
-        try {
-            return (
-                entityManager
-                    .createNativeQuery(
-                        """
-                        insert into post_attr (id, subject_id, name, int_value)
-                        values (
-                          nextval(
-                            coalesce(
-                              pg_get_serial_sequence('post_attr', 'id'),
-                              'public.post_attr_seq'
-                            )::regclass
-                          ),
-                          :subjectId,
-                          :name,
-                          greatest(:delta, 0)
-                        )
-                        returning int_value
-                        """.trimIndent(),
-                    ).setParameter("subjectId", subject.id)
-                    .setParameter("name", name)
-                    .setParameter("delta", delta)
-                    .singleResult as Number
-            ).toInt()
-        } catch (exception: PersistenceException) {
-            // 동시 insert 경쟁으로 이미 생성된 경우 update 경로로 재시도한다.
-            val retriedValues = updateIntValue(subject.id, name, delta)
-            if (retriedValues.isNotEmpty()) return retriedValues.max()
-            throw exception
-        }
+        return (
+            entityManager
+                .createNativeQuery(
+                    """
+                    insert into post_attr (id, subject_id, name, int_value, created_at, modified_at)
+                    values (
+                      nextval(
+                        coalesce(
+                          pg_get_serial_sequence('post_attr', 'id'),
+                          'public.post_attr_seq'
+                        )::regclass
+                      ),
+                      :subjectId,
+                      :name,
+                      greatest(:delta, 0),
+                      CURRENT_TIMESTAMP,
+                      CURRENT_TIMESTAMP
+                    )
+                    on conflict (subject_id, name) do update
+                    set int_value = greatest(0, coalesce(post_attr.int_value, 0) + :delta),
+                        modified_at = CURRENT_TIMESTAMP
+                    returning int_value
+                    """.trimIndent(),
+                ).setParameter("subjectId", subject.id)
+                .setParameter("name", name)
+                .setParameter("delta", delta)
+                .singleResult as Number
+        ).toInt()
     }
 
     /**

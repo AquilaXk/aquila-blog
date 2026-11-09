@@ -58,11 +58,12 @@ class CustomAuthenticationFilter(
     ) {
         val isPublicApi = publicApiRequestMatcher.matches(request)
         val isPublicReadSafe = isPublicApi && isReadSafeMethod(request.method)
+        val allowRefreshRotation = !isPublicReadSafe || isDualAccessPublicReadPath(request)
 
         try {
             rejectForbiddenQueryParams(request)
             try {
-                authenticateIfPossible(request, allowRefreshRotation = !isPublicReadSafe)
+                authenticateIfPossible(request, allowRefreshRotation = allowRefreshRotation)
             } catch (e: AppException) {
                 if (!isPublicApi) throw e
                 SecurityContextHolder.clearContext()
@@ -142,11 +143,25 @@ class CustomAuthenticationFilter(
         val tokens = authTokenExtractor.extract()
         val clientIp = clientIpResolver.resolve(request)
 
-        if (tokens.apiKey.isBlank() && tokens.accessToken.isBlank() && tokens.refreshToken.isBlank()) return
+        if (
+            tokens.apiKey.isBlank() &&
+            tokens.accessToken.isBlank() &&
+            tokens.sessionKey.isBlank() &&
+            tokens.refreshToken.isBlank()
+        ) {
+            return
+        }
 
         if (accessTokenAuthenticationHandler.authenticate(request, tokens, clientIp)) return
         if (!allowRefreshRotation) return
         refreshTokenAuthenticationHandler.authenticate(request, tokens, clientIp)
+    }
+
+    private fun isDualAccessPublicReadPath(request: HttpServletRequest): Boolean {
+        if (!isReadSafeMethod(request.method)) return false
+        val path = RequestPathNormalizer.normalize(request)
+        return DUAL_ACCESS_POST_DETAIL_PATH_REGEX.matches(path) ||
+            DUAL_ACCESS_POST_IMAGE_PATH_REGEX.matches(path)
     }
 
     private fun isReadSafeMethod(method: String?): Boolean =
@@ -180,6 +195,8 @@ class CustomAuthenticationFilter(
         private const val MAX_PATH_LENGTH = 512
         private const val FORBIDDEN_QUERY_PARAM_MESSAGE = "쿼리 파라미터로 인증 토큰을 전달할 수 없습니다."
         private val LOG_CONTROL_CHAR_REGEX = Regex("[\\x00-\\x1F\\x7F]")
+        private val DUAL_ACCESS_POST_DETAIL_PATH_REGEX = Regex("^/post/api/[^/]+/posts/\\d+$")
+        private val DUAL_ACCESS_POST_IMAGE_PATH_REGEX = Regex("^/post/api/[^/]+/images/.+$")
         private val FORBIDDEN_QUERY_PARAM_NAMES =
             setOf(
                 "accesstoken",

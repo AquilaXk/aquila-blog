@@ -118,7 +118,14 @@ class PostApplicationUseCaseCollaboratorTest {
         val postRepository = mock(PostRepositoryPort::class.java)
         val memberAttrRepository = mock(MemberAttrRepositoryPort::class.java)
         val postHydrationService = mock(PostHydrationService::class.java)
-        val service = PostTempDraftService(postRepository, memberAttrRepository, postHydrationService)
+        val postCounterService = mock(PostCounterService::class.java)
+        val service =
+            PostTempDraftService(
+                postRepository = postRepository,
+                memberAttrRepository = memberAttrRepository,
+                postHydrationService = postHydrationService,
+                postCounterService = postCounterService,
+            )
         val author = testMember()
         val untrackedLegacyPost = testPost(author = author)
         var savedMarker: MemberAttr? = null
@@ -141,6 +148,7 @@ class PostApplicationUseCaseCollaboratorTest {
         then(postRepository).should().save(createdPost)
         then(postRepository).should().flush()
         then(postRepository).shouldHaveNoMoreInteractions()
+        then(postCounterService).should().incrementMemberPostsCount(author)
         then(memberAttrRepository).should(times(3)).findBySubjectAndName(author, "activeTempDraftPostId")
         then(memberAttrRepository).should().incrementIntValue(author, "activeTempDraftLock", 1)
         then(memberAttrRepository).should().incrementIntValue(author, "activeTempDraftLock", -1)

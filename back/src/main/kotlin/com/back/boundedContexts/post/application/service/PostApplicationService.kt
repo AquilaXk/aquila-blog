@@ -19,6 +19,7 @@ import com.back.boundedContexts.post.event.PostDeletedEvent
 import com.back.boundedContexts.post.event.PostModifiedEvent
 import com.back.boundedContexts.post.event.PostWrittenEvent
 import com.back.boundedContexts.post.model.PostSummaryMode
+import com.back.boundedContexts.post.model.PostSummarySource
 import com.back.global.exception.application.AppException
 import com.back.global.exception.application.ErrorCode
 import com.back.global.security.application.HtmlContentSanitizer
@@ -149,11 +150,11 @@ class PostApplicationService(
                 beforeTags = emptyList(),
                 afterTags = createdTags,
                 cacheInvalidationScope =
-                    if (isPublic) {
-                        PostReadCacheInvalidationScope.PublicPostCreated
-                    } else {
-                        PostReadCacheInvalidationScope.None
-                    },
+                    resolveLifecycleCacheInvalidationScope(
+                        published = post.published,
+                        listed = post.listed,
+                        publicScope = PostReadCacheInvalidationScope.PublicPostCreated,
+                    ),
                 evictReason = if (idempotencyKey == null) "write" else "write-idempotent",
                 recommendationAction = recommendationActionFor(isPublic),
             ),
@@ -250,6 +251,10 @@ class PostApplicationService(
             resolveModifiedSummary(
                 title = title,
                 content = content,
+                previousTitle = previousTitle,
+                previousContent = previousContent,
+                previousSummaryText = previousSummaryText,
+                previousSummarySource = previousSummarySource,
                 submittedSummary = summary,
                 requestedMode = summaryMode,
             )?.let { resolved -> post.applyResolvedSummary(resolved) }
@@ -318,6 +323,7 @@ class PostApplicationService(
                 MemberDto(actor),
                 previousTags,
                 afterTags,
+                wasPublic = wasPublished,
             ),
         )
         logger.info("post_update_completed postId={} actorId={}", post.id, actor.id)
@@ -376,6 +382,10 @@ class PostApplicationService(
     private fun resolveModifiedSummary(
         title: String,
         content: String,
+        previousTitle: String,
+        previousContent: String,
+        previousSummaryText: String?,
+        previousSummarySource: PostSummarySource,
         submittedSummary: String?,
         requestedMode: PostSummaryMode?,
     ): PostSummaryResolver.ResolvedPostSummary? =
@@ -387,7 +397,18 @@ class PostApplicationService(
             PostSummaryMode.MANUAL -> PostSummaryResolver.resolveManual(content, requireNonBlankManualSummary(submittedSummary))
             null -> {
                 if (submittedSummary != null) throw AppException(ErrorCode.BAD_REQUEST, "summaryMode를 명시해야 합니다.")
-                null
+                if (
+                    content != previousContent &&
+                    previousSummarySource != PostSummarySource.MANUAL &&
+                    (
+                        previousSummaryText == null ||
+                            previousSummaryText == PostSummaryResolver.resolveAutomatic(previousTitle, previousContent).text
+                    )
+                ) {
+                    PostSummaryResolver.resolveAutomatic(title, content)
+                } else {
+                    null
+                }
             }
         }
 
@@ -438,7 +459,6 @@ class PostApplicationService(
         actor: Member,
     ) {
         val deletedPostContent = post.content
-        val wasPublic = isPubliclyListed(post)
         val wasTempDraft = postTempDraftService.isTempDraft(post)
         val beforeTags = postTagIndexService.extractNormalizedTags(deletedPostContent)
 
@@ -470,11 +490,11 @@ class PostApplicationService(
                 beforeTags = beforeTags,
                 afterTags = emptyList(),
                 cacheInvalidationScope =
-                    if (wasPublic) {
-                        PostReadCacheInvalidationScope.PublicPostDeleted
-                    } else {
-                        PostReadCacheInvalidationScope.None
-                    },
+                    resolveLifecycleCacheInvalidationScope(
+                        published = post.published,
+                        listed = post.listed,
+                        publicScope = PostReadCacheInvalidationScope.PublicPostDeleted,
+                    ),
                 evictReason = "soft-delete",
                 recommendationAction = PostRecommendationSideEffect.EVICT,
             ),
@@ -692,11 +712,11 @@ class PostApplicationService(
                 beforeTags = emptyList(),
                 afterTags = restoredTags,
                 cacheInvalidationScope =
-                    if (isPublic) {
-                        PostReadCacheInvalidationScope.PublicPostRestored
-                    } else {
-                        PostReadCacheInvalidationScope.None
-                    },
+                    resolveLifecycleCacheInvalidationScope(
+                        published = restoredPost.published,
+                        listed = restoredPost.listed,
+                        publicScope = PostReadCacheInvalidationScope.PublicPostRestored,
+                    ),
                 evictReason = "restore",
                 recommendationAction = recommendationActionFor(isPublic),
             ),
@@ -706,6 +726,7 @@ class PostApplicationService(
                 MemberDto(restoredPost.author),
                 emptyList(),
                 restoredTags,
+                wasPublic = restoredPost.published,
             ),
         )
 
@@ -734,11 +755,11 @@ class PostApplicationService(
                 beforeTags = beforeTags,
                 afterTags = emptyList(),
                 cacheInvalidationScope =
-                    if (snapshot.published && snapshot.listed) {
-                        PostReadCacheInvalidationScope.PublicPostHardDeleted
-                    } else {
-                        PostReadCacheInvalidationScope.None
-                    },
+                    resolveLifecycleCacheInvalidationScope(
+                        published = snapshot.published,
+                        listed = snapshot.listed,
+                        publicScope = PostReadCacheInvalidationScope.PublicPostHardDeleted,
+                    ),
                 evictReason = "hard-delete",
                 recommendationAction = PostRecommendationSideEffect.EVICT,
             ),
@@ -853,9 +874,36 @@ class PostApplicationService(
     override fun findTemp(author: Member): Post? = postTempDraftService.findTemp(author)
 
     @Transactional
-    override fun getOrCreateTemp(author: Member): Pair<Post, Boolean> = postTempDraftService.getOrCreateTemp(author)
+    override fun getOrCreateTemp(author: Member): Pair<Post, Boolean> =
+        postTempDraftService.getOrCreateTemp(author).also { (post, created) ->
+            if (created) {
+                val invalidator = postReadCacheInvalidator ?: return@also
+                val request =
+                    PostReadCacheInvalidationRequest(
+                        postId = post.id,
+                        beforeTags = emptyList(),
+                        afterTags = emptyList(),
+                        scope = PostReadCacheInvalidationScope.AdminPostListOnly,
+                        evictReason = "temp-draft-create",
+                    )
+                scheduleCacheInvalidationAfterCommit(post.id) {
+                    invalidator.invalidate(request)
+                }
+            }
+        }
 
     override fun isTempDraft(post: Post): Boolean = postTempDraftService.isTempDraft(post)
+
+    private fun resolveLifecycleCacheInvalidationScope(
+        published: Boolean,
+        listed: Boolean,
+        publicScope: PostReadCacheInvalidationScope,
+    ): PostReadCacheInvalidationScope =
+        when {
+            published && listed -> publicScope
+            published -> PostReadCacheInvalidationScope.AdminPostListAndDetail
+            else -> PostReadCacheInvalidationScope.AdminPostListOnly
+        }
 
     private fun findAndHydratePagedPosts(
         page: Int,

@@ -25,6 +25,7 @@ import org.springframework.context.event.ContextClosedEvent
 import org.springframework.scheduling.annotation.Scheduled
 import org.springframework.stereotype.Component
 import org.springframework.transaction.support.TransactionTemplate
+import java.lang.reflect.InvocationTargetException
 import java.time.Clock
 import java.time.Duration
 import java.time.Instant
@@ -480,7 +481,7 @@ class TaskProcessingScheduledJob(
         } catch (exception: Exception) {
             val rootCause = exception.cause ?: exception
             val errorType = rootCause::class.qualifiedName ?: "TaskHandlerFailure"
-            logger.error("Task failed: {} (type={}, errorType={})", taskId, context.taskType, errorType)
+            logger.error("Task failed: {} (type={}, errorType={})", taskId, context.taskType, errorType, exception)
             markTaskFailed(
                 taskId,
                 context.leaseToken,
@@ -659,15 +660,16 @@ class TaskProcessingScheduledJob(
             future.cancel(true)
             throw timeout
         } catch (executionException: ExecutionException) {
-            val cause = executionException.cause
-            if (cause is Exception) throw cause
+            val cause = executionException.cause ?: executionException
+            val unwrapped = (cause as? InvocationTargetException)?.targetException ?: cause
+            if (unwrapped is Exception) throw unwrapped
             logger.error(
                 "Task handler failed with non-exception throwable (taskId={}, taskType={})",
                 context.taskId,
                 context.taskType,
-                cause,
+                unwrapped,
             )
-            throw RuntimeException(cause)
+            throw RuntimeException(unwrapped)
         } catch (interruptedException: InterruptedException) {
             Thread.currentThread().interrupt()
             logger.warn(

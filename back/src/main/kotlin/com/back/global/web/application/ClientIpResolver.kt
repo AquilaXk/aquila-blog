@@ -30,14 +30,14 @@ class ClientIpResolver {
         resolveSingleHeaderIp(request, "X-Real-IP")?.let { return it }
 
         val forwardedFor = request.getHeader("X-Forwarded-For") ?: return null
-        forwardedFor
-            .split(',')
-            .asSequence()
-            .mapNotNull { IpAddressNormalizer.normalize(it) }
-            .firstOrNull()
-            ?.let { return it }
+        val forwardedIps =
+            forwardedFor
+                .split(',')
+                .mapNotNull { IpAddressNormalizer.normalize(it) }
+        if (forwardedIps.isEmpty()) return null
 
-        return null
+        return forwardedIps.asReversed().firstOrNull { !isTrustedProxyAddress(it) }
+            ?: forwardedIps.firstOrNull()
     }
 
     private fun resolveSingleHeaderIp(

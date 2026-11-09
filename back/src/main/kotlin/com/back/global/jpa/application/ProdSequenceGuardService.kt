@@ -183,20 +183,44 @@ class ProdSequenceGuardService(
                 "pk_member_attr" to SequenceTarget("member_attr", "member_attr_seq", 50),
                 "member_action_log_pkey" to SequenceTarget("member_action_log", "member_action_log_seq", 50),
                 "pk_member_action_log" to SequenceTarget("member_action_log", "member_action_log_seq", 50),
+                "member_session_pkey" to SequenceTarget("member_session", "member_session_seq", 50),
+                "pk_member_session" to SequenceTarget("member_session", "member_session_seq", 50),
                 "post_pkey" to SequenceTarget("post", "post_seq", 50),
                 "pk_post" to SequenceTarget("post", "post_seq", 50),
                 "post_attr_pkey" to SequenceTarget("post_attr", "post_attr_seq", 50),
                 "pk_post_attr" to SequenceTarget("post_attr", "post_attr_seq", 50),
                 "post_like_pkey" to SequenceTarget("post_like", "post_like_seq", 50),
                 "pk_post_like" to SequenceTarget("post_like", "post_like_seq", 50),
+                "post_image_references_pkey" to
+                    SequenceTarget("post_image_references", "post_image_references_seq", 50),
+                "pk_post_image_references" to
+                    SequenceTarget("post_image_references", "post_image_references_seq", 50),
                 "post_write_request_idempotency_pkey" to
                     SequenceTarget("post_write_request_idempotency", "post_write_request_idempotency_seq", 50),
                 "pk_post_write_request_idempotency" to
                     SequenceTarget("post_write_request_idempotency", "post_write_request_idempotency_seq", 50),
+                "admin_operation_receipt_pkey" to
+                    SequenceTarget("admin_operation_receipt", "admin_operation_receipt_seq", 50),
+                "pk_admin_operation_receipt" to
+                    SequenceTarget("admin_operation_receipt", "admin_operation_receipt_seq", 50),
                 "task_pkey" to SequenceTarget("task", "task_seq", 50),
                 "pk_task" to SequenceTarget("task", "task_seq", 50),
                 "uploaded_file_pkey" to SequenceTarget("uploaded_file", "uploaded_file_seq", 1),
                 "pk_uploaded_file" to SequenceTarget("uploaded_file", "uploaded_file_seq", 1),
+                "cloud_file_pkey" to SequenceTarget("cloud_file", "cloud_file_seq", 1),
+                "pk_cloud_file" to SequenceTarget("cloud_file", "cloud_file_seq", 1),
+                "cloud_video_upload_session_pkey" to
+                    SequenceTarget("cloud_video_upload_session", "cloud_video_upload_session_seq", 1),
+                "pk_cloud_video_upload_session" to
+                    SequenceTarget("cloud_video_upload_session", "cloud_video_upload_session_seq", 1),
+                "cloud_video_upload_part_pkey" to
+                    SequenceTarget("cloud_video_upload_part", "cloud_video_upload_part_seq", 1),
+                "pk_cloud_video_upload_part" to
+                    SequenceTarget("cloud_video_upload_part", "cloud_video_upload_part_seq", 1),
+                "cloud_external_playback_token_pkey" to
+                    SequenceTarget("cloud_external_playback_token", "cloud_external_playback_token_seq", 1),
+                "pk_cloud_external_playback_token" to
+                    SequenceTarget("cloud_external_playback_token", "cloud_external_playback_token_seq", 1),
             )
     }
 }

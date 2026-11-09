@@ -385,11 +385,20 @@ class ApiV1PostImageController(
         }
     }
 
+    private fun closeStreamQuietly(source: InputStream) {
+        runCatching { source.close() }
+    }
+
     private fun sliceStream(
         source: InputStream,
         range: LongRange,
     ): InputStream {
-        skipFully(source, range.first)
+        try {
+            skipFully(source, range.first)
+        } catch (ex: Throwable) {
+            closeStreamQuietly(source)
+            throw ex
+        }
         return object : InputStream() {
             private var remaining = range.last - range.first + 1
 

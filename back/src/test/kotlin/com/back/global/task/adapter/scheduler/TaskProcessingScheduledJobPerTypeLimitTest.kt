@@ -7,6 +7,8 @@ import com.back.global.task.application.TaskHandlerEntry
 import com.back.global.task.application.TaskHandlerMethod
 import com.back.global.task.application.TaskHandlerRegistry
 import com.back.global.task.application.TaskPayloadEnvelopeCodec
+import com.back.global.task.application.TaskPayloadQuarantineException
+import com.back.global.task.application.TaskQuarantineReason
 import com.back.global.task.application.TaskRetryPolicy
 import com.back.global.task.domain.Task
 import com.back.global.task.domain.TaskStatus
@@ -741,6 +743,65 @@ class TaskProcessingScheduledJobPerTypeLimitTest {
             handler.release.countDown()
             fixture.job.shutdownExecutor()
         }
+    }
+
+    @Test
+    @DisplayName("handler 내부에서 던진 TaskPayloadQuarantineException은 리플렉션 래핑을 벗기고 quarantine한다")
+    fun `handler quarantine exception is unwrapped from InvocationTargetException`() {
+        val taskType = "test.handler-quarantine"
+        val task = task(1L, taskType)
+        val handler = QuarantineThrowingHandler()
+        val entry =
+            TaskHandlerEntry.withCurrentDecoder(
+                taskType = taskType,
+                payloadClass = StubPayload::class.java,
+                handlerMethod =
+                    TaskHandlerMethod(
+                        bean = handler,
+                        method =
+                            QuarantineThrowingHandler::class.java.getDeclaredMethod(
+                                "handle",
+                                StubPayload::class.java,
+                            ),
+                    ),
+                retryPolicy = taskRetryPolicy(taskType),
+                schemaVersion = 2,
+                sensitivity = TaskPayloadSensitivity.INTERNAL,
+            )
+        val fixture =
+            createFixture(
+                maxConcurrent = 1,
+                perTypeMaxConcurrentRaw = "",
+                perTypeAutoTuneEnabled = false,
+                perTypeAutoTuneMinConcurrent = 1,
+                dynamicConcurrencyEnabled = false,
+                handlerEntries = listOf(entry),
+            )
+        org.mockito.Mockito
+            .`when`(fixture.taskRepository.findStaleProcessingTasksWithLock(anyInstant(), anyInt()))
+            .thenReturn(emptyList())
+        org.mockito.Mockito
+            .`when`(fixture.taskRepository.findPendingTasksWithLock(anyInt()))
+            .thenReturn(listOf(task), emptyList())
+        org.mockito.Mockito
+            .`when`(fixture.taskRepository.findById(task.id))
+            .thenReturn(Optional.of(task))
+
+        try {
+            fixture.job.processTasks()
+            waitUntilStatus(task, TaskStatus.QUARANTINED)
+            waitUntilQuarantineCounter(fixture.meterRegistry, taskType, "MALFORMED_PAYLOAD")
+
+            assertThat(task.status).isEqualTo(TaskStatus.QUARANTINED)
+            assertThat(task.payload).isEqualTo(Task.REDACTED_PAYLOAD)
+            assertThat(task.errorMessage).isEqualTo("MALFORMED_PAYLOAD")
+        } finally {
+            fixture.job.shutdownExecutor()
+        }
+    }
+
+    private class QuarantineThrowingHandler {
+        fun handle(payload: StubPayload): Nothing = throw TaskPayloadQuarantineException(TaskQuarantineReason.MALFORMED_PAYLOAD)
     }
 
     private data class JobFixture(

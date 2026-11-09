@@ -51,12 +51,13 @@ class ApiV1PublicCloudControllerWebMvcTest : BasePublicCloudControllerWebMvcTest
     @DisplayName("external playback Range 요청은 cookie 없이 token으로 partial response를 반환한다")
     fun `external playback Range 요청은 cookie 없이 token으로 partial response를 반환한다`() {
         val bytes = ByteArray(1024) { (it % 251).toByte() }
+        val loadedDto = sampleDto()
         given(cloudExternalPlaybackTokenService.getFile(token = "raw-token", fileId = 12L))
-            .willReturn(sampleDto())
-        given(cloudExternalPlaybackTokenService.openContentRange(token = "raw-token", fileId = 12L, range = 0L..1023L))
+            .willReturn(loadedDto)
+        given(cloudExternalPlaybackTokenService.openContentRange(file = loadedDto, range = 0L..1023L))
             .willReturn(
                 CloudFileContent(
-                    file = sampleDto(),
+                    file = loadedDto,
                     storedObject =
                         CloudStoragePort.StoredObject(
                             inputStream = ByteArrayInputStream(bytes),
@@ -82,7 +83,7 @@ class ApiV1PublicCloudControllerWebMvcTest : BasePublicCloudControllerWebMvcTest
             }
 
         then(cloudExternalPlaybackTokenService).should().getFile(token = "raw-token", fileId = 12L)
-        then(cloudExternalPlaybackTokenService).should().openContentRange(token = "raw-token", fileId = 12L, range = 0L..1023L)
+        then(cloudExternalPlaybackTokenService).should().openContentRange(file = loadedDto, range = 0L..1023L)
     }
 
     @Test

@@ -21,6 +21,7 @@ data class PostModifiedEvent
         val actorDto: MemberDto,
         val beforeTags: List<String> = emptyList(),
         val afterTags: List<String> = emptyList(),
+        val wasPublic: Boolean = true,
     ) : EventPayload {
         @JsonGetter("postDto")
         fun getPostDtoForJson() = postDto.forEventLog()
@@ -31,6 +32,7 @@ data class PostModifiedEvent
             actorDto: MemberDto,
             beforeTags: List<String> = emptyList(),
             afterTags: List<String> = emptyList(),
+            wasPublic: Boolean = true,
         ) : this(
             uid,
             postDto::class.simpleName!!,
@@ -39,5 +41,6 @@ data class PostModifiedEvent
             actorDto,
             beforeTags,
             afterTags,
+            wasPublic,
         )
     }

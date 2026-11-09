@@ -44,3 +44,49 @@ SELECT setval('public.task_seq', COALESCE((SELECT MAX(id) FROM public.task), 0) 
 
 ALTER SEQUENCE IF EXISTS uploaded_file_seq INCREMENT BY 1;
 SELECT setval('public.uploaded_file_seq', COALESCE((SELECT MAX(id) FROM public.uploaded_file), 0) + 1, false);
+
+ALTER SEQUENCE IF EXISTS member_session_seq INCREMENT BY 50;
+SELECT setval('public.member_session_seq', COALESCE((SELECT MAX(id) FROM public.member_session), 0) + 50, false);
+
+ALTER SEQUENCE IF EXISTS post_image_references_seq INCREMENT BY 50;
+SELECT
+    setval(
+        'public.post_image_references_seq',
+        COALESCE((SELECT MAX(id) FROM public.post_image_references), 0) + 50,
+        false
+    );
+
+ALTER SEQUENCE IF EXISTS admin_operation_receipt_seq INCREMENT BY 50;
+SELECT
+    setval(
+        'public.admin_operation_receipt_seq',
+        COALESCE((SELECT MAX(id) FROM public.admin_operation_receipt), 0) + 50,
+        false
+    );
+
+ALTER SEQUENCE IF EXISTS cloud_file_seq INCREMENT BY 1;
+SELECT setval('public.cloud_file_seq', COALESCE((SELECT MAX(id) FROM public.cloud_file), 0) + 1, false);
+
+ALTER SEQUENCE IF EXISTS cloud_video_upload_session_seq INCREMENT BY 1;
+SELECT
+    setval(
+        'public.cloud_video_upload_session_seq',
+        COALESCE((SELECT MAX(id) FROM public.cloud_video_upload_session), 0) + 1,
+        false
+    );
+
+ALTER SEQUENCE IF EXISTS cloud_video_upload_part_seq INCREMENT BY 1;
+SELECT
+    setval(
+        'public.cloud_video_upload_part_seq',
+        COALESCE((SELECT MAX(id) FROM public.cloud_video_upload_part), 0) + 1,
+        false
+    );
+
+ALTER SEQUENCE IF EXISTS cloud_external_playback_token_seq INCREMENT BY 1;
+SELECT
+    setval(
+        'public.cloud_external_playback_token_seq',
+        COALESCE((SELECT MAX(id) FROM public.cloud_external_playback_token), 0) + 1,
+        false
+    );

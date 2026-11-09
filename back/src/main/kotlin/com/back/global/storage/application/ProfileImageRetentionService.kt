@@ -94,8 +94,27 @@ class ProfileImageRetentionService(
             throw AppException(ErrorCode.BAD_REQUEST, "현재 사용 중인 프로필 이미지는 삭제할 수 없습니다.")
         }
 
+        val repo = postRepository
+        if (repo != null && repo.existsImageReferenceByObjectKey(uploadedFile.objectKey)) {
+            rebindProfileImageToReferencingPost(uploadedFile, repo.findFirstReferencingPostId(uploadedFile.objectKey))
+            return
+        }
+
         postImageStoragePort.deletePostImage(uploadedFile.objectKey)
         markProfileImageDeleted(uploadedFile)
+    }
+
+    private fun rebindProfileImageToReferencingPost(
+        uploadedFile: UploadedFile,
+        referencingPostId: Long?,
+    ) {
+        writeTransactionTemplate.executeWithoutResult {
+            uploadedFile.purpose = UploadedFilePurpose.POST_IMAGE
+            uploadedFile.ownerType = UploadedFileOwnerType.POST
+            uploadedFile.ownerId = referencingPostId
+            uploadedFile.restoreActive()
+            uploadedFileRepository.save(uploadedFile)
+        }
     }
 
     private fun markProfileImageDeleted(uploadedFile: UploadedFile) {

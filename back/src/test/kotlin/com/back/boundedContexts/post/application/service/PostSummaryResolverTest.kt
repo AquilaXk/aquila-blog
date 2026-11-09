@@ -45,6 +45,26 @@ summary: "이전 frontmatter 요약"
     }
 
     @Test
+    fun `unfenced leading metadata lines are stripped before extracting summary`() {
+        val content =
+            """
+            tags: [kotlin, spring, backend]
+            category: backend
+            thumbnail: https://example.com/thumb.png
+            description: 레거시 상단 메타 설명입니다.
+            excerpt: 레거시 상단 발췌문입니다.
+
+            비펜스 메타데이터 뒤의 실제 본문 첫 번째 문장입니다. 두 번째 문장입니다.
+            """.trimIndent()
+
+        val resolved = PostSummaryResolver.resolveAutomatic("비펜스 메타 글", content, fixedNow)
+
+        assertThat(resolved.source).isEqualTo(PostSummarySource.EXTRACTED)
+        assertThat(resolved.text).isEqualTo("비펜스 메타데이터 뒤의 실제 본문 첫 번째 문장입니다. 두 번째 문장입니다.")
+        assertThat(resolved.text).doesNotContain("tags:", "category:", "thumbnail:", "description:", "excerpt:")
+    }
+
+    @Test
     fun `leading explicit summary block wins over ordinary prose`() {
         val fixture = resolvedFixture("leading-block", "create")
         val expected = requireNotNull(fixture.expected)

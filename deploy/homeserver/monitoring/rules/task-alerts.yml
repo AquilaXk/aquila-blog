@@ -335,7 +335,7 @@ groups:
         expr: |
           sum(
             rate(
-              {__name__=~"http_server_requests_seconds_count|http_server_request_duration_seconds_count",job="back",service="aquila-back",uri=~"/post/api/v1/posts(/feed|/feed/cursor|/explore|/explore/cursor|/search|/tags|/[0-9]+)?"}[5m]
+              {__name__=~"http_server_requests_seconds_count|http_server_request_duration_seconds_count",job="back",service="aquila-back",uri=~"/post/api/v1/posts(/feed|/feed/cursor|/bootstrap|/explore|/explore/cursor|/search|/tags|/\\{id\\}|/\\{id\\}/meta|/\\{id\\}/content|/[0-9]+(/[a-z]+)?)?"}[5m]
             )
           ) > 50
         for: 10m

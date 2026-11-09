@@ -32,7 +32,7 @@ object CloudContentWebSupport {
         meterRegistry: MeterRegistry?,
         endpoint: String,
         loadFile: () -> CloudFileDto,
-        openRange: (LongRange) -> CloudFileContent,
+        openRange: (CloudFileDto, LongRange) -> CloudFileContent,
         openFull: () -> CloudFileContent,
     ): ResponseEntity<Resource> =
         contentResponse(
@@ -41,7 +41,7 @@ object CloudContentWebSupport {
             endpoint = endpoint,
             download = false,
             loadFile = loadFile,
-            openRange = { _, range -> openRange(range) },
+            openRange = openRange,
             openFull = openFull,
         )
 

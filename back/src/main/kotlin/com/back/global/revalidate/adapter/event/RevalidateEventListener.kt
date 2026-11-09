@@ -9,6 +9,8 @@ import com.back.global.task.annotation.TaskHandler
 import com.back.global.task.application.TaskFacade
 import org.slf4j.LoggerFactory
 import org.springframework.stereotype.Component
+import org.springframework.transaction.annotation.Propagation
+import org.springframework.transaction.annotation.Transactional
 import org.springframework.transaction.event.TransactionPhase
 import org.springframework.transaction.event.TransactionalEventListener
 import java.nio.charset.StandardCharsets
@@ -20,21 +22,34 @@ class RevalidateEventListener(
     private val revalidateService: com.back.global.revalidate.RevalidateService,
 ) {
     // revalidate 큐 적재 실패가 본 요청 트랜잭션을 깨지 않도록 AFTER_COMMIT에서 처리한다.
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
     @TransactionalEventListener(
         phase = TransactionPhase.AFTER_COMMIT,
     )
-    fun handle(event: PostWrittenEvent) = enqueueRevalidatePaths(event.uid, event.aggregateType, event.aggregateId)
+    fun handle(event: PostWrittenEvent) {
+        if (!event.postDto.published) return
+        enqueueRevalidatePaths(event.uid, event.aggregateType, event.aggregateId)
+    }
 
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
     @TransactionalEventListener(
         phase = TransactionPhase.AFTER_COMMIT,
     )
-    fun handle(event: PostModifiedEvent) = enqueueRevalidatePaths(event.uid, event.aggregateType, event.aggregateId)
+    fun handle(event: PostModifiedEvent) {
+        if (!event.wasPublic && !event.postDto.published) return
+        enqueueRevalidatePaths(event.uid, event.aggregateType, event.aggregateId)
+    }
 
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
     @TransactionalEventListener(
         phase = TransactionPhase.AFTER_COMMIT,
     )
-    fun handle(event: PostDeletedEvent) = enqueueRevalidatePaths(event.uid, event.aggregateType, event.aggregateId)
+    fun handle(event: PostDeletedEvent) {
+        if (!event.postDto.published) return
+        enqueueRevalidatePaths(event.uid, event.aggregateType, event.aggregateId)
+    }
 
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
     @TransactionalEventListener(
         phase = TransactionPhase.AFTER_COMMIT,
     )

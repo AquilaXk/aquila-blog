@@ -15,6 +15,8 @@ import io.micrometer.core.instrument.MeterRegistry
 import org.slf4j.LoggerFactory
 import org.springframework.beans.factory.annotation.Value
 import org.springframework.stereotype.Component
+import org.springframework.transaction.annotation.Propagation
+import org.springframework.transaction.annotation.Transactional
 import org.springframework.transaction.event.TransactionPhase
 import org.springframework.transaction.event.TransactionalEventListener
 import java.nio.charset.StandardCharsets
@@ -41,6 +43,7 @@ class PostReadModelTaskEventListener(
     @Value("\${custom.post.read.prewarm.enabled:true}")
     private val prewarmEnabled: Boolean,
 ) {
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
     @TransactionalEventListener(
         phase = TransactionPhase.AFTER_COMMIT,
     )
@@ -55,6 +58,7 @@ class PostReadModelTaskEventListener(
             warmDetail = event.postDto.published && event.postDto.listed,
         )
 
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
     @TransactionalEventListener(
         phase = TransactionPhase.AFTER_COMMIT,
     )
@@ -69,6 +73,7 @@ class PostReadModelTaskEventListener(
             warmDetail = event.postDto.published && event.postDto.listed,
         )
 
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
     @TransactionalEventListener(
         phase = TransactionPhase.AFTER_COMMIT,
     )

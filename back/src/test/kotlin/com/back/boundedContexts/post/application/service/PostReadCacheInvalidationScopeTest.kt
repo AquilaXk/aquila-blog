@@ -30,6 +30,10 @@ class PostReadCacheInvalidationScopeTest {
             PostReadCacheInvalidationScope.PublicPostModified(
                 setOf(PostPublicChangeImpact.TITLE),
             )
+        val contentChange =
+            PostReadCacheInvalidationScope.PublicPostModified(
+                setOf(PostPublicChangeImpact.CONTENT),
+            )
         val tagChange =
             PostReadCacheInvalidationScope.PublicPostModified(
                 setOf(PostPublicChangeImpact.TAG),
@@ -53,6 +57,15 @@ class PostReadCacheInvalidationScopeTest {
                 PostReadCacheInvalidationTarget.ADMIN_POSTS_FIRST_PAGE,
                 PostReadCacheInvalidationTarget.HOT_READ_PAGES,
                 PostReadCacheInvalidationTarget.SEARCH_FIRST_PAGE,
+                PostReadCacheInvalidationTarget.IMPACTED_TAG_PAGES,
+                PostReadCacheInvalidationTarget.DETAIL,
+            )
+        assertThat(evictedTargets(contentChange))
+            .containsExactlyInAnyOrder(
+                PostReadCacheInvalidationTarget.ADMIN_POSTS_FIRST_PAGE,
+                PostReadCacheInvalidationTarget.HOT_READ_PAGES,
+                PostReadCacheInvalidationTarget.SEARCH_FIRST_PAGE,
+                PostReadCacheInvalidationTarget.IMPACTED_TAG_PAGES,
                 PostReadCacheInvalidationTarget.DETAIL,
             )
         assertThat(evictedTargets(tagChange))

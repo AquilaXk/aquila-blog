@@ -98,20 +98,25 @@ class CloudExternalPlaybackTokenService(
 
     @Transactional(readOnly = true)
     fun openContentRange(
-        token: String,
-        fileId: Long,
+        file: CloudFileDto,
         range: LongRange,
     ): CloudFileContent {
-        val file = resolveTokenFile(token, fileId)
         val storedObject =
             cloudStoragePort.openRange(file.objectKey, range)
                 ?: throw AppException(ErrorCode.NOT_FOUND, "클라우드 파일을 찾을 수 없습니다.")
 
         return CloudFileContent(
-            file = file.toDto(),
+            file = file,
             storedObject = storedObject,
         )
     }
+
+    @Transactional(readOnly = true)
+    fun openContentRange(
+        token: String,
+        fileId: Long,
+        range: LongRange,
+    ): CloudFileContent = openContentRange(getFile(token, fileId), range)
 
     @Transactional
     fun purgeExpiredTokens(batchSize: Int): Int {
@@ -180,6 +185,7 @@ class CloudExternalPlaybackTokenService(
             folderPath = folderPath,
             createdAt = runCatching { createdAt }.getOrDefault(clock.instant()),
             modifiedAt = runCatching { modifiedAt }.getOrDefault(clock.instant()),
+            objectKey = objectKey,
         )
 
     companion object {

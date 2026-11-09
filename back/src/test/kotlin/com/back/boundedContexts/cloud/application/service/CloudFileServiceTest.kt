@@ -775,6 +775,29 @@ class CloudFileServiceTest {
     }
 
     @Test
+    @DisplayName("업로드 시 ZIP 엔트리 수가 상한을 초과하는 HWPX 파일은 Fail-Closed로 거절한다")
+    fun `upload는 엔트리 상한을 초과하는 HWPX 파일을 차단한다`() {
+        val excessiveEntries =
+            (0..10_000).map { index ->
+                "Contents/entry-$index.txt" to ""
+            }
+
+        assertThatThrownBy {
+            service.upload(
+                ownerMemberId = 7L,
+                originalFilename = "bomb.hwpx",
+                contentType = "application/octet-stream",
+                bytes = zip(*excessiveEntries.toTypedArray()),
+                folderPath = null,
+            )
+        }.isInstanceOf(AppException::class.java)
+            .hasMessageContaining("ZIP 아카이브 엔트리 수가 허용 상한을 초과했습니다.")
+
+        assertThat(storage.uploaded).isEmpty()
+        assertThat(repository.savedFiles).isEmpty()
+    }
+
+    @Test
     @DisplayName("업로드 시 한글 파일명의 일반 ZIP 파일은 문서로 저장한다")
     fun `upload는 한글 파일명의 일반 ZIP 파일을 문서로 저장한다`() {
         val nfcName = "3._(별첨2)_직무시험_관련_국민건강보험법_및_노인장기요양법.zip"

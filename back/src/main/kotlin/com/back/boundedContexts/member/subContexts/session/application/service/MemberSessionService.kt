@@ -155,7 +155,11 @@ class MemberSessionService(
 
     @Transactional
     override fun touchAuthenticated(memberSession: MemberSession) {
+        val previousTouch = memberSession.lastAuthenticatedAt
         memberSession.touchAuthenticatedIfDue(touchMinIntervalSeconds)
+        if (memberSession.lastAuthenticatedAt != previousTouch) {
+            evictActiveSnapshot(memberSession.member.id, memberSession.sessionKey)
+        }
     }
 
     @Transactional
@@ -318,6 +322,16 @@ class MemberSessionService(
         memberId: Long,
         sessionKey: String,
     ) {
+        evictActiveSnapshotOnce(memberId, sessionKey)
+        registerAfterCommit {
+            evictActiveSnapshotOnce(memberId, sessionKey)
+        }
+    }
+
+    private fun evictActiveSnapshotOnce(
+        memberId: Long,
+        sessionKey: String,
+    ) {
         cacheManager.getCache(MemberSessionCacheNames.ACTIVE)?.let { cache ->
             runCacheWriteSafely("evict") { cache.evict("session:$sessionKey") }
             runCacheWriteSafely("evict") { cache.evict("member:$memberId:session:$sessionKey") }
@@ -354,12 +368,18 @@ class MemberSessionService(
 
     private fun evictAllActiveSnapshotsNowAndAfterCommit() {
         evictAllActiveSnapshots()
+        registerAfterCommit {
+            evictAllActiveSnapshots()
+        }
+    }
+
+    private fun registerAfterCommit(action: () -> Unit) {
         if (!TransactionSynchronizationManager.isSynchronizationActive()) return
 
         TransactionSynchronizationManager.registerSynchronization(
             object : TransactionSynchronization {
                 override fun afterCommit() {
-                    evictAllActiveSnapshots()
+                    action()
                 }
             },
         )

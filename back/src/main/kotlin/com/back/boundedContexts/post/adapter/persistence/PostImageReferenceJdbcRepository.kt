@@ -113,8 +113,8 @@ class PostImageReferenceJdbcRepository(
 
         jdbcTemplate.batchUpdate(
             """
-            INSERT INTO post_image_references (post_id, object_key, created_at, modified_at)
-            VALUES (?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+            INSERT INTO post_image_references (id, post_id, object_key, created_at, modified_at)
+            VALUES (nextval('post_image_references_seq'), ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
             ON CONFLICT (post_id, object_key) DO NOTHING
             """.trimIndent(),
             normalizedKeys,

@@ -473,16 +473,16 @@ ALTER TABLE IF EXISTS public.post ADD COLUMN IF NOT EXISTS content_html TEXT;
 DO $$
 BEGIN
   IF to_regclass('"'"'public.post_like'"'"') IS NOT NULL AND to_regclass('"'"'public.post_like_seq'"'"') IS NOT NULL THEN
-    PERFORM setval('"'"'public.post_like_seq'"'"', COALESCE((SELECT MAX(id) + 1 FROM public.post_like), 1), false);
+    PERFORM setval('"'"'public.post_like_seq'"'"', COALESCE((SELECT MAX(id) FROM public.post_like), 0) + 50, false);
   END IF;
   IF to_regclass('"'"'public.post_attr'"'"') IS NOT NULL AND to_regclass('"'"'public.post_attr_seq'"'"') IS NOT NULL THEN
-    PERFORM setval('"'"'public.post_attr_seq'"'"', COALESCE((SELECT MAX(id) + 1 FROM public.post_attr), 1), false);
+    PERFORM setval('"'"'public.post_attr_seq'"'"', COALESCE((SELECT MAX(id) FROM public.post_attr), 0) + 50, false);
   END IF;
   IF to_regclass('"'"'public.member_attr'"'"') IS NOT NULL AND to_regclass('"'"'public.member_attr_seq'"'"') IS NOT NULL THEN
-    PERFORM setval('"'"'public.member_attr_seq'"'"', COALESCE((SELECT MAX(id) + 1 FROM public.member_attr), 1), false);
+    PERFORM setval('"'"'public.member_attr_seq'"'"', COALESCE((SELECT MAX(id) FROM public.member_attr), 0) + 50, false);
   END IF;
   IF to_regclass('"'"'public.task'"'"') IS NOT NULL AND to_regclass('"'"'public.task_seq'"'"') IS NOT NULL THEN
-    PERFORM setval('"'"'public.task_seq'"'"', COALESCE((SELECT MAX(id) + 1 FROM public.task), 1), false);
+    PERFORM setval('"'"'public.task_seq'"'"', COALESCE((SELECT MAX(id) FROM public.task), 0) + 50, false);
   END IF;
 END $$;
 '

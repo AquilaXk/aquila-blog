@@ -16,6 +16,7 @@ class PostTempDraftService(
     private val postRepository: PostRepositoryPort,
     private val memberAttrRepository: MemberAttrRepositoryPort,
     private val postHydrationService: PostHydrationService,
+    private val postCounterService: PostCounterService? = null,
 ) {
     private val activeTempDraftPostIdAttrName = "activeTempDraftPostId"
     private val activeTempDraftLockAttrName = "activeTempDraftLock"
@@ -47,6 +48,7 @@ class PostTempDraftService(
                 val newPost = postRepository.save(Post(0, persistenceAuthor, "임시글", "임시글 입니다.", isTempDraft = true))
                 updateTempDraftMarker(persistenceAuthor, newPost.id)
                 postRepository.flush()
+                postCounterService?.incrementMemberPostsCount(persistenceAuthor)
                 newPost to true
             }
         } finally {

@@ -46,10 +46,9 @@ class ApiV1PublicCloudController(
                     fileId = id,
                 )
             },
-            openRange = { range ->
+            openRange = { loaded, range ->
                 cloudExternalPlaybackTokenService.openContentRange(
-                    token = token,
-                    fileId = id,
+                    file = loaded,
                     range = range,
                 )
             },

@@ -4,6 +4,11 @@ import com.back.boundedContexts.member.application.port.input.CurrentMemberProfi
 import com.back.boundedContexts.member.application.port.input.ProfileImageReadUseCase
 import com.back.boundedContexts.member.application.port.output.MemberRepositoryPort
 import com.back.boundedContexts.member.domain.shared.Member
+import com.back.boundedContexts.member.domain.shared.MemberAttr
+import com.back.boundedContexts.member.domain.shared.memberMixin.MemberProfileWorkspaceContent
+import com.back.boundedContexts.member.domain.shared.memberMixin.PROFILE_WORKSPACE_DRAFT
+import com.back.boundedContexts.member.domain.shared.memberMixin.PROFILE_WORKSPACE_PUBLISHED
+import com.back.boundedContexts.member.domain.shared.memberMixin.encodeMemberProfileWorkspaceContent
 import com.back.boundedContexts.member.dto.MemberWithUsernameDto
 import com.back.global.app.AdminProperties
 import com.back.global.app.AppConfig
@@ -11,11 +16,13 @@ import com.back.global.exception.application.AppException
 import com.back.global.storage.application.UploadedFileUrlCodec
 import com.back.global.storage.domain.UploadedFile
 import com.back.global.storage.domain.UploadedFileRetentionReason
+import com.back.standard.util.Ut
 import org.assertj.core.api.Assertions.assertThat
 import org.assertj.core.api.Assertions.assertThatThrownBy
 import org.junit.jupiter.api.Test
 import org.mockito.Mockito.mock
 import org.mockito.Mockito.`when`
+import tools.jackson.module.kotlin.jacksonObjectMapper
 import java.lang.reflect.Field
 import java.time.Instant
 import java.util.Optional
@@ -86,6 +93,52 @@ class ProfileImageReadPolicyTest {
 
         assertThatThrownBy { policy.resolve("profiles/8/current.png", uploadedFile, noncanonicalOwner.id) }
             .isInstanceOf(AppException::class.java)
+    }
+
+    @Test
+    fun `CurrentMemberProfileQueryService는 존재하지 않는 회원 조회 시 404 AppException을 던진다`() {
+        withIsolatedAppConfig {
+            Ut.JSON.objectMapper = jacksonObjectMapper()
+            val hydratedOwner =
+                Member(7L, "admin", null, "관리자", "admin@test.com", true).also { member ->
+                    member.createdAt = Instant.EPOCH
+                    member.modifiedAt = Instant.EPOCH
+                    val encoded = encodeMemberProfileWorkspaceContent(MemberProfileWorkspaceContent())
+                    member.getOrPutAttr<MemberAttr>(PROFILE_WORKSPACE_DRAFT) {
+                        MemberAttr(1L, member, PROFILE_WORKSPACE_DRAFT, encoded).apply {
+                            createdAt = Instant.EPOCH
+                            modifiedAt = Instant.EPOCH
+                        }
+                    }
+                    member.getOrPutAttr<MemberAttr>(PROFILE_WORKSPACE_PUBLISHED) {
+                        MemberAttr(2L, member, PROFILE_WORKSPACE_PUBLISHED, encoded).apply {
+                            createdAt = Instant.EPOCH
+                            modifiedAt = Instant.EPOCH
+                        }
+                    }
+                }
+            val hydrator = mock(MemberProfileHydrator::class.java)
+            val queryService = CurrentMemberProfileQueryService(memberRepository, hydrator)
+            `when`(memberRepository.findById(hydratedOwner.id)).thenReturn(Optional.of(hydratedOwner))
+            `when`(hydrator.hydrate(hydratedOwner)).thenReturn(hydratedOwner)
+            `when`(memberRepository.findById(999L)).thenReturn(Optional.empty())
+
+            val publishedDto = queryService.getPublishedById(hydratedOwner.id)
+            assertThat(publishedDto.id).isEqualTo(hydratedOwner.id)
+
+            val cleanWorkspace = queryService.getWorkspaceById(hydratedOwner.id)
+            assertThat(cleanWorkspace.dirtyFromPublished).isFalse()
+
+            hydratedOwner.setProfileWorkspaceDraftContent(
+                hydratedOwner.getProfileWorkspaceDraftContent().copy(blogTitle = "변경된 블로그 제목"),
+            )
+            val dirtyWorkspace = queryService.getWorkspaceById(hydratedOwner.id)
+            assertThat(dirtyWorkspace.dirtyFromPublished).isTrue()
+
+            assertThatThrownBy { queryService.getPublishedById(999L) }
+                .isInstanceOf(AppException::class.java)
+                .hasMessageContaining("존재하지 않는 회원입니다.")
+        }
     }
 
     private fun profileImage(objectKey: String): UploadedFile =

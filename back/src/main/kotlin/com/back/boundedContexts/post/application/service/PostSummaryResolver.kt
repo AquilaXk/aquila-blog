@@ -44,6 +44,11 @@ object PostSummaryResolver {
                 "들어가며(?:[.!?]|\\s|$)|introduction(?:[.!?]|\\s|$))",
             RegexOption.IGNORE_CASE,
         )
+    private val leadingMetadataLineRegex =
+        Regex(
+            "^\\s*(?:tag|tags|category|categories|summary|description|excerpt|thumbnail|thumb|cover|coverimage|cover_image)\\s*:\\s*.+$",
+            RegexOption.IGNORE_CASE,
+        )
 
     data class ResolvedPostSummary(
         val text: String,
@@ -65,7 +70,7 @@ object PostSummaryResolver {
     ): ResolvedPostSummary {
         val normalizedContent = normalizeLineEndings(content)
         val hash = sha256(normalizedContent)
-        val bodyLines = splitFrontmatter(normalizedContent).lines()
+        val bodyLines = stripLeadingMetadataLines(splitFrontmatter(normalizedContent).lines())
         val leading = extractLeadingSummaryBlock(bodyLines)
         if (leading.isNotBlank()) {
             return derived(leading, PostSummarySource.LEADING_BLOCK, hash, ALGORITHM_VERSION, now)
@@ -131,6 +136,14 @@ object PostSummaryResolver {
             cursor = lineEnd + 1
         }
         return trimmed
+    }
+
+    private fun stripLeadingMetadataLines(lines: List<String>): List<String> {
+        var index = 0
+        while (index < lines.size && (lines[index].isBlank() || leadingMetadataLineRegex.matches(lines[index]))) {
+            index += 1
+        }
+        return lines.subList(index, lines.size)
     }
 
     private fun extractLeadingSummaryBlock(lines: List<String>): String {

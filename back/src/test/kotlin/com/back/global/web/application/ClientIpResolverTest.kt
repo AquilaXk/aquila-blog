@@ -31,13 +31,19 @@ class ClientIpResolverTest {
     }
 
     @Test
-    @DisplayName("신뢰 프록시에서 CF 헤더가 없으면 X-Forwarded-For 첫 번째 IP를 사용한다")
-    fun `trusted proxy falls back to x forwarded for first ip`() {
+    @DisplayName("신뢰 프록시에서 CF 헤더가 없으면 X-Forwarded-For 우측부터 신뢰 프록시를 건너뛴 첫 클라이언트 IP를 사용한다")
+    fun `trusted proxy falls back to rightmost non trusted x forwarded for ip`() {
         val request = MockHttpServletRequest("GET", "/member/api/v1/auth/me")
         request.remoteAddr = "10.0.0.8"
-        request.addHeader("X-Forwarded-For", "198.51.100.45, 198.51.100.46")
+        request.addHeader("X-Forwarded-For", "1.2.3.4, 198.51.100.45, 172.18.0.2")
 
         assertThat(resolver.resolve(request)).isEqualTo("198.51.100.45")
+
+        val allTrustedRequest = MockHttpServletRequest("GET", "/member/api/v1/auth/me")
+        allTrustedRequest.remoteAddr = "10.0.0.8"
+        allTrustedRequest.addHeader("X-Forwarded-For", "10.0.0.1, 172.18.0.2")
+
+        assertThat(resolver.resolve(allTrustedRequest)).isEqualTo("10.0.0.1")
     }
 
     @Test

@@ -447,6 +447,40 @@ class ApiV1PostImageControllerTest {
 
     private fun imageRequest(objectKey: String): MockHttpServletRequest = MockHttpServletRequest("GET", "/post/api/v1/images/$objectKey")
 
+    @Test
+    @DisplayName("Range 조회 중 skipFully에서 예외가 발생하면 원본 InputStream을 닫고 예외를 전파한다")
+    fun `images range 조회는 skipFully 실패 시 원본 스트림을 닫는다`() {
+        val objectKey = "posts/2026/03/truncated-range.png"
+        val uploadedFile = postImage(objectKey).apply { attachToPost(30L, UploadedFilePurpose.POST_IMAGE) }
+        `when`(uploadedFileRepository.findByObjectKey(objectKey)).thenReturn(uploadedFile)
+        `when`(postRepository.findPublicDetailById(30L)).thenReturn(publicPost(30L))
+        var closed = false
+        val shortStream =
+            object : ByteArrayInputStream(byteArrayOf(1, 2)) {
+                override fun skip(n: Long): Long = 0L
+
+                override fun close() {
+                    closed = true
+                    super.close()
+                }
+            }
+        postImageStorageService.images[objectKey] =
+            PostImageStoragePort.StoredObject(
+                inputStream = shortStream,
+                contentType = "image/png",
+                contentLength = 10L,
+                originalFilename = "truncated-range.png",
+            )
+
+        assertThatThrownBy {
+            controller.getPostImage(
+                imageRequest(objectKey).apply { addHeader(HttpHeaders.RANGE, "bytes=5-9") },
+            )
+        }.isInstanceOf(java.io.EOFException::class.java)
+
+        assertThat(closed).isTrue()
+    }
+
     private fun postImage(objectKey: String): UploadedFile =
         UploadedFile(
             objectKey = objectKey,

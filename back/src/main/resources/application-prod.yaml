@@ -13,6 +13,9 @@ spring:
     # Flyway는 dedicated migration credential만 사용한다. postgres/superuser fallback 금지 (#1131).
     user: "${PROD___SPRING__FLYWAY__USER}"
     password: "${PROD___SPRING__FLYWAY__PASSWORD}"
+    postgresql:
+      # non-transactional(CREATE INDEX CONCURRENTLY) 마이그레이션 실행 시 mainConnection 트랜잭션 스냅샷 자기 교착을 막는다.
+      transactional-lock: false
   data:
     redis:
       password: "${PROD___SPRING__DATA__REDIS__PASSWORD}"

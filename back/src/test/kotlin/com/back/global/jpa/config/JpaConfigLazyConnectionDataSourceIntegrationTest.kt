@@ -9,6 +9,7 @@ import org.mockito.Mockito.verifyNoInteractions
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.jdbc.core.JdbcTemplate
 import org.springframework.jdbc.datasource.LazyConnectionDataSourceProxy
+import org.springframework.test.util.ReflectionTestUtils
 import org.springframework.transaction.PlatformTransactionManager
 import org.springframework.transaction.TransactionDefinition
 import org.springframework.transaction.support.TransactionTemplate
@@ -31,6 +32,7 @@ class JpaConfigLazyConnectionDataSourceIntegrationTest : BaseSeededPerformanceIn
         val target = proxy.targetDataSource
         assertThat(target).isInstanceOf(HikariDataSource::class.java)
         assertThat(target).isNotInstanceOf(LazyConnectionDataSourceProxy::class.java)
+        assertThat(ReflectionTestUtils.invokeMethod<Boolean>(proxy, "defaultAutoCommit")).isFalse()
     }
 
     @Test
@@ -81,5 +83,11 @@ class JpaConfigLazyConnectionDataSourceIntegrationTest : BaseSeededPerformanceIn
         val otherBean = "plainBean"
         assertThat(processor.postProcessAfterInitialization(otherBean, "dataSource")).isSameAs(otherBean)
         verifyNoInteractions(rawDataSource, secondaryDataSource)
+
+        HikariDataSource().apply { isAutoCommit = false }.use { hikariDataSource ->
+            val wrappedHikari = processor.postProcessAfterInitialization(hikariDataSource, "dataSource")
+            assertThat(wrappedHikari).isInstanceOf(LazyConnectionDataSourceProxy::class.java)
+            assertThat(ReflectionTestUtils.invokeMethod<Boolean>(wrappedHikari as Any, "defaultAutoCommit")).isFalse()
+        }
     }
 }

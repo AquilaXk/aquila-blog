@@ -1,6 +1,7 @@
 package com.back.global.jpa.config
 
 import com.querydsl.jpa.impl.JPAQueryFactory
+import com.zaxxer.hikari.HikariDataSource
 import jakarta.persistence.EntityManager
 import jakarta.persistence.PersistenceContext
 import org.springframework.beans.factory.config.BeanPostProcessor
@@ -27,7 +28,11 @@ class JpaConfig {
                     beanName: String,
                 ): Any {
                     if (beanName == "dataSource" && bean is DataSource && bean !is LazyConnectionDataSourceProxy) {
-                        return LazyConnectionDataSourceProxy(bean)
+                        return LazyConnectionDataSourceProxy(bean).apply {
+                            if (bean is HikariDataSource) {
+                                setDefaultAutoCommit(bean.isAutoCommit)
+                            }
+                        }
                     }
                     return bean
                 }

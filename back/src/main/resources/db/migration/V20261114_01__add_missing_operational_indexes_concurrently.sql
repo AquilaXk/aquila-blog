@@ -1,3 +1,5 @@
+DROP INDEX CONCURRENTLY IF EXISTS post_idx_public_listed_active_created_at_id_desc;
+
 CREATE INDEX CONCURRENTLY IF NOT EXISTS post_idx_public_listed_active_created_at_id_desc
     ON post (created_at DESC, id DESC)
     WHERE deleted_at IS NULL AND published IS TRUE AND listed IS TRUE;

@@ -60,6 +60,8 @@ spring:
       max-request-size: ${CUSTOM_STORAGE_MULTIPART_MAX_REQUEST_SIZE:100MB}
   flyway:
     enabled: false
+    postgresql:
+      transactional-lock: false
   sql:
     init:
       mode: never

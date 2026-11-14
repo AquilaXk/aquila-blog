@@ -3,6 +3,7 @@ package com.back.boundedContexts.post.model
 import com.back.global.jpa.domain.AfterDDL
 import org.assertj.core.api.Assertions.assertThat
 import org.junit.jupiter.api.Test
+import org.yaml.snakeyaml.Yaml
 import java.nio.file.Files
 import java.nio.file.Path
 import kotlin.reflect.KClass
@@ -69,6 +70,14 @@ class PostOperationalIndexContractTest {
         assertThat(v2Sql).contains("CREATE INDEX CONCURRENTLY")
         assertThat(v2Sql).doesNotContainIgnoringCase("BEGIN;")
         assertThat(v2Sql).doesNotContainIgnoringCase("COMMIT;")
+        val dropStatement =
+            "DROP INDEX CONCURRENTLY IF EXISTS post_idx_public_listed_active_created_at_id_desc;"
+        val createStatement =
+            "CREATE INDEX CONCURRENTLY IF NOT EXISTS post_idx_public_listed_active_created_at_id_desc"
+        val dropIndex = v2Sql.indexOf(dropStatement)
+        val createIndex = v2Sql.indexOf(createStatement)
+        assertThat(dropIndex).isGreaterThanOrEqualTo(0)
+        assertThat(createIndex).isGreaterThan(dropIndex)
         listOf(
             "post_idx_public_listed_active_created_at_id_desc",
             "post_idx_public_listed_active_hit_count_id_desc",
@@ -82,6 +91,22 @@ class PostOperationalIndexContractTest {
             "cloud_video_upload_session_idx_status_modified_id",
         ).forEach { expectedIndex ->
             assertThat(v2Sql).contains(expectedIndex)
+        }
+    }
+
+    @Test
+    fun `application and prod flyway configs disable postgresql transactional advisory lock`() {
+        listOf(
+            Path.of("src/main/resources/application.yaml"),
+            Path.of("src/main/resources/application-prod.yaml"),
+        ).forEach { configPath ->
+            val root = Yaml().load<Map<String, Any>>(Files.readString(configPath))
+            val spring = root["spring"] as? Map<*, *>
+            val flyway = spring?.get("flyway") as? Map<*, *>
+            val postgresql = flyway?.get("postgresql") as? Map<*, *>
+            assertThat(postgresql?.get("transactional-lock"))
+                .describedAs("spring.flyway.postgresql.transactional-lock in %s", configPath)
+                .isEqualTo(false)
         }
     }
 

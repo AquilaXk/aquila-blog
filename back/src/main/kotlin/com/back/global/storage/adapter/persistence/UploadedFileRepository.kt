@@ -16,6 +16,8 @@ import java.time.Instant
 interface UploadedFileRepository :
     JpaRepository<UploadedFile, Long>,
     UploadedFileRepositoryPort {
+    override fun saveAllUploadedFiles(entities: Collection<UploadedFile>): List<UploadedFile> = saveAll(entities)
+
     override fun findByObjectKey(objectKey: String): UploadedFile?
 
     override fun findByObjectKeyIn(objectKeys: Collection<String>): List<UploadedFile>

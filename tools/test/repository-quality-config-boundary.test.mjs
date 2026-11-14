@@ -1,5 +1,5 @@
 import assert from "node:assert/strict"
-import { copyFileSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs"
+import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs"
 import { tmpdir } from "node:os"
 import path from "node:path"
 import { spawnSync } from "node:child_process"
@@ -25,9 +25,9 @@ test("Platform quality configuration owns only Platform surfaces", () => {
   const security = read(".github/workflows/security.yml")
   const sonar = read("sonar-project.properties")
   const automaticSonar = read(".sonarcloud.properties")
-  const dependabot = read(".github/dependabot.yml")
-  const combined = [security, sonar, automaticSonar, dependabot].join("\n")
+  const combined = [security, sonar, automaticSonar].join("\n")
 
+  assert.equal(existsSync(path.join(repoRoot, ".github/dependabot.yml")), false)
   assert.match(security, /java-kotlin/)
   assert.match(security, /dependencyCheckAnalyze/)
   assert.match(security, /dependency-review-action/)
@@ -37,9 +37,6 @@ test("Platform quality configuration owns only Platform surfaces", () => {
   assert.match(sonar, /^sonar\.tests=back\/src\/test$/m)
   assert.match(automaticSonar, /^sonar\.sources=back\/src\/main$/m)
   assert.match(automaticSonar, /^sonar\.tests=back\/src\/test$/m)
-  assert.match(dependabot, /package-ecosystem: "gradle"/)
-  assert.match(dependabot, /package-ecosystem: "github-actions"/)
-  assert.doesNotMatch(dependabot, /package-ecosystem: "npm"/)
   assert.doesNotMatch(combined, webRootPath)
 })
 
@@ -881,4 +878,30 @@ test("backend Jackson policy pins the patched Jackson 2 and Jackson 3 runtime ve
     /CVE-2026-89407|CVE-2026-89425|CVE-2026-68497|CVE-2026-91776|CVE-2026-91777/,
   )
 })
+
+test("Platform CI standalone evidence upload waits for non-skipped standalone gate", () => {
+  const ci = parseWorkflow(".github/workflows/ci.yml")
+  const standaloneSteps = ci.jobs["platform-standalone"]?.steps ?? []
+  const gateStep = standaloneSteps.find((step) => step.name === "Run Platform archive standalone gate")
+  const uploadStep = standaloneSteps.find((step) => step.name === "Upload Platform standalone evidence")
+
+  assert.equal(gateStep?.id, "standalone_gate")
+  assert.equal(uploadStep?.if, "always() && steps.standalone_gate.outcome != 'skipped'")
+})
+
+test("actions storage cleanup preserves owasp-nvd caches", () => {
+  const cleanup = parseWorkflow(".github/workflows/actions-storage-cleanup.yml")
+
+  for (const jobName of ["cleanup-pr-caches", "cleanup-weekly-caches"]) {
+    const steps = cleanup.jobs[jobName]?.steps ?? []
+    assert.ok(steps.length > 0, `${jobName} must contain cleanup steps`)
+    for (const step of steps) {
+      const run = String(step.run ?? "")
+      assert.doesNotMatch(run, /gh cache delete --all\b/)
+      assert.match(run, /startswith\("owasp-nvd-"\)/)
+      assert.match(run, /gh cache delete "\$\{cache_id\}"/)
+    }
+  }
+})
+
 

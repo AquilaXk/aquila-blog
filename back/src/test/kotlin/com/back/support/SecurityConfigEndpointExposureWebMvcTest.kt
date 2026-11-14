@@ -301,6 +301,21 @@ class SecurityConfigProdEndpointExposureWebMvcTest : SecurityConfigEndpointExpos
             status { isNotFound() }
         }
     }
+
+    @Test
+    @DisplayName("prod에서 내부 이메일 인증 readiness 경로는 forwarded 요청을 401로 막고 내부 직접 GET만 통과시킨다")
+    fun `prod restricts internal admin email auth readiness to direct internal GET`() {
+        mvc
+            .get("/internal/health/admin-email-auth") {
+                header("X-Forwarded-For", "203.0.113.10")
+            }.andExpect {
+                status { isUnauthorized() }
+            }
+
+        mvc.get("/internal/health/admin-email-auth").andExpect {
+            status { isNotFound() }
+        }
+    }
 }
 
 @ActiveProfiles("test")

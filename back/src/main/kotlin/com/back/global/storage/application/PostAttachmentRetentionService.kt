@@ -85,25 +85,51 @@ class PostAttachmentRetentionService(
         previousKeys: Set<String>,
         purpose: UploadedFilePurpose,
     ) {
+        val detachedKeys = previousKeys - currentKeys
+        val lookupKeys =
+            buildSet(currentKeys.size + detachedKeys.size) {
+                currentKeys.forEach { if (it.isNotBlank()) add(it) }
+                detachedKeys.forEach { if (it.isNotBlank()) add(it) }
+            }
+        if (lookupKeys.isEmpty()) return
+
+        val existingByKey =
+            uploadedFileRepository
+                .findByObjectKeyIn(lookupKeys)
+                .associateByTo(HashMap(lookupKeys.size)) { it.objectKey }
+        val toSave = ArrayList<UploadedFile>(lookupKeys.size)
+
         currentKeys.forEach { objectKey ->
+            if (objectKey.isBlank()) return@forEach
             val uploadedFile =
-                if (purpose == UploadedFilePurpose.POST_IMAGE) {
-                    findOrCreate(objectKey)
-                } else {
-                    uploadedFileRepository.findByObjectKey(objectKey) ?: return@forEach
-                }
+                existingByKey[objectKey]
+                    ?: if (purpose == UploadedFilePurpose.POST_IMAGE) {
+                        newPostImageRecord(objectKey)
+                    } else {
+                        return@forEach
+                    }
             if (isProfileOwnedFile(uploadedFile) || hasActiveOwnerPostReference(uploadedFile, postId)) return@forEach
             uploadedFile.attachToPost(postId, purpose)
-            uploadedFileRepository.save(uploadedFile)
+            toSave.add(uploadedFile)
         }
 
-        (previousKeys - currentKeys).forEach { objectKey ->
-            scheduleDeletionIfKnown(
-                objectKey = objectKey,
-                purpose = purpose,
-                reason = UploadedFileRetentionReason.DETACHED_POST_ATTACHMENT,
-                purgeAfter = now().plusSeconds(retentionProperties.deletedPostAttachmentSeconds),
-            )
+        if (detachedKeys.isNotEmpty()) {
+            val purgeAfter = now().plusSeconds(retentionProperties.deletedPostAttachmentSeconds)
+            detachedKeys.forEach { objectKey ->
+                if (objectKey.isBlank()) return@forEach
+                val uploadedFile = existingByKey[objectKey] ?: return@forEach
+                collectScheduledDeletionIfKnown(
+                    uploadedFile = uploadedFile,
+                    purpose = purpose,
+                    reason = UploadedFileRetentionReason.DETACHED_POST_ATTACHMENT,
+                    purgeAfter = purgeAfter,
+                    toSave = toSave,
+                )
+            }
+        }
+
+        if (toSave.isNotEmpty()) {
+            uploadedFileRepository.saveAllUploadedFiles(toSave)
         }
     }
 
@@ -111,13 +137,29 @@ class PostAttachmentRetentionService(
         keys: Set<String>,
         purpose: UploadedFilePurpose,
     ) {
-        keys.forEach { objectKey ->
-            scheduleDeletionIfKnown(
-                objectKey = objectKey,
+        val targetKeys = keys.filter { it.isNotBlank() }
+        if (targetKeys.isEmpty()) return
+
+        val existingByKey =
+            uploadedFileRepository
+                .findByObjectKeyIn(targetKeys)
+                .associateByTo(HashMap(targetKeys.size)) { it.objectKey }
+        val toSave = ArrayList<UploadedFile>(existingByKey.size)
+        val purgeAfter = now().plusSeconds(retentionProperties.deletedPostAttachmentSeconds)
+
+        targetKeys.forEach { objectKey ->
+            val uploadedFile = existingByKey[objectKey] ?: return@forEach
+            collectScheduledDeletionIfKnown(
+                uploadedFile = uploadedFile,
                 purpose = purpose,
                 reason = UploadedFileRetentionReason.DELETED_POST_ATTACHMENT,
-                purgeAfter = now().plusSeconds(retentionProperties.deletedPostAttachmentSeconds),
+                purgeAfter = purgeAfter,
+                toSave = toSave,
             )
+        }
+
+        if (toSave.isNotEmpty()) {
+            uploadedFileRepository.saveAllUploadedFiles(toSave)
         }
     }
 
@@ -126,8 +168,17 @@ class PostAttachmentRetentionService(
         keys: Set<String>,
         purpose: UploadedFilePurpose,
     ) {
-        keys.forEach { objectKey ->
-            val uploadedFile = uploadedFileRepository.findByObjectKey(objectKey) ?: return@forEach
+        val targetKeys = keys.filter { it.isNotBlank() }
+        if (targetKeys.isEmpty()) return
+
+        val existingByKey =
+            uploadedFileRepository
+                .findByObjectKeyIn(targetKeys)
+                .associateByTo(HashMap(targetKeys.size)) { it.objectKey }
+        val toSave = ArrayList<UploadedFile>(existingByKey.size)
+
+        targetKeys.forEach { objectKey ->
+            val uploadedFile = existingByKey[objectKey] ?: return@forEach
             if (uploadedFile.status == UploadedFileStatus.DELETED ||
                 isProfileOwnedFile(uploadedFile) ||
                 hasActiveOwnerPostReference(uploadedFile, postId)
@@ -135,21 +186,24 @@ class PostAttachmentRetentionService(
                 return@forEach
             }
             uploadedFile.attachToPost(postId, purpose)
-            uploadedFileRepository.save(uploadedFile)
+            toSave.add(uploadedFile)
+        }
+
+        if (toSave.isNotEmpty()) {
+            uploadedFileRepository.saveAllUploadedFiles(toSave)
         }
     }
 
-    private fun scheduleDeletionIfKnown(
-        objectKey: String,
+    private fun collectScheduledDeletionIfKnown(
+        uploadedFile: UploadedFile,
         purpose: UploadedFilePurpose,
         reason: UploadedFileRetentionReason,
         purgeAfter: Instant,
+        toSave: MutableList<UploadedFile>,
     ) {
-        if (objectKey.isBlank()) return
-
-        val uploadedFile = uploadedFileRepository.findByObjectKey(objectKey) ?: return
         if (isProfileOwnedFile(uploadedFile)) return
 
+        val objectKey = uploadedFile.objectKey
         val existingOwnerId = uploadedFile.ownerId
         if (uploadedFile.ownerType == UploadedFileOwnerType.POST &&
             existingOwnerId != null &&
@@ -161,13 +215,13 @@ class PostAttachmentRetentionService(
         val activeReferencingPostId = postRepository?.findFirstReferencingPostId(objectKey)?.takeIf { it > 0L }
         if (activeReferencingPostId != null) {
             uploadedFile.attachToPost(activeReferencingPostId, purpose)
-            uploadedFileRepository.save(uploadedFile)
+            toSave.add(uploadedFile)
             return
         }
 
         uploadedFile.purpose = purpose
         uploadedFile.scheduleDeletion(reason, purgeAfter)
-        uploadedFileRepository.save(uploadedFile)
+        toSave.add(uploadedFile)
     }
 
     private fun isProfileOwnedFile(uploadedFile: UploadedFile): Boolean =
@@ -186,14 +240,13 @@ class PostAttachmentRetentionService(
             postRepository?.existsImageReference(existingOwnerId, uploadedFile.objectKey) == true
     }
 
-    private fun findOrCreate(objectKey: String): UploadedFile =
-        uploadedFileRepository.findByObjectKey(objectKey)
-            ?: UploadedFile(
-                objectKey = objectKey,
-                bucket = storageProperties.bucket,
-                contentType = "application/octet-stream",
-                fileSize = 0,
-            )
+    private fun newPostImageRecord(objectKey: String): UploadedFile =
+        UploadedFile(
+            objectKey = objectKey,
+            bucket = storageProperties.bucket,
+            contentType = "application/octet-stream",
+            fileSize = 0,
+        )
 
     private fun now(): Instant = Instant.now(clock)
 }

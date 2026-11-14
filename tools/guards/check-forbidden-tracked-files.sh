@@ -40,7 +40,7 @@ while IFS= read -r -d '' file; do
         targets+=("${file}")
       fi
       ;;
-    AGENTS.md|CLAUDE.md|GEMINI.md|CURSOR.md|COPILOT.md|.cursor/*|.claude/*|.aider/*|.aider*|.windsurf/*|.codex/*|.ai/*)
+    AGENTS.md|CLAUDE.md|GEMINI.md|CURSOR.md|COPILOT.md|.agents|.agents/*|.gemini|.gemini/*|.cursor/*|.claude/*|.aider/*|.aider*|.windsurf/*|.codex/*|.ai/*)
       targets+=("${file}")
       ;;
     *.md)

@@ -174,6 +174,10 @@ class ApiV1AdmCloudController(
         partNumber: Int,
         request: HttpServletRequest,
     ): CloudVideoUploadPartResultDto {
+        val contentLength = request.contentLengthLong
+        if (contentLength <= 0L) {
+            throw AppException(ErrorCode.BAD_REQUEST, "업로드 조각 크기가 올바르지 않습니다.")
+        }
         val session =
             cloudVideoUploadSessionService.getSession(
                 ownerMemberId = securityUser.id,
@@ -188,7 +192,6 @@ class ApiV1AdmCloudController(
             } else {
                 session.partSizeBytes
             }
-        val contentLength = request.contentLengthLong
         if (contentLength > expectedBytes) {
             throw AppException(ErrorCode.BAD_REQUEST, "업로드 조각 크기가 올바르지 않습니다.")
         }

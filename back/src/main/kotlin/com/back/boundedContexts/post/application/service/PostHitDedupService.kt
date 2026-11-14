@@ -27,7 +27,7 @@ class PostHitDedupService(
         postId: Long,
         viewerKey: String,
     ): Boolean =
-        executeViewerDedup(postId, viewerKey, onBlank = true) { redisTemplate, normalizedKey ->
+        executeViewerDedup(postId, viewerKey, onBlank = false) { redisTemplate, normalizedKey ->
             redisTemplate
                 .opsForValue()
                 .setIfAbsent(redisKey(normalizedKey), "1", Duration.ofSeconds(viewerWindowSeconds)) == true

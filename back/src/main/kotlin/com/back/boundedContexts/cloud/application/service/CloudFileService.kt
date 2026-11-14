@@ -5,14 +5,19 @@ import com.back.boundedContexts.cloud.model.CloudFile
 import com.back.boundedContexts.cloud.model.CloudFileMediaKind
 import com.back.global.exception.application.AppException
 import com.back.global.exception.application.ErrorCode
+import com.back.global.storage.application.ImageUploadAdmissionValidator
 import com.back.global.storage.application.port.output.CloudStoragePort
 import com.back.global.storage.config.CloudStorageProperties
 import com.fasterxml.jackson.annotation.JsonIgnore
 import org.slf4j.LoggerFactory
 import org.springframework.stereotype.Service
+import org.springframework.transaction.PlatformTransactionManager
+import org.springframework.transaction.TransactionDefinition
 import org.springframework.transaction.annotation.Transactional
 import org.springframework.transaction.support.TransactionSynchronization
 import org.springframework.transaction.support.TransactionSynchronizationManager
+import org.springframework.transaction.support.TransactionTemplate
+import java.io.BufferedInputStream
 import java.io.InputStream
 import java.nio.file.Files
 import java.nio.file.Path
@@ -45,10 +50,11 @@ class CloudFileService(
     private val cloudStoragePort: CloudStoragePort,
     private val cloudStorageProperties: CloudStorageProperties = CloudStorageProperties(),
     private val clock: Clock = Clock.systemUTC(),
+    private val transactionManager: PlatformTransactionManager? = null,
+    private val imageAdmissionValidator: ImageUploadAdmissionValidator = ImageUploadAdmissionValidator(),
 ) {
     private val logger = LoggerFactory.getLogger(javaClass)
 
-    @Transactional
     fun upload(
         ownerMemberId: Long,
         originalFilename: String?,
@@ -70,6 +76,12 @@ class CloudFileService(
             try {
                 val detected = detectContent(tempFile, contentType, safeFilename)
                 validateFileSize(contentLength, detected)
+                val validatedContentType =
+                    if (detected.mediaKind == CloudFileMediaKind.PHOTO) {
+                        imageAdmissionValidator.validate(tempFile, detected.contentType).contentType
+                    } else {
+                        detected.contentType
+                    }
                 val objectKey =
                     buildObjectKey(
                         ownerMemberId = ownerMemberId,
@@ -86,7 +98,7 @@ class CloudFileService(
                                 objectKey = objectKey,
                                 inputStream = uploadStream,
                                 contentLength = contentLength,
-                                contentType = detected.contentType,
+                                contentType = validatedContentType,
                                 originalFilename = safeFilename,
                             ),
                         )
@@ -94,18 +106,20 @@ class CloudFileService(
 
                 val saved =
                     try {
-                        cloudFileRepository.save(
-                            CloudFile.create(
-                                ownerMemberId = ownerMemberId,
-                                objectKey = uploadResult.objectKey,
-                                originalFilename = safeFilename,
-                                contentType = detected.contentType,
-                                byteSize = contentLength,
-                                mediaKind = detected.mediaKind,
-                                folderPath = normalizedFolderPath,
-                                checksumSha256 = uploadResult.checksumSha256,
-                            ),
-                        )
+                        executeWriteTransaction {
+                            cloudFileRepository.save(
+                                CloudFile.create(
+                                    ownerMemberId = ownerMemberId,
+                                    objectKey = uploadResult.objectKey,
+                                    originalFilename = safeFilename,
+                                    contentType = validatedContentType,
+                                    byteSize = contentLength,
+                                    mediaKind = detected.mediaKind,
+                                    folderPath = normalizedFolderPath,
+                                    checksumSha256 = uploadResult.checksumSha256,
+                                ),
+                            )
+                        }
                     } catch (ex: Throwable) {
                         runCatching { cloudStoragePort.delete(uploadResult.objectKey) }
                         throw ex
@@ -143,23 +157,21 @@ class CloudFileService(
         fileId: Long,
     ): CloudFileDto = findActiveOwnedFile(fileId, ownerMemberId).toDto(clock)
 
-    @Transactional(readOnly = true)
     fun openContent(
         ownerMemberId: Long,
         fileId: Long,
     ): CloudFileContent {
-        val file = findActiveOwnedFile(fileId, ownerMemberId)
+        val fileDto = executeReadOnlyTransaction { findActiveOwnedFile(fileId, ownerMemberId).toDto(clock) }
         val storedObject =
-            cloudStoragePort.open(file.objectKey)
+            cloudStoragePort.open(fileDto.objectKey)
                 ?: throw AppException(ErrorCode.NOT_FOUND, "클라우드 파일을 찾을 수 없습니다.")
 
         return CloudFileContent(
-            file = file.toDto(clock),
+            file = fileDto,
             storedObject = storedObject,
         )
     }
 
-    @Transactional(readOnly = true)
     fun openContentRange(
         file: CloudFileDto,
         range: LongRange,
@@ -174,12 +186,14 @@ class CloudFileService(
         )
     }
 
-    @Transactional(readOnly = true)
     fun openContentRange(
         ownerMemberId: Long,
         fileId: Long,
         range: LongRange,
-    ): CloudFileContent = openContentRange(get(ownerMemberId, fileId), range)
+    ): CloudFileContent {
+        val fileDto = executeReadOnlyTransaction { findActiveOwnedFile(fileId, ownerMemberId).toDto(clock) }
+        return openContentRange(fileDto, range)
+    }
 
     @Transactional
     fun updateFile(
@@ -322,9 +336,10 @@ class CloudFileService(
         filename: String,
     ): DetectedContent {
         val normalizedDeclared = resolveDeclaredContentType(declaredContentType)
-        val header = readHeader(file, 16)
+        val header = ByteArray(SIGNATURE_HEADER_BYTES)
+        val headerLen = readHeader(file, header)
         val detected =
-            detectFromSignature(file, header, filename)
+            detectFromSignature(file, header, headerLen, filename)
                 ?: throw AppException(ErrorCode.BAD_REQUEST, "지원하지 않는 클라우드 파일 형식입니다.")
 
         if (
@@ -353,48 +368,31 @@ class CloudFileService(
 
     private fun detectFromSignature(
         file: Path,
-        bytes: ByteArray,
+        header: ByteArray,
+        headerLen: Int,
         filename: String,
     ): DetectedContent? {
-        if (bytes.size >= 5 && bytes.copyOfRange(0, 5).toString(Charsets.US_ASCII) == "%PDF-") {
+        if (
+            headerLen >= 5 &&
+            ImageUploadAdmissionValidator.readInt32BE(header, 0) == PDF_MAGIC_WORD &&
+            header[4] == '-'.code.toByte()
+        ) {
             return DetectedContent("application/pdf", CloudFileMediaKind.DOCUMENT)
         }
-        if (
-            bytes.size >= 3 &&
-            bytes[0] == 0xFF.toByte() &&
-            bytes[1] == 0xD8.toByte() &&
-            bytes[2] == 0xFF.toByte()
-        ) {
-            return DetectedContent("image/jpeg", CloudFileMediaKind.PHOTO)
+        ImageUploadAdmissionValidator.detectImageFormatFromHeader(header, headerLen)?.let {
+            return DetectedContent(it.contentType, CloudFileMediaKind.PHOTO)
         }
-        if (
-            bytes.size >= 8 &&
-            bytes[0] == 0x89.toByte() &&
-            bytes[1] == 0x50.toByte() &&
-            bytes[2] == 0x4E.toByte() &&
-            bytes[3] == 0x47.toByte() &&
-            bytes[4] == 0x0D.toByte() &&
-            bytes[5] == 0x0A.toByte() &&
-            bytes[6] == 0x1A.toByte() &&
-            bytes[7] == 0x0A.toByte()
-        ) {
-            return DetectedContent("image/png", CloudFileMediaKind.PHOTO)
+        if (headerLen >= 12 && ImageUploadAdmissionValidator.readInt32BE(header, 4) == MP4_FTYP_WORD) {
+            return DetectedContent("video/mp4", CloudFileMediaKind.VIDEO)
         }
-        if (bytes.size >= 6) {
-            val header = bytes.copyOfRange(0, 6).toString(Charsets.US_ASCII)
-            if (header == "GIF87a" || header == "GIF89a") return DetectedContent("image/gif", CloudFileMediaKind.PHOTO)
+        if (headerLen >= 4 && ImageUploadAdmissionValidator.readInt32BE(header, 0) == EBML_MAGIC_WORD) {
+            return DetectedContent("video/webm", CloudFileMediaKind.VIDEO)
         }
-        if (bytes.size >= 12) {
-            val riff = bytes.copyOfRange(0, 4).toString(Charsets.US_ASCII)
-            val webp = bytes.copyOfRange(8, 12).toString(Charsets.US_ASCII)
-            if (riff == "RIFF" && webp == "WEBP") return DetectedContent("image/webp", CloudFileMediaKind.PHOTO)
-        }
-        detectVideoFromSignature(bytes)?.let { return DetectedContent(it, CloudFileMediaKind.VIDEO) }
         val extension = extractLowerExtension(filename)
-        if (extension == "hwpx" && isHwpxPackage(file)) {
+        if (extension == "hwpx" && isHwpxPackage(file, header, headerLen)) {
             return DetectedContent(HWPX_CONTENT_TYPE, CloudFileMediaKind.DOCUMENT)
         }
-        if (extension == "zip" && isValidZipArchive(file)) {
+        if (extension == "zip" && isValidZipArchive(file, header, headerLen)) {
             return DetectedContent(ZIP_CONTENT_TYPE, CloudFileMediaKind.DOCUMENT)
         }
 
@@ -403,26 +401,59 @@ class CloudFileService(
 
     private fun readHeader(
         file: Path,
-        maxBytes: Int,
-    ): ByteArray = Files.newInputStream(file).use { it.readNBytes(maxBytes) }
+        buffer: ByteArray,
+    ): Int =
+        BufferedInputStream(Files.newInputStream(file), IO_BUFFER_BYTES).use { stream ->
+            ImageUploadAdmissionValidator.readUpTo(stream, buffer, buffer.size)
+        }
 
-    private fun isHwpxPackage(file: Path): Boolean {
-        if (!isZipSignature(readHeader(file, 4))) return false
+    private fun isHwpxPackage(
+        file: Path,
+        header: ByteArray,
+        headerLen: Int,
+    ): Boolean {
+        if (!isZipSignature(header, headerLen)) return false
 
         val entries = readZipEntryNames(file)
 
         return HWPX_MANIFEST_ENTRY in entries && entries.any { it in HWPX_DOCUMENT_ENTRIES }
     }
 
-    private fun isValidZipArchive(file: Path): Boolean =
-        isZipSignature(readHeader(file, 4)) &&
+    private fun isValidZipArchive(
+        file: Path,
+        header: ByteArray,
+        headerLen: Int,
+    ): Boolean =
+        isZipSignature(header, headerLen) &&
             runCatching {
                 ZipFile(file.toFile()).use { zip -> zip.entries().hasMoreElements() || Files.size(file) >= ZIP_EOCD_MIN_SIZE }
             }.getOrDefault(false)
 
-    private fun isZipSignature(bytes: ByteArray): Boolean =
-        bytes.size >= 4 &&
-            bytes.copyOfRange(0, 4).toList() in ZIP_SIGNATURES
+    private fun isZipSignature(
+        bytes: ByteArray,
+        length: Int,
+    ): Boolean {
+        if (length < 4) return false
+        val word = ImageUploadAdmissionValidator.readInt32BE(bytes, 0)
+        return word == ZIP_LOCAL_HEADER_WORD || word == ZIP_EOCD_WORD || word == ZIP_SPANNED_WORD
+    }
+
+    private fun <T> executeWriteTransaction(block: () -> T): T {
+        val manager = transactionManager ?: return block()
+        return TransactionTemplate(manager).execute { block() }
+            ?: throw IllegalStateException("Write transaction returned null")
+    }
+
+    private fun <T> executeReadOnlyTransaction(block: () -> T): T {
+        val manager = transactionManager ?: return block()
+        val template =
+            TransactionTemplate(manager).apply {
+                isReadOnly = true
+                propagationBehavior = TransactionDefinition.PROPAGATION_REQUIRED
+            }
+        return template.execute { block() }
+            ?: throw IllegalStateException("Read-only transaction returned null")
+    }
 
     private fun readZipEntryNames(file: Path): Set<String> =
         runCatching {
@@ -454,6 +485,14 @@ class CloudFileService(
     )
 
     companion object {
+        private const val IO_BUFFER_BYTES = 8_192
+        private const val SIGNATURE_HEADER_BYTES = 64
+        private const val PDF_MAGIC_WORD = 0x2550_4446
+        private const val MP4_FTYP_WORD = 0x6674_7970
+        private const val EBML_MAGIC_WORD = 0x1A45_DFA3
+        private const val ZIP_LOCAL_HEADER_WORD = 0x504B_0304
+        private const val ZIP_EOCD_WORD = 0x504B_0506
+        private const val ZIP_SPANNED_WORD = 0x504B_0708
         private const val HWPX_CONTENT_TYPE = "application/haansofthwpx"
         private const val ZIP_CONTENT_TYPE = "application/zip"
         private const val HWPX_MANIFEST_ENTRY = "Contents/content.hpf"
@@ -464,12 +503,6 @@ class CloudFileService(
                 "Contents/header.xml",
                 "Contents/section0.xml",
                 "META-INF/container.xml",
-            )
-        private val ZIP_SIGNATURES =
-            setOf(
-                listOf(0x50.toByte(), 0x4B.toByte(), 0x03.toByte(), 0x04.toByte()),
-                listOf(0x50.toByte(), 0x4B.toByte(), 0x05.toByte(), 0x06.toByte()),
-                listOf(0x50.toByte(), 0x4B.toByte(), 0x07.toByte(), 0x08.toByte()),
             )
         private val CONTENT_TYPE_ALIASES =
             mapOf(

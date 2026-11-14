@@ -171,7 +171,7 @@ class AdminOperationService(
     }
 
     private fun normalizeReason(value: String): String {
-        val reason = value.trim().replace(Regex("\\s+"), " ")
+        val reason = value.trim().replace(COLLAPSE_WHITESPACE_REGEX, " ")
         if (reason.isEmpty() || reason.length > 200) throw AppException(ErrorCode.ADMIN_OPERATION_INVALID_COMMAND)
         return reason
     }
@@ -235,4 +235,8 @@ class AdminOperationService(
             controlValue = controlValue,
             controlVersion = controlVersion,
         )
+
+    companion object {
+        private val COLLAPSE_WHITESPACE_REGEX = Regex("\\s+")
+    }
 }

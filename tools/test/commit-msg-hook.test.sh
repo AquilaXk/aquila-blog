@@ -211,18 +211,25 @@ fi
 
 set_filter "${failing_filter}"
 rm -f "${filter_marker}"
-expect_accepted "English subject with a failing filter" "${english_subject}" LANG="${base_locale}"
+expect_rejected "English subject with a failing filter fails closed" "hooks.commitMsgFilter 실행 실패" \
+  "${english_subject}" LANG="${base_locale}"
 if [ ! -e "${filter_marker}" ]; then
   echo "[test] expected the failing filter to have run" >&2
   exit 1
 fi
-if ! grep -qF -- "hooks.commitMsgFilter 실행 실패" "${hook_output}"; then
-  echo "[test] expected a warning when the configured filter fails" >&2
-  cat "${hook_output}" >&2
-  exit 1
-fi
-expect_rejected "invalid subject with a failing filter" "${reason_format}" \
-  "commit message without type" LANG="${base_locale}"
 clear_filter
+
+printf '%s\n\n%s\n' "${english_subject}" "Validate full body lines without disallowed trailers." > "${msg_file}"
+expect_accepted_message "multi-line commit body with clean prose" LANG="${base_locale}"
+
+co_author_trailer="$(printf '%s-%s-%s: automated <dev@example.com>' 'Co' 'Authored' 'By')"
+generated_trailer="$(printf '%s %s build tool' 'Generated' 'with')"
+reason_trailer="[commit-msg] 허용되지 않는 공동 작성 또는 자동 생성 트레일러"
+
+printf '%s\n\n%s\n' "${english_subject}" "${co_author_trailer}" > "${msg_file}"
+expect_rejected_message "multi-line commit body with co-author trailer" "${reason_trailer}" LANG="${base_locale}"
+
+printf '%s\n\n%s\n' "${english_subject}" "${generated_trailer}" > "${msg_file}"
+expect_rejected_message "multi-line commit body with generated attribution footer" "${reason_trailer}" LANG="${base_locale}"
 
 echo "[test] commit-msg hook rules passed"

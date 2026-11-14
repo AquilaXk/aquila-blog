@@ -8,6 +8,8 @@ import java.time.Instant
 interface TaskQueueRepositoryPort {
     fun save(task: Task): Task
 
+    fun saveAllTasks(tasks: Collection<Task>): List<Task> = tasks.map(::save)
+
     fun countByStatus(status: TaskStatus): Long
 
     fun countByStatusAndNextRetryAtLessThanEqual(

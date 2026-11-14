@@ -769,6 +769,128 @@ class CustomAuthenticationFilterTest {
         }
     }
 
+    @Test
+    @DisplayName("최신 버전과 canonical email이 일치하는 유효 accessToken은 apiKey DB 조회와 JWT 재서명을 건너뛴다")
+    fun `fresh accessToken with matching version and canonical email skips apiKey lookup and jwt resigning`() {
+        configureProductionUrls()
+        val fixture = CustomAuthenticationFilterFixture()
+        val request = MockHttpServletRequest("PUT", "/post/api/v1/posts/452")
+        val apiKey = "admin-api-key"
+        val accessToken = "fresh-canonical-access-token"
+        val sessionKey = "admin-session-key"
+        val persistedAdmin = Member(54L, "internal-admin", null, "aquila", "admin@test.com", apiKey).also { it.grantAdmin() }
+        val sessionSnapshot =
+            MemberSessionAuthSnapshot(
+                id = 15L,
+                memberId = 54L,
+                sessionKey = sessionKey,
+                rememberLoginEnabled = true,
+                ipSecurityEnabled = false,
+                ipSecurityFingerprint = null,
+                lastAuthenticatedAt = Instant.now(),
+            )
+        fixture.givenProtectedRequest(request)
+        fixture.givenEmptyAuthorizationHeader()
+        fixture.givenCookieTokens(apiKey = apiKey, accessToken = accessToken, sessionKey = sessionKey)
+        given(fixture.actorApplicationService.payload(accessToken))
+            .willReturn(
+                AccessTokenPayload(
+                    id = 54L,
+                    sessionKey = sessionKey,
+                    username = "internal-admin",
+                    email = "admin@test.com",
+                    name = "aquila",
+                    rememberLoginEnabled = true,
+                    ipSecurityEnabled = false,
+                    ipSecurityFingerprint = null,
+                    issuedAt = Instant.now(),
+                    tokenVersion = AccessTokenPayload.CURRENT_TOKEN_VERSION,
+                ),
+            )
+        given(fixture.memberSessionUseCase.findActiveSession(54L, sessionKey)).willReturn(activeSession(sessionSnapshot))
+        given(fixture.actorApplicationService.findById(54L)).willReturn(persistedAdmin)
+        fixture.givenClientIp(request, "203.0.113.14")
+
+        val response = MockHttpServletResponse()
+        val filterChain = fixture.adminRoleRequiredFilterChain()
+        try {
+            fixture.authenticationFilter().doFilter(request, response, filterChain)
+            assertThat(response.status).isEqualTo(HttpServletResponse.SC_NO_CONTENT)
+            verify(fixture.actorApplicationService, never()).findByApiKey(ArgumentMatchers.anyString())
+            verify(fixture.actorApplicationService, never()).genAccessToken(
+                persistedAdmin,
+                sessionKey,
+                true,
+                false,
+                null,
+            )
+            verify(fixture.authCookieService, never()).issueAccessToken(
+                ArgumentMatchers.anyString(),
+                ArgumentMatchers.anyBoolean(),
+                ArgumentMatchers.nullable(String::class.java),
+                ArgumentMatchers.nullable(String::class.java),
+            )
+        } finally {
+            SecurityContextHolder.clearContext()
+        }
+    }
+
+    @Test
+    @DisplayName("구버전 accessToken 클레임은 canonical email이 같아도 apiKey 기준 DB 재조회를 수행한다")
+    fun `legacy accessToken version triggers apiKey refresh even when email matches canonical admin`() {
+        configureProductionUrls()
+        val fixture = CustomAuthenticationFilterFixture()
+        val request = MockHttpServletRequest("PUT", "/post/api/v1/posts/452")
+        val apiKey = "admin-api-key"
+        val accessToken = "legacy-version-access-token"
+        val sessionKey = "admin-session-key"
+        val persistedAdmin = Member(54L, "internal-admin", null, "aquila", "admin@test.com", apiKey).also { it.grantAdmin() }
+        val sessionSnapshot =
+            MemberSessionAuthSnapshot(
+                id = 16L,
+                memberId = 54L,
+                sessionKey = sessionKey,
+                rememberLoginEnabled = true,
+                ipSecurityEnabled = false,
+                ipSecurityFingerprint = null,
+                lastAuthenticatedAt = Instant.now(),
+            )
+        fixture.givenProtectedRequest(request)
+        fixture.givenEmptyAuthorizationHeader()
+        fixture.givenCookieTokens(apiKey = apiKey, accessToken = accessToken, sessionKey = sessionKey)
+        given(fixture.actorApplicationService.payload(accessToken))
+            .willReturn(
+                AccessTokenPayload(
+                    id = 54L,
+                    sessionKey = sessionKey,
+                    username = "internal-admin",
+                    email = "admin@test.com",
+                    name = "aquila",
+                    rememberLoginEnabled = true,
+                    ipSecurityEnabled = false,
+                    ipSecurityFingerprint = null,
+                    issuedAt = Instant.now(),
+                    tokenVersion = 0,
+                ),
+            )
+        given(fixture.actorApplicationService.findByApiKey(apiKey)).willReturn(persistedAdmin)
+        given(fixture.memberSessionUseCase.findActiveSession(54L, sessionKey)).willReturn(activeSession(sessionSnapshot))
+        given(fixture.actorApplicationService.genAccessToken(persistedAdmin, sessionKey, true, false, null))
+            .willReturn("upgraded-access-token")
+        fixture.givenClientIp(request, "203.0.113.14")
+
+        val response = MockHttpServletResponse()
+        val filterChain = fixture.adminRoleRequiredFilterChain()
+        try {
+            fixture.authenticationFilter().doFilter(request, response, filterChain)
+            assertThat(response.status).isEqualTo(HttpServletResponse.SC_NO_CONTENT)
+            verify(fixture.actorApplicationService).findByApiKey(apiKey)
+            verify(fixture.actorApplicationService).genAccessToken(persistedAdmin, sessionKey, true, false, null)
+        } finally {
+            SecurityContextHolder.clearContext()
+        }
+    }
+
     private fun configureProductionUrls() {
         AppConfig(
             siteBackUrl = "https://api.blog.aquilaxk.site",

@@ -5459,5 +5459,34 @@ test("setup_hardening.sh restricts SSH UFW allowance to tailscale0 interface", (
   assert.doesNotMatch(hardeningScript, /^\s*ufw allow "\$\{SSH_PORT\}\/tcp"\s*$/m)
 })
 
+test("Grafana Caddy vhost strips forged auth headers, captures edge client IP, and scripts fail closed without password fallback", () => {
+  const caddyfile = readFileSync(caddyfilePath, "utf8")
+  const grafanaBlock = extractCaddySiteBlock(caddyfile, "http://{$GRAFANA_DOMAIN")
+  const recoverScript = readFileSync(path.join(repoRoot, "deploy/homeserver/recover.sh"), "utf8")
+  const steadyStateGuard = readFileSync(path.join(repoRoot, "deploy/homeserver/steady_state_guard.sh"), "utf8")
+  const deployStatus = readFileSync(deployStatusScriptPath, "utf8")
+
+  assert.notEqual(grafanaBlock, "", "Grafana vhost block must be extractable")
+  assert.match(grafanaBlock, /^\s*import edge_client_ip_capture\s*$/m)
+  assert.match(grafanaBlock, /^\s*request_header -X-WEBAUTH-USER\s*$/m)
+  assert.match(grafanaBlock, /^\s*request_header -X-WEBAUTH-NAME\s*$/m)
+  assert.match(grafanaBlock, /^\s*import trusted_edge_client_ip\s*$/m)
+  assert.match(grafanaBlock, /^\s*header_up -X-WEBAUTH-USER\s*$/m)
+  assert.match(grafanaBlock, /^\s*header_up -X-WEBAUTH-NAME\s*$/m)
+
+  assert.match(recoverScript, /resolve_compose_profiles\(\)/)
+  assert.match(recoverScript, /STATE_FILE="\$\{SCRIPT_DIR\}\/\.active_backend"/)
+  assert.match(recoverScript, /sync_active_backend_state/)
+
+  for (const [name, script] of [
+    ["steady_state_guard.sh", steadyStateGuard],
+    ["check_deploy_status.sh", deployStatus],
+  ]) {
+    assert.doesNotMatch(script, /change_me_grafana_password/, `${name} must not retain default Grafana password fallback`)
+    assert.doesNotMatch(script, /\s-u "\$\{grafana_user\}:\$\{grafana_password\}"/, `${name} must not pass Grafana credentials on curl argv`)
+    assert.match(script, /-K -/, `${name} must supply curl credentials via stdin (-K -)`)
+  }
+})
+
 
 

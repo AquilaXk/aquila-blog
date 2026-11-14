@@ -37,7 +37,7 @@ class ClientIpResolver {
         if (forwardedIps.isEmpty()) return null
 
         return forwardedIps.asReversed().firstOrNull { !isTrustedProxyAddress(it) }
-            ?: forwardedIps.firstOrNull()
+            ?: forwardedIps.lastOrNull()
     }
 
     private fun resolveSingleHeaderIp(

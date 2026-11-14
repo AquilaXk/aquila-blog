@@ -106,4 +106,21 @@ class PostPreviewExtractorTest {
         assertThat(PostPreviewExtractor.cachedEntryCount())
             .isLessThanOrEqualTo(PostPreviewExtractor.MAX_CACHE_ENTRIES)
     }
+
+    @Test
+    fun `adversarial unclosed image markers finish linearly and huge documents skip cache retention`() {
+        val adversarial = "![unclosed".repeat(12_000) + "\n![alt](" + "a".repeat(600) + ")"
+        val startedNanos = System.nanoTime()
+        val extracted = PostPreviewExtractor.extractThumbnail(adversarial)
+        val elapsedMs = (System.nanoTime() - startedNanos) / 1_000_000L
+
+        assertThat(extracted).isNull()
+        assertThat(elapsedMs).isLessThan(1_000L)
+        assertThat(PostPreviewExtractor.cachedEntryCount()).isZero()
+
+        val validLargeContent = "![cover](https://example.com/large.png)\n" + "x".repeat(20_000)
+        assertThat(PostPreviewExtractor.extractThumbnail(validLargeContent))
+            .isEqualTo("https://example.com/large.png")
+        assertThat(PostPreviewExtractor.cachedEntryCount()).isZero()
+    }
 }

@@ -236,14 +236,38 @@ class CdnCachePurgeService(
             .distinct()
             .toList()
 
-    private fun normalizeCacheTagToken(raw: String): String =
-        raw
-            .trim()
-            .lowercase()
-            .replace(Regex("[^a-z0-9:_-]"), "-")
-            .replace(Regex("-+"), "-")
-            .trim('-')
-            .take(MAX_TAG_LENGTH)
+    internal fun normalizeCacheTagToken(raw: String): String {
+        var start = 0
+        var end = raw.length
+        while (start < end && raw[start] <= ' ') start++
+        while (end > start && raw[end - 1] <= ' ') end--
+        if (start >= end) return ""
+
+        val out = CharArray(minOf(end - start, MAX_TAG_LENGTH))
+        var outLen = 0
+        var pendingHyphen = false
+        for (index in start until end) {
+            val ch = raw[index]
+            val mapped =
+                when (ch) {
+                    in 'a'..'z', in '0'..'9', ':', '_' -> ch
+                    in 'A'..'Z' -> (ch.code or 0x20).toChar()
+                    else -> '-'
+                }
+            if (mapped == '-') {
+                if (outLen > 0) pendingHyphen = true
+                continue
+            }
+            if (pendingHyphen) {
+                if (outLen >= MAX_TAG_LENGTH) break
+                out[outLen++] = '-'
+                pendingHyphen = false
+            }
+            if (outLen >= MAX_TAG_LENGTH) break
+            out[outLen++] = mapped
+        }
+        return if (outLen == 0) "" else String(out, 0, outLen)
+    }
 
     @PreDestroy
     fun shutdownExecutor() {

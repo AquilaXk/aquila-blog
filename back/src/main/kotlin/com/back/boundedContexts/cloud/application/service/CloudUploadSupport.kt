@@ -7,7 +7,6 @@ import com.back.boundedContexts.cloud.model.CloudVideoUploadSessionStatus
 import com.back.global.exception.application.AppException
 import com.back.global.exception.application.ErrorCode
 import com.fasterxml.jackson.annotation.JsonInclude
-import java.net.URLEncoder
 import java.nio.charset.StandardCharsets
 import java.nio.file.Files
 import java.nio.file.Path
@@ -303,25 +302,71 @@ private fun String.takeCodePoints(maxCodePoints: Long): String {
     return String(codePoints, 0, codePoints.size)
 }
 
-private fun String.takeMetadataEncodedBytes(maxEncodedBytes: Int): String {
-    val builder = StringBuilder()
-    val iterator = codePoints().iterator()
-    while (iterator.hasNext()) {
-        val next = iterator.nextInt()
-        val candidate = StringBuilder(builder).appendCodePoint(next).toString()
-        if (metadataEncodedLength(candidate) > maxEncodedBytes) break
-        builder.appendCodePoint(next)
+private fun buildMask(
+    vararg ranges: IntRange,
+    chars: String = "",
+): Long {
+    var mask = 0L
+    for (range in ranges) {
+        for (bit in range) {
+            mask = mask or (1L shl bit)
+        }
     }
-
-    return builder.toString()
+    for (ch in chars) {
+        mask = mask or (1L shl (ch.code and 63))
+    }
+    return mask
 }
 
-private fun metadataEncodedLength(value: String): Int =
-    URLEncoder
-        .encode(value, StandardCharsets.UTF_8)
-        .replace("+", "%20")
-        .toByteArray(StandardCharsets.US_ASCII)
-        .size
+private val UNENCODED_LOW_MASK: Long = buildMask(48..57, chars = " *-.")
+private val UNENCODED_HIGH_MASK: Long = buildMask((65 - 64)..(90 - 64), (97 - 64)..(122 - 64), chars = "_")
+
+internal fun String.takeMetadataEncodedBytes(maxEncodedBytes: Int): String {
+    if (maxEncodedBytes <= 0 || isEmpty()) return ""
+    var encodedBytes = 0
+    var charIndex = 0
+    while (charIndex < length) {
+        val ch = this[charIndex]
+        val charCount: Int
+        val cpEncodedBytes: Int
+        if (Character.isHighSurrogate(ch) && charIndex + 1 < length && Character.isLowSurrogate(this[charIndex + 1])) {
+            charCount = 2
+            cpEncodedBytes = 12
+        } else {
+            charCount = 1
+            cpEncodedBytes = bmpMetadataEncodedLength(ch.code)
+        }
+        if (encodedBytes + cpEncodedBytes > maxEncodedBytes) break
+        encodedBytes += cpEncodedBytes
+        charIndex += charCount
+    }
+    return if (charIndex == length) this else substring(0, charIndex)
+}
+
+internal fun metadataEncodedLength(value: String): Int {
+    var total = 0
+    var index = 0
+    while (index < value.length) {
+        val ch = value[index]
+        if (Character.isHighSurrogate(ch) && index + 1 < value.length && Character.isLowSurrogate(value[index + 1])) {
+            total += 12
+            index += 2
+        } else {
+            total += bmpMetadataEncodedLength(ch.code)
+            index += 1
+        }
+    }
+    return total
+}
+
+private fun bmpMetadataEncodedLength(codeUnit: Int): Int =
+    when {
+        codeUnit < 64 -> if (((UNENCODED_LOW_MASK ushr codeUnit) and 1L) != 0L) 1 else 3
+        codeUnit < 128 -> if (((UNENCODED_HIGH_MASK ushr (codeUnit - 64)) and 1L) != 0L) 1 else 3
+        codeUnit < 0x800 -> 6
+        codeUnit in 0xD800..0xDFFF -> 3
+        else -> 9
+    }
 
 private fun recoverUtf8MojibakeFilename(raw: String): String {
     if (raw.isBlank()) return raw

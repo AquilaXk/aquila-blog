@@ -32,8 +32,7 @@ class ApiV1PostInteractionControllerTest {
         given(rq.hasRole("ADMIN")).willReturn(false)
         given(rq.actorOrNull).willReturn(null)
         given(rq.clientIp).willReturn("203.0.113.50")
-        given(rq.userAgent).willReturn("JUnit-Agent")
-        val expectedViewerKey = "anon:203.0.113.50|JUnit-Agent"
+        val expectedViewerKey = "anon:203.0.113.50"
         given(postHitDedupUseCase.markLikedIfAbsent(10L, expectedViewerKey)).willReturn(true)
         val failure = IllegalStateException("db failure")
         doThrow(failure).`when`(postUseCase).incrementLike(post)
@@ -71,8 +70,7 @@ class ApiV1PostInteractionControllerTest {
         given(rq.hasRole("ADMIN")).willReturn(true)
         given(rq.actorOrNull).willReturn(null)
         given(rq.clientIp).willReturn("203.0.113.51")
-        given(rq.userAgent).willReturn("JUnit-Agent")
-        val viewerKey = "anon:203.0.113.51|JUnit-Agent"
+        val viewerKey = "anon:203.0.113.51"
 
         given(postHitDedupUseCase.shouldCountHit(12L, viewerKey)).willReturn(true, false)
         assertThat(controller.incrementHit(12L).data.hitCount).isEqualTo(5)
@@ -89,6 +87,27 @@ class ApiV1PostInteractionControllerTest {
         assertThat(controller.unlike(12L).data).isEqualTo(PostLikeToggleResBody(liked = false, likesCount = 2))
         assertThat(controller.unlike(12L).data).isEqualTo(PostLikeToggleResBody(liked = false, likesCount = 2))
         verify(postUseCase).decrementLike(post)
+    }
+
+    @Test
+    @DisplayName("익명 viewer key는 User-Agent 변조와 무관하게 정규화 IP와 IPv6 /64 프리픽스만 사용하고 잘못된 IP는 빈 키를 반환한다")
+    fun anonymousViewerKeyIgnoresUserAgentNormalizesIpv6AndRejectsInvalidIp() {
+        val post = publicPost(id = 14L, likesCount = 0, hitCount = 1)
+        given(postUseCase.findById(14L)).willReturn(post)
+        given(rq.hasRole("ADMIN")).willReturn(false)
+        given(rq.actorOrNull).willReturn(null)
+        given(rq.clientIp).willReturn("[2001:db8:1:2:aaaa::1]:443", "2001:db8:1:2:bbbb::9", "invalid-ip")
+        given(rq.userAgent).willReturn("Agent-A", "Agent-B", "Agent-C")
+        val normalizedIpv6Key = "anon:2001:db8:1:2::/64"
+        given(postHitDedupUseCase.shouldCountHit(14L, normalizedIpv6Key)).willReturn(true, false)
+        given(postHitDedupUseCase.shouldCountHit(14L, "")).willReturn(false)
+
+        controller.incrementHit(14L)
+        controller.incrementHit(14L)
+        controller.incrementHit(14L)
+
+        verify(postUseCase).incrementHit(post)
+        verify(postHitDedupUseCase).shouldCountHit(14L, "")
     }
 
     @Test

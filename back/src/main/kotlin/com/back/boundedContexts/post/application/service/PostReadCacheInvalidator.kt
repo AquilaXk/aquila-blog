@@ -3,8 +3,12 @@ package com.back.boundedContexts.post.application.service
 import com.back.standard.dto.post.type1.PostSearchSortType1
 import io.micrometer.core.instrument.MeterRegistry
 import org.slf4j.LoggerFactory
+import org.springframework.cache.Cache
 import org.springframework.cache.CacheManager
+import org.springframework.data.redis.cache.RedisCache
+import org.springframework.data.redis.cache.RedisCacheWriter
 import org.springframework.stereotype.Component
+import java.nio.charset.StandardCharsets
 
 internal data class PostReadCacheInvalidationRequest(
     val postId: Long?,
@@ -44,24 +48,64 @@ class PostReadCacheInvalidator(
             throw IllegalArgumentException("ranked sort invalidation requires HIT_COUNT and/or LIKES_COUNT")
         }
 
-        val feedCursorFirstCache = cacheManager.getCache(PostQueryCacheNames.FEED_CURSOR_FIRST)
-        val bootstrapCache = cacheManager.getCache(PostQueryCacheNames.BOOTSTRAP)
-
-        // FEED offset keys are page×size×sort (page up to 200, size 1..30). Hot-size page=1 eviction
-        // leaves ranked page 2+ stale until TTL; clear the whole FEED cache instead of under-invalidating.
-        cacheManager.getCache(PostQueryCacheNames.FEED)?.clear()
-        recordCacheEvict(PostQueryCacheNames.FEED, "clear", evictReason)
-
-        feedCursorFirstCache?.clear()
-        recordCacheEvict(PostQueryCacheNames.FEED_CURSOR_FIRST, "clear", evictReason)
-        bootstrapCache?.clear()
-        recordCacheEvict(PostQueryCacheNames.BOOTSTRAP, "clear", evictReason)
-
-        // Ranked explore/search entries are keyed by real tag/kw tokens. Evicting only tag=_ or kw=_
-        // leaves stale ranked pages; interaction paths often lack a complete tag/kw set, so clear these
-        // cache names instead of silently under-invalidating.
-        clearRankedInteractionExploreAndSearchCaches(evictReason)
+        // targetSorts에 해당하는 ranked 정렬 엔트리만 제거해 CREATED_AT, 기본 BOOTSTRAP, SEARCH_NEGATIVE 캐시를 보존한다.
+        listOf(
+            PostQueryCacheNames.FEED,
+            PostQueryCacheNames.FEED_CURSOR_FIRST,
+            PostQueryCacheNames.BOOTSTRAP,
+            PostQueryCacheNames.EXPLORE,
+            PostQueryCacheNames.EXPLORE_CURSOR_FIRST,
+            PostQueryCacheNames.SEARCH,
+        ).forEach { cacheName ->
+            evictCacheByTargetSorts(
+                cache = cacheManager.getCache(cacheName),
+                cacheName = cacheName,
+                targetSorts = targetSorts,
+                evictReason = evictReason,
+            )
+        }
     }
+
+    private fun evictCacheByTargetSorts(
+        cache: Cache?,
+        cacheName: String,
+        targetSorts: List<PostSearchSortType1>,
+        evictReason: String,
+    ) {
+        if (cache == null) return
+        val native = cache.nativeCache
+        if (native is MutableMap<*, *>) {
+            val iterator = native.keys.iterator()
+            while (iterator.hasNext()) {
+                val rawKey = iterator.next()?.toString() ?: continue
+                if (matchesTargetSort(rawKey, targetSorts)) {
+                    iterator.remove()
+                    recordCacheEvict(cacheName, "key", evictReason)
+                }
+            }
+            return
+        }
+        if (cache is RedisCache && native is RedisCacheWriter) {
+            val keyPrefix = cache.cacheConfiguration.getKeyPrefixFor(cacheName)
+            targetSorts.forEach { sort ->
+                native.clean(cacheName, "$keyPrefix*:sort=${sort.name}".toByteArray(StandardCharsets.UTF_8))
+                native.clean(cacheName, "$keyPrefix*:sort=${sort.name}:*".toByteArray(StandardCharsets.UTF_8))
+                recordCacheEvict(cacheName, "pattern", evictReason)
+            }
+            return
+        }
+        cache.clear()
+        recordCacheEvict(cacheName, "clear", evictReason)
+    }
+
+    private fun matchesTargetSort(
+        rawKey: String,
+        targetSorts: List<PostSearchSortType1>,
+    ): Boolean =
+        targetSorts.any { sort ->
+            val suffix = ":sort=${sort.name}"
+            rawKey.endsWith(suffix) || rawKey.contains("$suffix:")
+        }
 
     internal fun invalidatePublicDetailCounters(
         postId: Long,

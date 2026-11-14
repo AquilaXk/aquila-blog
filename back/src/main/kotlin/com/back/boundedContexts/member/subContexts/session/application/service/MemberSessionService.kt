@@ -50,8 +50,11 @@ class MemberSessionService(
     private val logger = LoggerFactory.getLogger(MemberSessionService::class.java)
     private val rotationGraceWindow: Duration = Duration.ofSeconds(refreshTokenRotationGraceSeconds.coerceAtLeast(0))
     private val rotationGraceRedisKeyPrefix = "auth:session:refresh-grace:"
+    private val rotatedHistoryRedisKeyPrefix = "auth:session:refresh-history:"
     private val maxInMemoryGraceEntries = 1_024
+    private val maxRotatedHashesPerSession = 16
     private val inMemoryRotationGraceEntries = ConcurrentHashMap<String, String>()
+    private val inMemoryRotatedRefreshTokenHashes = ConcurrentHashMap<String, String>()
 
     @Transactional
     override fun createSession(
@@ -189,28 +192,44 @@ class MemberSessionService(
                 evictActiveSnapshot(session.member.id, session.sessionKey)
                 return MemberSessionWithRefreshToken(session = session, refreshToken = graceRotatedToken)
             }
-            clearRotationGraceEntry(session.sessionKey)
             if (session.isRefreshTokenExpired(now)) {
+                clearRotationGraceEntry(session.sessionKey)
+                clearRotatedRefreshTokenHistory(session.sessionKey)
                 session.revoke(now)
-            } else {
-                session.markRefreshTokenReused(now)
+                evictActiveSnapshot(session.member.id, session.sessionKey)
+                return null
             }
-            evictActiveSnapshot(session.member.id, session.sessionKey)
+            val presentedHash = MemberSessionRefreshTokenPolicy.hash(refreshToken)
+            if (isKnownRotatedRefreshTokenHash(session.sessionKey, presentedHash, now)) {
+                clearRotationGraceEntry(session.sessionKey)
+                clearRotatedRefreshTokenHistory(session.sessionKey)
+                session.markRefreshTokenReused(now)
+                evictActiveSnapshot(session.member.id, session.sessionKey)
+            }
             return null
         }
 
         val previousRefreshTokenHash = session.refreshTokenHash
         val nextRefreshToken = MemberSessionRefreshTokenPolicy.generate()
-        session.bindRefreshToken(nextRefreshToken, refreshTokenExpiresAt(now), now)
-        if (!previousRefreshTokenHash.isNullOrBlank() && !rotationGraceWindow.isZero && !rotationGraceWindow.isNegative) {
-            recordRotationGraceEntry(
+        val nextExpiresAt = refreshTokenExpiresAt(now)
+        session.bindRefreshToken(nextRefreshToken, nextExpiresAt, now)
+        if (!previousRefreshTokenHash.isNullOrBlank()) {
+            recordRotatedRefreshTokenHash(
                 sessionKey = session.sessionKey,
-                previousRefreshToken = refreshToken,
                 previousRefreshTokenHash = previousRefreshTokenHash,
-                currentRefreshTokenHash = requireNotNull(session.refreshTokenHash),
-                rotatedRefreshToken = nextRefreshToken,
+                expiresAt = nextExpiresAt,
                 now = now,
             )
+            if (!rotationGraceWindow.isZero && !rotationGraceWindow.isNegative) {
+                recordRotationGraceEntry(
+                    sessionKey = session.sessionKey,
+                    previousRefreshToken = refreshToken,
+                    previousRefreshTokenHash = previousRefreshTokenHash,
+                    currentRefreshTokenHash = requireNotNull(session.refreshTokenHash),
+                    rotatedRefreshToken = nextRefreshToken,
+                    now = now,
+                )
+            }
         }
         session.touchAuthenticated(now)
         evictActiveSnapshot(session.member.id, session.sessionKey)
@@ -221,6 +240,7 @@ class MemberSessionService(
     override fun revokeSession(sessionKey: String) {
         if (sessionKey.isBlank()) return
         clearRotationGraceEntry(sessionKey)
+        clearRotatedRefreshTokenHistory(sessionKey)
         val session = memberSessionStorePort.findBySessionKeyAndRevokedAtIsNull(sessionKey) ?: return
         session.revoke()
         evictActiveSnapshot(session.member.id, sessionKey)
@@ -231,6 +251,7 @@ class MemberSessionService(
         val revokedCount = memberSessionStorePort.revokeAllActiveSessionsForMember(memberId, Instant.now())
         if (revokedCount > 0) {
             inMemoryRotationGraceEntries.clear()
+            inMemoryRotatedRefreshTokenHashes.clear()
             evictAllActiveSnapshotsNowAndAfterCommit()
         }
         return revokedCount
@@ -257,16 +278,23 @@ class MemberSessionService(
         val maskedToken = maskTokenWithSecret(rotatedRefreshToken, previousRefreshToken)
         val serialized = "$previousRefreshTokenHash|$currentRefreshTokenHash|$maskedToken|${expiresAt.toEpochMilli()}"
         val redis = redisKeyValuePort?.takeIf { it.isAvailable() }
-        if (redis != null) {
-            runCatching {
-                redis.set(rotationGraceRedisKey(sessionKey), serialized, rotationGraceWindow)
-            }
+        val storedInRedis =
+            redis != null &&
+                runCatching {
+                    redis.set(rotationGraceRedisKey(sessionKey), serialized, rotationGraceWindow)
+                }.onFailure { exception ->
+                    logger.warn("Failed to store rotation grace entry in Redis for sessionKey={}", sessionKey, exception)
+                }.isSuccess
+        if (storedInRedis) {
+            inMemoryRotationGraceEntries.remove(sessionKey)
             return
         }
         if (inMemoryRotationGraceEntries.size >= maxInMemoryGraceEntries) {
             inMemoryRotationGraceEntries.entries.removeIf { isSerializedGraceExpired(it.value, now) }
         }
-        inMemoryRotationGraceEntries[sessionKey] = serialized
+        if (inMemoryRotationGraceEntries.size < maxInMemoryGraceEntries || inMemoryRotationGraceEntries.containsKey(sessionKey)) {
+            inMemoryRotationGraceEntries[sessionKey] = serialized
+        }
     }
 
     private fun resolveGraceRotatedRefreshToken(
@@ -281,7 +309,11 @@ class MemberSessionService(
         val redis = redisKeyValuePort?.takeIf { it.isAvailable() }
         val raw =
             if (redis != null) {
-                runCatching { redis.get(rotationGraceRedisKey(session.sessionKey)) }.getOrNull()
+                runCatching { redis.get(rotationGraceRedisKey(session.sessionKey)) }
+                    .onFailure { exception ->
+                        logger.warn("Failed to read rotation grace entry from Redis for sessionKey={}", session.sessionKey, exception)
+                    }.getOrNull()
+                    ?: inMemoryRotationGraceEntries[session.sessionKey]
             } else {
                 inMemoryRotationGraceEntries[session.sessionKey]
             } ?: return null
@@ -294,11 +326,114 @@ class MemberSessionService(
             clearRotationGraceEntry(session.sessionKey)
             return null
         }
-        if (parts[0] != presentedHash || parts[1] != activeHash) {
+        val previousMatches = MemberSessionRefreshTokenPolicy.constantTimeEquals(parts[0], presentedHash)
+        val currentMatches = MemberSessionRefreshTokenPolicy.constantTimeEquals(parts[1], activeHash)
+        if (!previousMatches || !currentMatches) {
             return null
         }
         return unmaskTokenWithSecret(parts[2], presentedRefreshToken)
     }
+
+    private fun recordRotatedRefreshTokenHash(
+        sessionKey: String,
+        previousRefreshTokenHash: String,
+        expiresAt: Instant,
+        now: Instant,
+    ) {
+        val ttlSeconds = Duration.between(now, expiresAt).seconds.coerceAtLeast(1L)
+        val ttl = Duration.ofSeconds(ttlSeconds)
+        val redis = redisKeyValuePort?.takeIf { it.isAvailable() }
+        val existingSerialized =
+            if (redis != null) {
+                runCatching { redis.get(rotatedHistoryRedisKey(sessionKey)) }
+                    .onFailure { exception ->
+                        logger.warn("Failed to read rotated token history from Redis for sessionKey={}", sessionKey, exception)
+                    }.getOrNull()
+                    ?: inMemoryRotatedRefreshTokenHashes[sessionKey]
+            } else {
+                inMemoryRotatedRefreshTokenHashes[sessionKey]
+            }
+        val updatedSerialized = appendRotatedHistoryEntry(existingSerialized, previousRefreshTokenHash, expiresAt)
+        val storedInRedis =
+            redis != null &&
+                runCatching {
+                    redis.set(rotatedHistoryRedisKey(sessionKey), updatedSerialized, ttl)
+                }.onFailure { exception ->
+                    logger.warn("Failed to store rotated token history in Redis for sessionKey={}", sessionKey, exception)
+                }.isSuccess
+        if (storedInRedis) {
+            inMemoryRotatedRefreshTokenHashes.remove(sessionKey)
+            return
+        }
+        if (inMemoryRotatedRefreshTokenHashes.size >= maxInMemoryGraceEntries) {
+            inMemoryRotatedRefreshTokenHashes.entries.removeIf { isSerializedGraceExpired(it.value, now) }
+        }
+        if (inMemoryRotatedRefreshTokenHashes.size < maxInMemoryGraceEntries || inMemoryRotatedRefreshTokenHashes.containsKey(sessionKey)) {
+            inMemoryRotatedRefreshTokenHashes[sessionKey] = updatedSerialized
+        }
+    }
+
+    private fun isKnownRotatedRefreshTokenHash(
+        sessionKey: String,
+        presentedHash: String,
+        now: Instant,
+    ): Boolean {
+        val redis = redisKeyValuePort?.takeIf { it.isAvailable() }
+        val raw =
+            if (redis != null) {
+                runCatching { redis.get(rotatedHistoryRedisKey(sessionKey)) }
+                    .onFailure { exception ->
+                        logger.warn("Failed to read rotated token history from Redis for sessionKey={}", sessionKey, exception)
+                    }.getOrNull()
+                    ?: inMemoryRotatedRefreshTokenHashes[sessionKey]
+            } else {
+                inMemoryRotatedRefreshTokenHashes[sessionKey]
+            } ?: return false
+
+        val separatorIndex = raw.lastIndexOf('|')
+        if (separatorIndex <= 0) return false
+        val expiresAtMillis = raw.substring(separatorIndex + 1).toLongOrNull() ?: return false
+        if (!now.isBefore(Instant.ofEpochMilli(expiresAtMillis))) {
+            clearRotatedRefreshTokenHistory(sessionKey)
+            return false
+        }
+        val hashesPart = raw.substring(0, separatorIndex)
+        var matched = false
+        for (recordedHash in hashesPart.split(',')) {
+            if (recordedHash.isNotBlank() && MemberSessionRefreshTokenPolicy.constantTimeEquals(recordedHash, presentedHash)) {
+                matched = true
+            }
+        }
+        return matched
+    }
+
+    private fun appendRotatedHistoryEntry(
+        existingSerialized: String?,
+        newHash: String,
+        expiresAt: Instant,
+    ): String {
+        val existingHashes =
+            existingSerialized
+                ?.substringBeforeLast('|', "")
+                ?.split(',')
+                ?.filter { it.isNotBlank() }
+                .orEmpty()
+        val combined =
+            (existingHashes.filter { it != newHash } + newHash)
+                .takeLast(maxRotatedHashesPerSession)
+                .joinToString(",")
+        return "$combined|${expiresAt.toEpochMilli()}"
+    }
+
+    private fun clearRotatedRefreshTokenHistory(sessionKey: String) {
+        inMemoryRotatedRefreshTokenHashes.remove(sessionKey)
+        val redis = redisKeyValuePort?.takeIf { it.isAvailable() } ?: return
+        runCatching {
+            redis.delete(listOf(rotatedHistoryRedisKey(sessionKey)))
+        }
+    }
+
+    private fun rotatedHistoryRedisKey(sessionKey: String): String = "$rotatedHistoryRedisKeyPrefix$sessionKey"
 
     private fun isSerializedGraceExpired(
         raw: String,

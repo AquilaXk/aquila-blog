@@ -53,13 +53,13 @@ class ApiV1PostPublicReadController(
         val validPage = normalizePublicPage(page)
         val validPageSize = pageSize.coerceIn(1, 30)
         val data = postPublicReadQueryUseCase.getPublicFeed(validPage, validPageSize, sort)
-        val etagSeed = postPublicReadResponseFactory.buildFeedPageEtagSeed("feed", validPage, validPageSize, sort, data = data)
-        return postPublicReadResponseFactory.respondWithEtag(
+        val weakEtag = postPublicReadResponseFactory.buildFeedPageWeakEtag("feed", validPage, validPageSize, sort, data = data)
+        return postPublicReadResponseFactory.respondWithWeakEtag(
             request = request,
             response = response,
             cachePolicy = PostPublicReadCachePolicies.FEED,
             surrogateKeys = setOf(PostCacheTags.LIST, PostCacheTags.FEED),
-            etagSeed = etagSeed,
+            weakEtag = weakEtag,
             startedAtNanos = startedAtNanos,
             body = data,
         )
@@ -77,13 +77,13 @@ class ApiV1PostPublicReadController(
         val validPageSize = pageSize.coerceIn(1, 30)
         val validSort = sort.normalizeForCursor()
         val data = postPublicReadQueryUseCase.getPublicFeedByCursor(cursor, validPageSize, validSort)
-        val etagSeed = postPublicReadResponseFactory.buildCursorFeedEtagSeed("feed-cursor", validPageSize, validSort, cursor, data = data)
-        return postPublicReadResponseFactory.respondWithEtag(
+        val weakEtag = postPublicReadResponseFactory.buildCursorFeedWeakEtag("feed-cursor", validPageSize, validSort, cursor, data = data)
+        return postPublicReadResponseFactory.respondWithWeakEtag(
             request = request,
             response = response,
             cachePolicy = PostPublicReadCachePolicies.FEED_CURSOR,
             surrogateKeys = setOf(PostCacheTags.LIST, PostCacheTags.FEED, PostCacheTags.FEED_CURSOR),
-            etagSeed = etagSeed,
+            weakEtag = weakEtag,
             startedAtNanos = startedAtNanos,
             body = data,
         )
@@ -106,8 +106,8 @@ class ApiV1PostPublicReadController(
         val normalizedKw = searchIntent.keyword
         val normalizedTag = searchIntent.tag
         val data = postPublicReadQueryUseCase.getPublicExplore(validPage, validPageSize, normalizedKw, normalizedTag, sort)
-        val etagSeed =
-            postPublicReadResponseFactory.buildFeedPageEtagSeed(
+        val weakEtag =
+            postPublicReadResponseFactory.buildFeedPageWeakEtag(
                 "explore",
                 validPage,
                 validPageSize,
@@ -116,7 +116,7 @@ class ApiV1PostPublicReadController(
                 normalizedTag,
                 data,
             )
-        return postPublicReadResponseFactory.respondWithEtag(
+        return postPublicReadResponseFactory.respondWithWeakEtag(
             request = request,
             response = response,
             cachePolicy = PostPublicReadCachePolicies.EXPLORE,
@@ -128,7 +128,7 @@ class ApiV1PostPublicReadController(
                         add(PostCacheTags.byTag(normalizedTag))
                     }
                 },
-            etagSeed = etagSeed,
+            weakEtag = weakEtag,
             startedAtNanos = startedAtNanos,
             body = data,
         )
@@ -148,14 +148,14 @@ class ApiV1PostPublicReadController(
         val normalizedTag = postSearchIntentResolver.normalizeTag(tag)
         val validSort = sort.normalizeForCursor()
         val data = postPublicReadQueryUseCase.getPublicExploreByCursor(cursor, validPageSize, normalizedTag, validSort)
-        val etagSeed =
-            postPublicReadResponseFactory.buildCursorFeedEtagSeed("explore-cursor", validPageSize, validSort, cursor, normalizedTag, data)
-        return postPublicReadResponseFactory.respondWithEtag(
+        val weakEtag =
+            postPublicReadResponseFactory.buildCursorFeedWeakEtag("explore-cursor", validPageSize, validSort, cursor, normalizedTag, data)
+        return postPublicReadResponseFactory.respondWithWeakEtag(
             request = request,
             response = response,
             cachePolicy = PostPublicReadCachePolicies.EXPLORE_CURSOR,
             surrogateKeys = postExploreCursorSurrogateKeys(normalizedTag),
-            etagSeed = etagSeed,
+            weakEtag = weakEtag,
             startedAtNanos = startedAtNanos,
             body = data,
         )
@@ -178,13 +178,13 @@ class ApiV1PostPublicReadController(
                 excludePostId = safeExcludePostId,
                 limit = safeLimit,
             )
-        val etagSeed = postPublicReadResponseFactory.buildRelatedAuthorEtagSeed(authorId, safeExcludePostId, safeLimit, data)
-        return postPublicReadResponseFactory.respondWithEtag(
+        val weakEtag = postPublicReadResponseFactory.buildRelatedAuthorWeakEtag(authorId, safeExcludePostId, safeLimit, data)
+        return postPublicReadResponseFactory.respondWithWeakEtag(
             request = request,
             response = response,
             cachePolicy = PostPublicReadCachePolicies.RELATED_AUTHOR,
             surrogateKeys = setOf(PostCacheTags.LIST, PostCacheTags.DETAIL),
-            etagSeed = etagSeed,
+            weakEtag = weakEtag,
             startedAtNanos = startedAtNanos,
             body = data,
         )
@@ -211,8 +211,24 @@ class ApiV1PostPublicReadController(
             } else {
                 postPublicReadQueryUseCase.getPublicExplore(validPage, validPageSize, normalizedKw, normalizedTag, sort)
             }
-        val etagSeed =
-            postPublicReadResponseFactory.buildFeedPageEtagSeed(
+        val searchPolicy = postPublicReadResponseFactory.resolveSearchReadCachePolicy(normalizedKw)
+        val surrogateKeys =
+            buildSet {
+                add(PostCacheTags.SEARCH)
+                if (normalizedTag.isNotBlank()) add(PostCacheTags.byTag(normalizedTag))
+            }
+        if (searchPolicy.noStore) {
+            return postPublicReadResponseFactory.respondNoStore(
+                response = response,
+                cachePolicy = searchPolicy,
+                surrogateKeys = surrogateKeys,
+                startedAtNanos = startedAtNanos,
+                originDescription = "search-no-store",
+                body = data,
+            )
+        }
+        val weakEtag =
+            postPublicReadResponseFactory.buildFeedPageWeakEtag(
                 if (normalizedTag.isBlank()) "search" else "search-tag-intent",
                 validPage,
                 validPageSize,
@@ -221,31 +237,12 @@ class ApiV1PostPublicReadController(
                 normalizedTag,
                 data,
             )
-        val searchPolicy = postPublicReadResponseFactory.resolveSearchReadCachePolicy(normalizedKw)
-        if (searchPolicy.noStore) {
-            return postPublicReadResponseFactory.respondNoStore(
-                response = response,
-                cachePolicy = searchPolicy,
-                surrogateKeys =
-                    buildSet {
-                        add(PostCacheTags.SEARCH)
-                        if (normalizedTag.isNotBlank()) add(PostCacheTags.byTag(normalizedTag))
-                    },
-                startedAtNanos = startedAtNanos,
-                originDescription = "search-no-store",
-                body = data,
-            )
-        }
-        return postPublicReadResponseFactory.respondWithEtag(
+        return postPublicReadResponseFactory.respondWithWeakEtag(
             request = request,
             response = response,
             cachePolicy = searchPolicy,
-            surrogateKeys =
-                buildSet {
-                    add(PostCacheTags.SEARCH)
-                    if (normalizedTag.isNotBlank()) add(PostCacheTags.byTag(normalizedTag))
-                },
-            etagSeed = etagSeed,
+            surrogateKeys = surrogateKeys,
+            weakEtag = weakEtag,
             startedAtNanos = startedAtNanos,
             body = data,
         )
@@ -258,13 +255,13 @@ class ApiV1PostPublicReadController(
     ): ResponseEntity<List<TagCountDto>> {
         val startedAtNanos = System.nanoTime()
         val data = postPublicReadQueryUseCase.getPublicTagCounts()
-        val etagSeed = postPublicReadResponseFactory.buildTagsEtagSeed(data)
-        return postPublicReadResponseFactory.respondWithEtag(
+        val weakEtag = postPublicReadResponseFactory.buildTagsWeakEtag(data)
+        return postPublicReadResponseFactory.respondWithWeakEtag(
             request = request,
             response = response,
             cachePolicy = PostPublicReadCachePolicies.TAGS,
             surrogateKeys = setOf(PostCacheTags.TAGS),
-            etagSeed = etagSeed,
+            weakEtag = weakEtag,
             startedAtNanos = startedAtNanos,
             body = data,
         )
@@ -283,15 +280,15 @@ class ApiV1PostPublicReadController(
         val validPageSize = pageSize.coerceIn(1, 30)
         val validSort = sort.normalizeForCursor()
         val data = postPublicReadQueryUseCase.getPublicBootstrap(normalizedTag, validPageSize, validSort)
-        val etagSeed =
-            postPublicReadResponseFactory.buildBootstrapEtagSeed(
+        val weakEtag =
+            postPublicReadResponseFactory.buildBootstrapWeakEtag(
                 pageSize = validPageSize,
                 sort = validSort,
                 tag = normalizedTag,
                 data = data,
             )
 
-        return postPublicReadResponseFactory.respondWithEtag(
+        return postPublicReadResponseFactory.respondWithWeakEtag(
             request = request,
             response = response,
             cachePolicy = PostPublicReadCachePolicies.BOOTSTRAP,
@@ -308,7 +305,7 @@ class ApiV1PostPublicReadController(
                         add(PostCacheTags.byTag(normalizedTag))
                     }
                 },
-            etagSeed = etagSeed,
+            weakEtag = weakEtag,
             startedAtNanos = startedAtNanos,
             body = data,
         )

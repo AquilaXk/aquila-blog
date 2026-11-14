@@ -1,18 +1,19 @@
 package com.back.boundedContexts.post.dto
 
-import java.nio.charset.StandardCharsets
-import java.security.MessageDigest
-import java.util.HexFormat
-import java.util.concurrent.ConcurrentHashMap
+import com.back.global.util.Utf8ChunkDigest
 
 object PostPreviewExtractor {
     internal const val MAX_CACHE_ENTRIES = 256
+    private const val MAX_CACHEABLE_CONTENT_CHARS = 16_384
+    private const val MAX_IMAGE_TOKEN_SCAN_CHARS = 512
     private const val NO_THUMBNAIL_SENTINEL = "__NO_THUMBNAIL__"
-    private val HEX_FORMAT = HexFormat.of()
 
-    private val thumbnailCache = ConcurrentHashMap<String, String>()
+    private val cacheLock = Any()
+    private val thumbnailCache =
+        object : LinkedHashMap<String, String>(MAX_CACHE_ENTRIES + 1, 0.75f, true) {
+            override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, String>): Boolean = size > MAX_CACHE_ENTRIES
+        }
 
-    private val markdownImageRegex = Regex("!\\[[^\\]]*\\]\\(([^)\\s]+)(?:\\s+\"[^\"]*\")?\\)")
     private val metadataLineRegex =
         Regex(
             "^\\s*(tag|tags|category|categories|summary|thumbnail|thumb|cover|coverimage|cover_image)\\s*:\\s*(.+)\\s*$",
@@ -26,41 +27,134 @@ object PostPreviewExtractor {
     )
 
     fun extractThumbnail(content: String): String? {
-        val cacheKey = cacheKeyFor(content)
-        val cached = thumbnailCache[cacheKey]
-        if (cached != null) {
-            return if (cached == NO_THUMBNAIL_SENTINEL) null else cached
+        if (content.length > MAX_CACHEABLE_CONTENT_CHARS) {
+            return computeThumbnail(content)
         }
-        val scanResult = extractFrontmatterAndMetadataHeader(content)
-        val result =
-            scanResult.explicitThumbnail
-                ?: findFirstBodyMarkdownImage(content, scanResult.bodyStartOffset)
-        thumbnailCache[cacheKey] = result ?: NO_THUMBNAIL_SENTINEL
-        while (thumbnailCache.size > MAX_CACHE_ENTRIES) {
-            thumbnailCache.remove(thumbnailCache.keys.iterator().next())
+        val cacheKey = cacheKeyFor(content)
+        synchronized(cacheLock) {
+            val cached = thumbnailCache[cacheKey]
+            if (cached != null) {
+                return if (cached == NO_THUMBNAIL_SENTINEL) null else cached
+            }
+        }
+        val result = computeThumbnail(content)
+        synchronized(cacheLock) {
+            thumbnailCache[cacheKey] = result ?: NO_THUMBNAIL_SENTINEL
         }
         return result
     }
 
+    private fun computeThumbnail(content: String): String? {
+        val scanResult = extractFrontmatterAndMetadataHeader(content)
+        return scanResult.explicitThumbnail ?: findFirstBodyMarkdownImage(content, scanResult.bodyStartOffset)
+    }
+
+    /**
+     * Single-pass O(N) markdown image scanner bounded to a single line and 512 chars per token,
+     * eliminating catastrophic regex backtracking on malformed `![...` sequences.
+     */
     private fun findFirstBodyMarkdownImage(
         content: String,
         bodyStartOffset: Int,
     ): String? {
-        val firstImageMarker = content.indexOf("![", startIndex = bodyStartOffset)
-        if (firstImageMarker == -1) return null
-        return markdownImageRegex.find(content, startIndex = firstImageMarker)?.groupValues?.getOrNull(1)
+        val len = content.length
+        var cursor = bodyStartOffset
+        while (cursor < len) {
+            val marker = content.indexOf("![", startIndex = cursor)
+            if (marker < 0) return null
+
+            var lineEnd = content.indexOf('\n', startIndex = marker + 2)
+            if (lineEnd < 0) lineEnd = len
+            val crIndex = content.indexOf('\r', startIndex = marker + 2)
+            if (crIndex in (marker + 2) until lineEnd) lineEnd = crIndex
+
+            val altSearchEnd = minOf(lineEnd, marker + 2 + MAX_IMAGE_TOKEN_SCAN_CHARS)
+            var closeBracket = -1
+            var i = marker + 2
+            while (i < altSearchEnd) {
+                if (content[i] == ']') {
+                    closeBracket = i
+                    break
+                }
+                i++
+            }
+
+            if (closeBracket < 0) {
+                val nextBracketOnLine = content.indexOf(']', startIndex = altSearchEnd)
+                cursor =
+                    if (nextBracketOnLine < 0 || nextBracketOnLine >= lineEnd) {
+                        minOf(len, lineEnd + 1)
+                    } else {
+                        maxOf(marker + 2, nextBracketOnLine - MAX_IMAGE_TOKEN_SCAN_CHARS)
+                    }
+                continue
+            }
+
+            if (closeBracket + 1 >= lineEnd || content[closeBracket + 1] != '(') {
+                cursor = closeBracket + 1
+                continue
+            }
+
+            val urlStart = closeBracket + 2
+            if (urlStart >= lineEnd) {
+                cursor = lineEnd + 1
+                continue
+            }
+
+            val urlScanLimit = minOf(lineEnd, urlStart + MAX_IMAGE_TOKEN_SCAN_CHARS)
+            var urlEnd = urlStart
+            while (urlEnd < urlScanLimit) {
+                val ch = content[urlEnd]
+                if (ch == ')' || ch.isWhitespace()) break
+                urlEnd++
+            }
+            if (urlEnd == urlStart) {
+                cursor = urlStart + 1
+                continue
+            }
+
+            val validClosingParen =
+                if (urlEnd < urlScanLimit && content[urlEnd] == ')') {
+                    true
+                } else {
+                    hasValidOptionalTitleBeforeClosingParen(content, urlEnd, minOf(lineEnd, urlStart + MAX_IMAGE_TOKEN_SCAN_CHARS))
+                }
+            if (validClosingParen) {
+                return content.substring(urlStart, urlEnd)
+            }
+            cursor = urlEnd + 1
+        }
+        return null
+    }
+
+    private fun hasValidOptionalTitleBeforeClosingParen(
+        content: String,
+        afterUrlIndex: Int,
+        limit: Int,
+    ): Boolean {
+        var idx = afterUrlIndex
+        if (idx >= limit || !content[idx].isWhitespace()) return false
+        while (idx < limit && content[idx].isWhitespace()) idx++
+        if (idx >= limit || content[idx] != '"') return false
+        idx++
+        while (idx < limit && content[idx] != '"') idx++
+        if (idx >= limit) return false
+        idx++
+        return idx < limit && content[idx] == ')'
     }
 
     internal fun clearCache() {
-        thumbnailCache.clear()
+        synchronized(cacheLock) {
+            thumbnailCache.clear()
+        }
     }
 
-    internal fun cachedEntryCount(): Int = thumbnailCache.size
+    internal fun cachedEntryCount(): Int =
+        synchronized(cacheLock) {
+            thumbnailCache.size
+        }
 
-    internal fun cacheKeyFor(content: String): String {
-        val digest = MessageDigest.getInstance("SHA-256").digest(content.toByteArray(StandardCharsets.UTF_8))
-        return HEX_FORMAT.formatHex(digest)
-    }
+    internal fun cacheKeyFor(content: String): String = Utf8ChunkDigest.sha256Hex(content)
 
     private fun extractFrontmatterAndMetadataHeader(content: String): HeaderScanResult {
         var cursor = skipLeadingWhitespace(content, 0)

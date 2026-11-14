@@ -53,6 +53,7 @@ class AuthTokenService(
                     "rememberLoginEnabled" to rememberLoginEnabled,
                     "ipSecurityEnabled" to ipSecurityEnabled,
                     "ipSecurityFingerprint" to ipSecurityFingerprint,
+                    "ver" to AccessTokenPayload.CURRENT_TOKEN_VERSION,
                 ),
             ).issuedAt(Date())
             .expiration(Date(System.currentTimeMillis() + accessTokenExpirationSeconds * 1000L))
@@ -78,6 +79,7 @@ class AuthTokenService(
             ipSecurityFingerprint = claims["ipSecurityFingerprint"] as? String,
             issuedAt = claims.issuedAt?.toInstant(),
             expiresAt = claims.expiration?.toInstant(),
+            tokenVersion = (claims["ver"] as? Number)?.toInt() ?: 0,
         )
     }
 }

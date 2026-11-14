@@ -167,4 +167,6 @@ interface TaskRepository :
         status: TaskStatus,
         pageable: Pageable,
     ): List<Task>
+
+    override fun saveAllTasks(tasks: Collection<Task>): List<Task> = saveAll(tasks)
 }

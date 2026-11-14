@@ -32,12 +32,15 @@ class PostLikeReconciliationService(
                 modifiedAfter = modifiedAfter,
                 limit = safeLimit,
             )
+        if (likeAttrs.isEmpty()) return 0
 
+        val postIds = likeAttrs.mapTo(LinkedHashSet(likeAttrs.size)) { it.subject.id }
+        val likeCountsByPostId = postLikeRepository.countByPostIdIn(postIds)
         var correctedCount = 0
 
         likeAttrs.forEach { likeAttr ->
             val post = likeAttr.subject
-            val actualLikesCount = postLikeRepository.countByPost(post).toInt().coerceAtLeast(0)
+            val actualLikesCount = (likeCountsByPostId[post.id] ?: 0L).toInt().coerceAtLeast(0)
             val currentLikesCount = (likeAttr.intValue ?: 0).coerceAtLeast(0)
             val targetLikesCount = maxOf(currentLikesCount, actualLikesCount)
             if (likeAttr.intValue != targetLikesCount || post.likesCount != targetLikesCount) {

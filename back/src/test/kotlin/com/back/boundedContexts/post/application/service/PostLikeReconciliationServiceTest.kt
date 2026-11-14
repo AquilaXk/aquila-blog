@@ -235,5 +235,7 @@ class PostLikeReconciliationServiceTest {
         ) = error("not used in this test")
 
         override fun countByPost(post: Post): Long = actualCount
+
+        override fun countByPostIdIn(postIds: Collection<Long>): Map<Long, Long> = postIds.associateWith { actualCount }
     }
 }

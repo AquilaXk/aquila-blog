@@ -40,4 +40,11 @@ class PostLikeRepositoryAdapter(
     ): List<PostLike> = postLikeRepository.findByLikerAndPostIn(liker, posts)
 
     override fun countByPost(post: Post): Long = postLikeRepository.countByPost(post)
+
+    override fun countByPostIdIn(postIds: Collection<Long>): Map<Long, Long> {
+        if (postIds.isEmpty()) return emptyMap()
+        return postLikeRepository
+            .countGroupedByPostIdIn(postIds)
+            .associate { row -> (row[0] as Number).toLong() to (row[1] as Number).toLong() }
+    }
 }

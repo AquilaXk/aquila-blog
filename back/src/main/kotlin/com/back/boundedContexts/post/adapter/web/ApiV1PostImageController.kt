@@ -8,6 +8,7 @@ import com.back.global.exception.application.AppException
 import com.back.global.exception.application.ErrorCode
 import com.back.global.rsData.RsData
 import com.back.global.security.domain.SecurityUser
+import com.back.global.storage.application.ImageUploadAdmissionValidator
 import com.back.global.storage.application.UploadedFileRetentionService
 import com.back.global.storage.application.UploadedFileUrlCodec
 import com.back.global.storage.application.port.output.UploadedFileRepositoryPort
@@ -151,13 +152,56 @@ class ApiV1PostImageController(
             ).build()
         }
 
-        val image =
-            postImageStorageService.getPostImage(objectKey)
-                ?: throw AppException(ErrorCode.NOT_FOUND, IMAGE_NOT_FOUND_MESSAGE)
-
         val rangeHeader = request.getHeader(HttpHeaders.RANGE)
+        val requestedClosedRange =
+            if (!rangeHeader.isNullOrBlank()) parseClosedRangeSyntax(rangeHeader) else null
+        val image =
+            if (requestedClosedRange != null) {
+                postImageStorageService.getPostImage(objectKey, requestedClosedRange)
+            } else {
+                postImageStorageService.getPostImage(objectKey)
+            } ?: throw AppException(ErrorCode.NOT_FOUND, IMAGE_NOT_FOUND_MESSAGE)
+
+        if (!rangeHeader.isNullOrBlank() && image.rangeUnsatisfiable) {
+            closeStreamQuietly(image.inputStream)
+            val totalSuffix = image.totalContentLength?.takeIf { it > 0 }?.toString() ?: "*"
+            return withImageCacheControl(
+                ResponseEntity
+                    .status(HttpStatus.REQUESTED_RANGE_NOT_SATISFIABLE)
+                    .header(HttpHeaders.CONTENT_RANGE, "bytes */$totalSuffix")
+                    .eTag(etag),
+                access,
+                uploadedFile,
+            ).build()
+        }
+
+        val canonicalMimeType = resolveSafeImageMimeType(image.contentType)
+        if (canonicalMimeType == null) {
+            closeStreamQuietly(image.inputStream)
+            throw AppException(ErrorCode.BAD_REQUEST, "지원하지 않는 이미지 형식입니다.")
+        }
+
         if (!rangeHeader.isNullOrBlank()) {
-            val totalLength = image.contentLength ?: -1
+            if (image.isPartialContent && requestedClosedRange != null) {
+                val resolvedStart = image.partialStart ?: requestedClosedRange.first
+                val resolvedEnd = image.partialEnd ?: requestedClosedRange.last
+                val totalLength = image.totalContentLength ?: (resolvedEnd + 1)
+                val clampedEnd = minOf(resolvedEnd, totalLength - 1)
+                val sliceLength = (image.contentLength ?: (clampedEnd - resolvedStart + 1)).coerceAtLeast(0L)
+                return withImageCacheControl(
+                    ResponseEntity
+                        .status(HttpStatus.PARTIAL_CONTENT)
+                        .contentType(MediaType.parseMediaType(canonicalMimeType))
+                        .header(HttpHeaders.ACCEPT_RANGES, "bytes")
+                        .header(HttpHeaders.CONTENT_RANGE, "bytes $resolvedStart-$clampedEnd/$totalLength")
+                        .contentLength(sliceLength)
+                        .eTag(etag),
+                    access,
+                    uploadedFile,
+                ).body(InputStreamResource(image.inputStream))
+            }
+
+            val totalLength = image.totalContentLength ?: image.contentLength ?: -1
             if (totalLength <= 0) {
                 image.inputStream.close()
                 return withImageCacheControl(
@@ -187,7 +231,7 @@ class ApiV1PostImageController(
             return withImageCacheControl(
                 ResponseEntity
                     .status(HttpStatus.PARTIAL_CONTENT)
-                    .contentType(MediaType.parseMediaType(image.contentType))
+                    .contentType(MediaType.parseMediaType(canonicalMimeType))
                     .header(HttpHeaders.ACCEPT_RANGES, "bytes")
                     .header(HttpHeaders.CONTENT_RANGE, "bytes ${range.first}-${range.last}/$totalLength")
                     .contentLength(range.last - range.first + 1)
@@ -201,7 +245,7 @@ class ApiV1PostImageController(
             withImageCacheControl(
                 ResponseEntity
                     .ok()
-                    .contentType(MediaType.parseMediaType(image.contentType))
+                    .contentType(MediaType.parseMediaType(canonicalMimeType))
                     .header(HttpHeaders.ACCEPT_RANGES, "bytes")
                     .eTag(etag),
                 access,
@@ -264,9 +308,13 @@ class ApiV1PostImageController(
         builder: ResponseEntity.BodyBuilder,
         access: ProfileImageReadUseCase.Access,
         uploadedFile: UploadedFile,
-    ): ResponseEntity.BodyBuilder =
-        if (access == ProfileImageReadUseCase.Access.OWNER_ONLY) {
+    ): ResponseEntity.BodyBuilder {
+        val securedBuilder =
             builder
+                .header("X-Content-Type-Options", "nosniff")
+                .header("Content-Security-Policy", "default-src 'none'; sandbox")
+        return if (access == ProfileImageReadUseCase.Access.OWNER_ONLY) {
+            securedBuilder
                 .cacheControl(CacheControl.noStore().cachePrivate())
                 .header(HttpHeaders.VARY, HttpHeaders.COOKIE)
         } else if (uploadedFile.purpose == UploadedFilePurpose.POST_IMAGE) {
@@ -283,7 +331,7 @@ class ApiV1PostImageController(
                         add("post:$it")
                     }
                 }
-            builder
+            securedBuilder
                 .cacheControl(
                     CacheControl
                         .maxAge(3600, TimeUnit.SECONDS)
@@ -292,15 +340,33 @@ class ApiV1PostImageController(
                 ).header("Surrogate-Key", cacheTags.joinToString(" "))
                 .header("Cache-Tag", cacheTags.joinToString(","))
         } else if (uploadedFile.purpose == UploadedFilePurpose.PROFILE_IMAGE) {
-            builder.cacheControl(
+            securedBuilder.cacheControl(
                 CacheControl
                     .maxAge(3600, TimeUnit.SECONDS)
                     .staleWhileRevalidate(86400, TimeUnit.SECONDS)
                     .cachePublic(),
             )
         } else {
-            builder.cacheControl(CacheControl.noCache().cachePublic())
+            securedBuilder.cacheControl(CacheControl.noCache().cachePublic())
         }
+    }
+
+    private fun resolveSafeImageMimeType(rawContentType: String?): String? {
+        val canonical = ImageUploadAdmissionValidator.normalizeImageMediaContentType(rawContentType) ?: return null
+        return canonical.takeIf { it in ImageUploadAdmissionValidator.ALLOWED_IMAGE_CONTENT_TYPES }
+    }
+
+    private fun parseClosedRangeSyntax(rangeHeader: String): LongRange? {
+        if (!rangeHeader.startsWith("bytes=")) return null
+        val spec = rangeHeader.removePrefix("bytes=").trim()
+        if (spec.isEmpty() || spec.contains(",")) return null
+        val dashIndex = spec.indexOf('-')
+        if (dashIndex <= 0 || dashIndex >= spec.lastIndex) return null
+        val start = spec.substring(0, dashIndex).trim().toLongOrNull() ?: return null
+        val end = spec.substring(dashIndex + 1).trim().toLongOrNull() ?: return null
+        if (start < 0 || end < start) return null
+        return start..end
+    }
 
     private fun extractObjectKey(
         request: HttpServletRequest,

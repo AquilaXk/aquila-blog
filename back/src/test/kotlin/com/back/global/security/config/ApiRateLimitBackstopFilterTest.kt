@@ -414,6 +414,17 @@ class ApiRateLimitBackstopFilterTest {
         assertThat(secondResponse.status).isEqualTo(429)
     }
 
+    @Test
+    fun `private and admin read requests use dedicated private-read bucket independent of public-read`() {
+        val redis = InMemoryRedisKeyValuePort()
+        val filter = createFilter(redis = redis, publicReadLimitPerMinute = 5, privateReadLimitPerMinute = 2)
+
+        assertThat(runFilter(filter, "GET", "/post/api/v1/adm/posts").status).isEqualTo(HttpServletResponse.SC_OK)
+        assertThat(runFilter(filter, "HEAD", "/member/api/v1/auth/me").status).isEqualTo(HttpServletResponse.SC_OK)
+        assertThat(runFilter(filter, "GET", "/post/api/v1/adm/posts").status).isEqualTo(429)
+        assertThat(runFilter(filter, "GET", "/post/api/v1/posts/feed").status).isEqualTo(HttpServletResponse.SC_OK)
+    }
+
     private fun createFilter(
         redis: RedisKeyValuePort?,
         clientIpResolver: ClientIpResolver? = ClientIpResolver(),
@@ -421,6 +432,7 @@ class ApiRateLimitBackstopFilterTest {
         enabled: Boolean = true,
         requireRedisInProd: Boolean = false,
         publicReadLimitPerMinute: Int = 120,
+        privateReadLimitPerMinute: Int = 120,
         mutationLimitPerMinute: Int = 60,
         authLimitPerMinute: Int = 20,
         prodRuntime: Boolean = false,
@@ -437,6 +449,7 @@ class ApiRateLimitBackstopFilterTest {
         enabled = enabled,
         requireRedisInProd = requireRedisInProd,
         publicReadLimitPerMinute = publicReadLimitPerMinute,
+        privateReadLimitPerMinute = privateReadLimitPerMinute,
         mutationLimitPerMinute = mutationLimitPerMinute,
         authLimitPerMinute = authLimitPerMinute,
     )

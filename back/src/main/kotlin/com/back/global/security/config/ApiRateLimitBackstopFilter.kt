@@ -35,6 +35,8 @@ class ApiRateLimitBackstopFilter(
     private val requireRedisInProd: Boolean = true,
     @param:Value("\${custom.security.apiRateLimit.publicReadLimitPerMinute:120}")
     private val publicReadLimitPerMinute: Int = 120,
+    @param:Value("\${custom.security.apiRateLimit.privateReadLimitPerMinute:120}")
+    private val privateReadLimitPerMinute: Int = 120,
     @param:Value("\${custom.security.apiRateLimit.mutationLimitPerMinute:60}")
     private val mutationLimitPerMinute: Int = 60,
     @param:Value("\${custom.security.apiRateLimit.authLimitPerMinute:20}")
@@ -42,6 +44,7 @@ class ApiRateLimitBackstopFilter(
 ) : OncePerRequestFilter() {
     init {
         require(publicReadLimitPerMinute > 0) { "publicReadLimitPerMinute must be > 0" }
+        require(privateReadLimitPerMinute > 0) { "privateReadLimitPerMinute must be > 0" }
         require(mutationLimitPerMinute > 0) { "mutationLimitPerMinute must be > 0" }
         require(authLimitPerMinute > 0) { "authLimitPerMinute must be > 0" }
     }
@@ -108,6 +111,9 @@ class ApiRateLimitBackstopFilter(
         }
         if (method in SAFE_METHODS && publicApiRequestMatcher.isPublicReadSafe(method, path)) {
             return Bucket("public-read", publicReadLimitPerMinute)
+        }
+        if (method in SAFE_METHODS && API_PATH_REGEX.matches(path)) {
+            return Bucket("private-read", privateReadLimitPerMinute)
         }
         if (method !in SAFE_METHODS && API_PATH_REGEX.matches(path)) {
             return Bucket("mutation", mutationLimitPerMinute)

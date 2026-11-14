@@ -625,6 +625,28 @@ write_metadata() {
 
 CREATED_BACKUP_DIRS=()
 BACKUP_COMPLETED="false"
+PRIMARY_POSTGRES_BACKUP_DIR=""
+PRIMARY_MINIO_BACKUP_DIR=""
+PRIMARY_MINIO_BACKUP_MODE=""
+
+link_or_copy_file() {
+  local source_file="$1"
+  local target_file="$2"
+  ln -f "${source_file}" "${target_file}" 2>/dev/null || cp -p "${source_file}" "${target_file}"
+}
+
+reuse_backup_artifact_set() {
+  local source_dir="$1"
+  local target_dir="$2"
+  local artifact_name="$3"
+  link_or_copy_file "${source_dir}/${artifact_name}" "${target_dir}/${artifact_name}"
+  if [[ -f "${source_dir}/sha256sums.txt" && -f "${source_dir}/hmac-sha256.txt" ]]; then
+    link_or_copy_file "${source_dir}/sha256sums.txt" "${target_dir}/sha256sums.txt"
+    link_or_copy_file "${source_dir}/hmac-sha256.txt" "${target_dir}/hmac-sha256.txt"
+  else
+    write_backup_artifact_integrity_files "${target_dir}" "${artifact_name}"
+  fi
+}
 
 copy_deploy_config() {
   local class="$1"
@@ -661,12 +683,19 @@ backup_postgres() {
     return 0
   fi
 
+  if [[ -n "${PRIMARY_POSTGRES_BACKUP_DIR}" && -f "${PRIMARY_POSTGRES_BACKUP_DIR}/dump.sql.enc" ]]; then
+    reuse_backup_artifact_set "${PRIMARY_POSTGRES_BACKUP_DIR}" "${target_dir}" "dump.sql.enc"
+    write_metadata "${class}" "${target_dir}"
+    return 0
+  fi
+
   prepare_postgres_backup_compose_if_needed
   compose exec -T db_1 pg_dump --no-owner --no-acl -U postgres -d "${POSTGRES_DB_NAME}" \
     | encrypt_stream_to_file "${target_dir}/dump.sql.enc"
   [[ -s "${target_dir}/dump.sql.enc" ]] || fail "postgres backup produced an empty dump.sql.enc"
   write_backup_artifact_integrity_files "${target_dir}" "dump.sql.enc"
   write_metadata "${class}" "${target_dir}"
+  PRIMARY_POSTGRES_BACKUP_DIR="${target_dir}"
 }
 
 is_dir_empty() {
@@ -854,6 +883,12 @@ backup_minio() {
     return 0
   fi
 
+  if [[ -n "${PRIMARY_MINIO_BACKUP_DIR}" && -f "${PRIMARY_MINIO_BACKUP_DIR}/minio-data.tar.gz.enc" ]]; then
+    reuse_backup_artifact_set "${PRIMARY_MINIO_BACKUP_DIR}" "${target_dir}" "minio-data.tar.gz.enc"
+    write_metadata "${class}" "${target_dir}" "${PRIMARY_MINIO_BACKUP_MODE}"
+    return 0
+  fi
+
   prepare_external_minio_dir
   [[ -d "${minio_dir}" ]] || fail "missing minio data directory: ${minio_dir}"
 
@@ -869,6 +904,8 @@ backup_minio() {
   [[ -s "${target_dir}/minio-data.tar.gz.enc" ]] || fail "minio backup produced an empty minio-data.tar.gz.enc"
   write_backup_artifact_integrity_files "${target_dir}" "minio-data.tar.gz.enc"
   write_metadata "${class}" "${target_dir}" "${mode}"
+  PRIMARY_MINIO_BACKUP_DIR="${target_dir}"
+  PRIMARY_MINIO_BACKUP_MODE="${mode}"
 }
 
 EXTERNAL_STORAGE_ROOT="$(env_value AQUILA_EXTERNAL_STORAGE_ROOT "${DEFAULT_EXTERNAL_STORAGE_ROOT}")"

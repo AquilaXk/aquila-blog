@@ -43,7 +43,7 @@ class ClientIpResolverTest {
         allTrustedRequest.remoteAddr = "10.0.0.8"
         allTrustedRequest.addHeader("X-Forwarded-For", "10.0.0.1, 172.18.0.2")
 
-        assertThat(resolver.resolve(allTrustedRequest)).isEqualTo("10.0.0.1")
+        assertThat(resolver.resolve(allTrustedRequest)).isEqualTo("172.18.0.2")
     }
 
     @Test

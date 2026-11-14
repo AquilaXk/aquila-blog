@@ -29,9 +29,46 @@ class PostPublicReadResponseFactory(
         etagSeed: String,
         startedAtNanos: Long,
         body: T,
+    ): ResponseEntity<T> =
+        respondWithResolvedEtag(
+            request = request,
+            response = response,
+            cachePolicy = cachePolicy,
+            surrogateKeys = surrogateKeys,
+            etag = etagSupport.toWeakEtag(etagSeed),
+            startedAtNanos = startedAtNanos,
+            body = body,
+        )
+
+    fun <T : Any> respondWithWeakEtag(
+        request: HttpServletRequest,
+        response: HttpServletResponse,
+        cachePolicy: PublicReadCachePolicy,
+        surrogateKeys: Set<String>,
+        weakEtag: String,
+        startedAtNanos: Long,
+        body: T,
+    ): ResponseEntity<T> =
+        respondWithResolvedEtag(
+            request = request,
+            response = response,
+            cachePolicy = cachePolicy,
+            surrogateKeys = surrogateKeys,
+            etag = weakEtag,
+            startedAtNanos = startedAtNanos,
+            body = body,
+        )
+
+    private fun <T : Any> respondWithResolvedEtag(
+        request: HttpServletRequest,
+        response: HttpServletResponse,
+        cachePolicy: PublicReadCachePolicy,
+        surrogateKeys: Set<String>,
+        etag: String,
+        startedAtNanos: Long,
+        body: T,
     ): ResponseEntity<T> {
         cacheHeaderWriter.applyPublicReadCacheHeaders(response, cachePolicy, surrogateKeys)
-        val etag = etagSupport.toWeakEtag(etagSeed)
         response.setHeader(HttpHeaders.ETAG, etag)
         if (etagSupport.isNotModified(request, etag)) {
             serverTimingWriter.appendMetric(response, "cache;desc=\"etag-304\"")
@@ -123,6 +160,70 @@ class PostPublicReadResponseFactory(
         data: PublicPostsBootstrapDto,
     ): String =
         etagSeedBuilder.buildBootstrapEtagSeed(
+            pageSize = pageSize,
+            sort = sort,
+            tag = tag,
+            data = data,
+        )
+
+    fun buildFeedPageWeakEtag(
+        source: String,
+        page: Int,
+        pageSize: Int,
+        sort: PostSearchSortType1,
+        kw: String = "",
+        tag: String = "",
+        data: PageDto<FeedPostDto>,
+    ): String =
+        etagSeedBuilder.buildFeedPageWeakEtag(
+            source = source,
+            page = page,
+            pageSize = pageSize,
+            sort = sort,
+            kw = kw,
+            tag = tag,
+            data = data,
+        )
+
+    fun buildCursorFeedWeakEtag(
+        source: String,
+        pageSize: Int,
+        sort: PostSearchSortType1,
+        cursor: String?,
+        tag: String = "",
+        data: CursorFeedPageDto,
+    ): String =
+        etagSeedBuilder.buildCursorFeedWeakEtag(
+            source = source,
+            pageSize = pageSize,
+            sort = sort,
+            cursor = cursor,
+            tag = tag,
+            data = data,
+        )
+
+    fun buildTagsWeakEtag(tags: List<TagCountDto>): String = etagSeedBuilder.buildTagsWeakEtag(tags)
+
+    fun buildRelatedAuthorWeakEtag(
+        authorId: Long,
+        excludePostId: Long?,
+        limit: Int,
+        posts: List<FeedPostDto>,
+    ): String =
+        etagSeedBuilder.buildRelatedAuthorWeakEtag(
+            authorId = authorId,
+            excludePostId = excludePostId,
+            limit = limit,
+            posts = posts,
+        )
+
+    fun buildBootstrapWeakEtag(
+        pageSize: Int,
+        sort: PostSearchSortType1,
+        tag: String,
+        data: PublicPostsBootstrapDto,
+    ): String =
+        etagSeedBuilder.buildBootstrapWeakEtag(
             pageSize = pageSize,
             sort = sort,
             tag = tag,

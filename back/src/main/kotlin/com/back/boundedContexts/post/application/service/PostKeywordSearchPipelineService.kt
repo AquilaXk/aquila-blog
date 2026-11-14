@@ -6,6 +6,7 @@ import com.back.global.system.application.SearchRuntimeControlQueryService
 import com.back.standard.dto.page.PagedResult
 import com.back.standard.dto.post.type1.PostSearchSortType1
 import io.micrometer.core.instrument.MeterRegistry
+import jakarta.annotation.PreDestroy
 import org.slf4j.LoggerFactory
 import org.springframework.beans.factory.annotation.Value
 import org.springframework.http.MediaType
@@ -17,7 +18,12 @@ import java.net.http.HttpRequest
 import java.net.http.HttpResponse
 import java.time.Duration
 import java.time.Instant
+import java.util.concurrent.ArrayBlockingQueue
+import java.util.concurrent.CompletableFuture
 import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.RejectedExecutionException
+import java.util.concurrent.ThreadFactory
+import java.util.concurrent.ThreadPoolExecutor
 import java.util.concurrent.TimeUnit
 import kotlin.math.max
 
@@ -86,9 +92,9 @@ class PostKeywordSearchPipelineService(
     )
 
     private data class SearchSignals(
-        val titleLower: String,
-        val contentLower: String,
-        val tagsLower: List<String>,
+        val title: String,
+        val content: String,
+        val tags: List<String>,
     )
 
     private enum class SearchProfile {
@@ -243,13 +249,12 @@ class PostKeywordSearchPipelineService(
                 .asSequence()
                 .map(String::trim)
                 .filter(String::isNotBlank)
-                .map(String::lowercase)
                 .distinct()
                 .toList()
         return SearchSignals(
-            titleLower = post.title.lowercase(),
-            contentLower = post.content.lowercase(),
-            tagsLower = extractedTags,
+            title = post.title,
+            content = post.content,
+            tags = extractedTags,
         )
     }
 
@@ -284,9 +289,9 @@ class PostKeywordSearchPipelineService(
         var tagHitCount = 0
         var contentHitCount = 0
         for (token in tokens) {
-            if (signals.titleLower.contains(token)) titleHitCount += 1
-            if (signals.tagsLower.any { tag -> tag.contains(token) }) tagHitCount += 1
-            if (signals.contentLower.contains(token)) contentHitCount += 1
+            if (signals.title.contains(token, ignoreCase = true)) titleHitCount += 1
+            if (signals.tags.any { tag -> tag.contains(token, ignoreCase = true) }) tagHitCount += 1
+            if (signals.content.contains(token, ignoreCase = true)) contentHitCount += 1
         }
 
         val ageHours = Duration.between(post.createdAt, now).toHours().coerceAtLeast(0)
@@ -330,6 +335,8 @@ class PostKeywordSearchPipelineService(
         }
     }
 
+    private val pendingShadowTasks = ConcurrentHashMap.newKeySet<CompletableFuture<Unit>>()
+
     private fun compareWithExternalShadow(
         keyword: String,
         page: Int,
@@ -339,6 +346,39 @@ class PostKeywordSearchPipelineService(
         if (!shadowExternalEnabled || shadowExternalEndpoint.isBlank()) return
         if (primaryPostIds.isEmpty()) return
 
+        val completion = CompletableFuture<Unit>()
+        pendingShadowTasks.add(completion)
+        try {
+            SHADOW_EXECUTOR.execute {
+                try {
+                    executeExternalShadow(keyword, page, pageSize, primaryPostIds)
+                } finally {
+                    pendingShadowTasks.remove(completion)
+                    completion.complete(Unit)
+                }
+            }
+        } catch (_: RejectedExecutionException) {
+            pendingShadowTasks.remove(completion)
+            completion.complete(Unit)
+            meterRegistry?.counter("post.search.pipeline.shadow.external.result", "status", "dropped")?.increment()
+        }
+    }
+
+    internal fun awaitPendingExternalShadowTasks(timeoutMs: Long = 3_000L): Boolean {
+        val snapshot = pendingShadowTasks.toTypedArray()
+        if (snapshot.isEmpty()) return true
+        return runCatching {
+            CompletableFuture.allOf(*snapshot).get(timeoutMs, TimeUnit.MILLISECONDS)
+            true
+        }.getOrDefault(false)
+    }
+
+    private fun executeExternalShadow(
+        keyword: String,
+        page: Int,
+        pageSize: Int,
+        primaryPostIds: List<Long>,
+    ) {
         val requestBody =
             objectMapper.writeValueAsString(
                 mapOf(
@@ -391,6 +431,11 @@ class PostKeywordSearchPipelineService(
         }
     }
 
+    @PreDestroy
+    fun shutdownShadowExecutor() {
+        awaitPendingExternalShadowTasks(500L)
+    }
+
     private fun parseExternalShadowIds(rawBody: String): List<Long> =
         runCatching {
             val node = objectMapper.readTree(rawBody)
@@ -409,6 +454,18 @@ class PostKeywordSearchPipelineService(
     companion object {
         private val WHITESPACE_REGEX = Regex("\\s+")
         private val SHARED_HTTP_CLIENTS = ConcurrentHashMap<Long, HttpClient>()
+        private val SHADOW_EXECUTOR =
+            ThreadPoolExecutor(
+                1,
+                2,
+                30L,
+                TimeUnit.SECONDS,
+                ArrayBlockingQueue(32),
+                ThreadFactory { runnable ->
+                    Thread(runnable, "post-search-shadow-worker").apply { isDaemon = true }
+                },
+                ThreadPoolExecutor.AbortPolicy(),
+            )
 
         private fun sharedHttpClient(connectTimeoutMs: Long): HttpClient =
             SHARED_HTTP_CLIENTS.computeIfAbsent(connectTimeoutMs) { timeoutMs ->

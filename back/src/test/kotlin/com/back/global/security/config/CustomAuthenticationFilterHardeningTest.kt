@@ -72,8 +72,8 @@ class CustomAuthenticationFilterHardeningTest {
     }
 
     @Test
-    @DisplayName("게시글 상세 및 이미지 조회 경로는 만료된 accessToken에서도 sessionKey와 refreshToken으로 관리자 인증을 복원한다")
-    fun `dual access post detail and image paths allow refresh token rotation`() {
+    @DisplayName("게시글 상세는 refreshToken 회전을 허용하고 미디어 GET/HEAD 경로는 회전을 건너뛴다")
+    fun `dual access post detail allows refresh rotation while media reads skip rotation`() {
         val fixture = CustomAuthenticationFilterTest.CustomAuthenticationFilterFixture()
         val filter = fixture.authenticationFilter()
         val sessionKey = "admin-session"
@@ -88,8 +88,25 @@ class CustomAuthenticationFilterHardeningTest {
         given(fixture.actorApplicationService.genAccessToken(admin, sessionKey, true, false, null))
             .willReturn("new-access-token")
 
-        for (path in listOf("/post/api/v1/posts/452", "/post/api/v1/images/2026/04/temp.png")) {
-            val request = MockHttpServletRequest("GET", path)
+        val postRequest = MockHttpServletRequest("GET", "/post/api/v1/posts/452")
+        val postResponse = MockHttpServletResponse()
+        fixture.givenPublicRequest(postRequest)
+        fixture.givenClientIp(postRequest, "203.0.113.10")
+        try {
+            filter.doFilter(postRequest, postResponse, MockFilterChain())
+            assertThat(postResponse.status).isEqualTo(HttpServletResponse.SC_OK)
+        } finally {
+            SecurityContextHolder.clearContext()
+        }
+
+        val mediaRequests =
+            listOf(
+                MockHttpServletRequest("GET", "/post/api/v1/images/2026/04/temp.png"),
+                MockHttpServletRequest("HEAD", "/post/api/v1/images/2026/04/temp.png"),
+                MockHttpServletRequest("GET", "/post/api/v1/files/2026/04/report.pdf"),
+                MockHttpServletRequest("HEAD", "/post/api/v1/files/2026/04/report.pdf"),
+            )
+        for (request in mediaRequests) {
             val response = MockHttpServletResponse()
             fixture.givenPublicRequest(request)
             fixture.givenClientIp(request, "203.0.113.10")
@@ -97,12 +114,13 @@ class CustomAuthenticationFilterHardeningTest {
             try {
                 filter.doFilter(request, response, MockFilterChain())
                 assertThat(response.status).isEqualTo(HttpServletResponse.SC_OK)
+                assertThat(SecurityContextHolder.getContext().authentication).isNull()
             } finally {
                 SecurityContextHolder.clearContext()
             }
         }
 
-        verify(fixture.memberSessionUseCase, org.mockito.Mockito.times(2))
+        verify(fixture.memberSessionUseCase, org.mockito.Mockito.times(1))
             .rotateRefreshToken(sessionKey, refreshToken)
     }
 

@@ -12,4 +12,6 @@ class CanonicalAdminPolicy(
         member.deletedAt == null &&
             member.isAdmin &&
             adminProperties.matchesEmail(member.email)
+
+    fun matchesEmail(email: String?): Boolean = adminProperties.matchesEmail(email)
 }

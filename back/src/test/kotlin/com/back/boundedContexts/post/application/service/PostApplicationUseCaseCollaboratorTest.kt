@@ -1,6 +1,7 @@
 package com.back.boundedContexts.post.application.service
 
 import com.back.boundedContexts.member.application.port.output.MemberAttrRepositoryPort
+import com.back.boundedContexts.member.application.port.output.MemberRepositoryPort
 import com.back.boundedContexts.member.domain.shared.Member
 import com.back.boundedContexts.member.domain.shared.MemberAttr
 import com.back.boundedContexts.post.application.port.output.PostAttrRepositoryPort
@@ -21,6 +22,7 @@ import org.mockito.BDDMockito.then
 import org.mockito.Mockito.any
 import org.mockito.Mockito.mock
 import org.mockito.Mockito.times
+import org.springframework.dao.PessimisticLockingFailureException
 import java.time.Instant
 import java.util.Optional
 
@@ -98,19 +100,26 @@ class PostApplicationUseCaseCollaboratorTest {
         val postRepository = mock(PostRepositoryPort::class.java)
         val memberAttrRepository = mock(MemberAttrRepositoryPort::class.java)
         val postHydrationService = mock(PostHydrationService::class.java)
-        val service = PostTempDraftService(postRepository, memberAttrRepository, postHydrationService)
+        val memberRepository = mock(MemberRepositoryPort::class.java)
+        val service =
+            PostTempDraftService(
+                postRepository = postRepository,
+                memberAttrRepository = memberAttrRepository,
+                postHydrationService = postHydrationService,
+                memberRepository = memberRepository,
+            )
         val author = testMember()
         val tempPost = testPost(author = author)
         val marker = MemberAttr(1, author, "activeTempDraftPostId", tempPost.id.toString())
         given(memberAttrRepository.findBySubjectAndName(author, "activeTempDraftPostId")).willReturn(marker)
         given(postRepository.findById(tempPost.id)).willReturn(Optional.of(tempPost))
-        given(memberAttrRepository.incrementIntValue(author, "activeTempDraftLock", 1)).willReturn(2)
+        given(memberRepository.findByIdForUpdate(author.id))
+            .willThrow(PessimisticLockingFailureException("lock contention"))
 
         assertThat(service.findTemp(author)).isSameAs(tempPost)
         assertThatThrownBy { service.getOrCreateTemp(author) }
             .isInstanceOf(AppException::class.java)
             .hasMessageContaining("다른 탭")
-        then(memberAttrRepository).should().incrementIntValue(author, "activeTempDraftLock", -1)
     }
 
     @Test
@@ -119,20 +128,22 @@ class PostApplicationUseCaseCollaboratorTest {
         val memberAttrRepository = mock(MemberAttrRepositoryPort::class.java)
         val postHydrationService = mock(PostHydrationService::class.java)
         val postCounterService = mock(PostCounterService::class.java)
+        val memberRepository = mock(MemberRepositoryPort::class.java)
         val service =
             PostTempDraftService(
                 postRepository = postRepository,
                 memberAttrRepository = memberAttrRepository,
                 postHydrationService = postHydrationService,
                 postCounterService = postCounterService,
+                memberRepository = memberRepository,
             )
         val author = testMember()
         val untrackedLegacyPost = testPost(author = author)
         var savedMarker: MemberAttr? = null
         untrackedLegacyPost.title = "임시글"
         untrackedLegacyPost.published = false
+        given(memberRepository.findByIdForUpdate(author.id)).willReturn(Optional.of(author))
         given(memberAttrRepository.findBySubjectAndName(author, "activeTempDraftPostId")).willReturn(null)
-        given(memberAttrRepository.incrementIntValue(author, "activeTempDraftLock", 1)).willReturn(1)
         given(postRepository.save(anyPost())).willAnswer { it.arguments[0] as Post }
         given(memberAttrRepository.save(anyMemberAttr())).willAnswer {
             (it.arguments[0] as MemberAttr).also { marker -> savedMarker = marker }
@@ -145,13 +156,12 @@ class PostApplicationUseCaseCollaboratorTest {
         assertThat(createdPost).isNotSameAs(untrackedLegacyPost)
         assertThat(createdPost.title).isEqualTo("임시글")
         val marker = requireNotNull(savedMarker)
+        then(memberRepository).should().findByIdForUpdate(author.id)
         then(postRepository).should().save(createdPost)
         then(postRepository).should().flush()
         then(postRepository).shouldHaveNoMoreInteractions()
         then(postCounterService).should().incrementMemberPostsCount(author)
         then(memberAttrRepository).should(times(3)).findBySubjectAndName(author, "activeTempDraftPostId")
-        then(memberAttrRepository).should().incrementIntValue(author, "activeTempDraftLock", 1)
-        then(memberAttrRepository).should().incrementIntValue(author, "activeTempDraftLock", -1)
         then(memberAttrRepository).should().save(marker)
         assertThat(marker.name).isEqualTo("activeTempDraftPostId")
         assertThat(marker.strValue).isEqualTo(createdPost.id.toString())
@@ -162,14 +172,21 @@ class PostApplicationUseCaseCollaboratorTest {
         val postRepository = mock(PostRepositoryPort::class.java)
         val memberAttrRepository = mock(MemberAttrRepositoryPort::class.java)
         val postHydrationService = mock(PostHydrationService::class.java)
-        val service = PostTempDraftService(postRepository, memberAttrRepository, postHydrationService)
+        val memberRepository = mock(MemberRepositoryPort::class.java)
+        val service =
+            PostTempDraftService(
+                postRepository = postRepository,
+                memberAttrRepository = memberAttrRepository,
+                postHydrationService = postHydrationService,
+                memberRepository = memberRepository,
+            )
         val author = testMember()
         val existingPost = testPost(author = author)
         existingPost.isTempDraft = false
         val marker = MemberAttr(1, author, "activeTempDraftPostId", existingPost.id.toString())
+        given(memberRepository.findByIdForUpdate(author.id)).willReturn(Optional.of(author))
         given(memberAttrRepository.findBySubjectAndName(author, "activeTempDraftPostId")).willReturn(marker)
         given(postRepository.findById(existingPost.id)).willReturn(Optional.of(existingPost))
-        given(memberAttrRepository.incrementIntValue(author, "activeTempDraftLock", 1)).willReturn(1)
         given(postRepository.save(anyPost())).willAnswer { it.arguments[0] as Post }
 
         val (post, created) = service.getOrCreateTemp(author)
@@ -177,6 +194,7 @@ class PostApplicationUseCaseCollaboratorTest {
         assertThat(created).isFalse()
         assertThat(post).isSameAs(existingPost)
         assertThat(post.isTempDraft).isTrue()
+        then(memberRepository).should().findByIdForUpdate(author.id)
         then(postRepository).should().save(existingPost)
         then(postRepository).should().flush()
     }

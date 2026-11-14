@@ -1,13 +1,9 @@
 package com.back.boundedContexts.post.dto
 
-import java.nio.charset.StandardCharsets
-import java.security.MessageDigest
-import java.util.HexFormat
-import java.util.concurrent.ConcurrentHashMap
+import com.back.global.util.Utf8ChunkDigest
 
 object PostMetaExtractor {
     internal const val MAX_CACHE_ENTRIES = 512
-    private val HEX_FORMAT = HexFormat.of()
 
     data class PostMeta(
         val tags: List<String>,
@@ -20,7 +16,11 @@ object PostMetaExtractor {
             categories = emptyList(),
         )
 
-    private val metaCache = ConcurrentHashMap<String, PostMeta>()
+    private val cacheLock = Any()
+    private val metaCache =
+        object : LinkedHashMap<String, PostMeta>(MAX_CACHE_ENTRIES + 1, 0.75f, true) {
+            override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, PostMeta>): Boolean = size > MAX_CACHE_ENTRIES
+        }
 
     private val metadataLineRegex =
         Regex(
@@ -31,25 +31,28 @@ object PostMetaExtractor {
     fun extract(content: String): PostMeta {
         val metadataBlock = extractMetadataBlock(content) ?: return EMPTY_META
         val cacheKey = cacheKeyFor(metadataBlock)
-        metaCache[cacheKey]?.let { return it }
+        synchronized(cacheLock) {
+            metaCache[cacheKey]?.let { return it }
+        }
         val computed = buildMeta(metadataBlock)
-        metaCache[cacheKey] = computed
-        while (metaCache.size > MAX_CACHE_ENTRIES) {
-            metaCache.remove(metaCache.keys.iterator().next())
+        synchronized(cacheLock) {
+            metaCache[cacheKey] = computed
         }
         return computed
     }
 
     internal fun clearCache() {
-        metaCache.clear()
+        synchronized(cacheLock) {
+            metaCache.clear()
+        }
     }
 
-    internal fun cachedEntryCount(): Int = metaCache.size
+    internal fun cachedEntryCount(): Int =
+        synchronized(cacheLock) {
+            metaCache.size
+        }
 
-    internal fun cacheKeyFor(metadataBlock: String): String {
-        val digest = MessageDigest.getInstance("SHA-256").digest(metadataBlock.toByteArray(StandardCharsets.UTF_8))
-        return HEX_FORMAT.formatHex(digest)
-    }
+    internal fun cacheKeyFor(metadataBlock: String): String = Utf8ChunkDigest.sha256Hex(metadataBlock)
 
     private fun extractMetadataBlock(content: String): String? {
         var cursor = skipLeadingWhitespace(content, 0)

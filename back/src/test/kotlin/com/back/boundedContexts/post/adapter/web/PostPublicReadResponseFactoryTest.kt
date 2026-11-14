@@ -560,6 +560,105 @@ class PostPublicReadResponseFactoryTest {
         )
     }
 
+    @Test
+    @DisplayName("스트리밍 Weak ETag는 문자열 시드 SHA-256과 바이트 단위로 동일하며 200과 304를 일관되게 응답한다")
+    fun streamingWeakEtagMatchesSeedHashParity() {
+        val etagSupport = PostPublicReadEtagSupport()
+        val unicodePost =
+            feedPost(id = 99L, modifiedAt = Instant.parse("2026-11-14T01:23:45.678Z")).copy(
+                title = "한글 제목 🚀 \uD83D\uDE80",
+                thumbnail = null,
+                summary = "요약 텍스트 — 특수문자 포함",
+                authorName = "작성자 이름",
+                authorUsername = "aquila",
+                authorProfileImgUrl = "https://cdn.example.com/p.webp?v=1",
+                likesCount = 1234,
+                hitCount = 56789,
+            )
+        val pageData = pageOf(unicodePost)
+        val cursorData =
+            CursorFeedPageDto(
+                content = listOf(unicodePost),
+                pageSize = 10,
+                hasNext = true,
+                nextCursor = "1:2:3:99:CREATED_AT:abc",
+            )
+        val tags = listOf(TagCountDto("Kotlin", 3), TagCountDto("한글태그", 1))
+        val bootstrap = PublicPostsBootstrapDto(feed = cursorData, tags = tags)
+
+        assertThat(responseFactory.buildFeedPageWeakEtag("feed", 2, 10, PostSearchSortType1.HIT_COUNT, " kw ", " tag ", pageData))
+            .isEqualTo(
+                etagSupport.toWeakEtag(
+                    responseFactory.buildFeedPageEtagSeed("feed", 2, 10, PostSearchSortType1.HIT_COUNT, " kw ", " tag ", pageData),
+                ),
+            )
+        assertThat(
+            responseFactory.buildCursorFeedWeakEtag(
+                "feed-cursor",
+                10,
+                PostSearchSortType1.LIKES_COUNT,
+                " 1:2:3 ",
+                " tag ",
+                cursorData,
+            ),
+        ).isEqualTo(
+            etagSupport.toWeakEtag(
+                responseFactory.buildCursorFeedEtagSeed(
+                    "feed-cursor",
+                    10,
+                    PostSearchSortType1.LIKES_COUNT,
+                    " 1:2:3 ",
+                    " tag ",
+                    cursorData,
+                ),
+            ),
+        )
+        assertThat(responseFactory.buildTagsWeakEtag(tags))
+            .isEqualTo(etagSupport.toWeakEtag(responseFactory.buildTagsEtagSeed(tags)))
+        assertThat(responseFactory.buildRelatedAuthorWeakEtag(7L, null, 4, listOf(unicodePost)))
+            .isEqualTo(etagSupport.toWeakEtag(responseFactory.buildRelatedAuthorEtagSeed(7L, null, 4, listOf(unicodePost))))
+        assertThat(responseFactory.buildBootstrapWeakEtag(10, PostSearchSortType1.CREATED_AT, "Kotlin", bootstrap))
+            .isEqualTo(
+                etagSupport.toWeakEtag(
+                    responseFactory.buildBootstrapEtagSeed(
+                        10,
+                        PostSearchSortType1.CREATED_AT,
+                        "Kotlin",
+                        bootstrap,
+                    ),
+                ),
+            )
+
+        val weakEtag = responseFactory.buildTagsWeakEtag(tags)
+        val res200 = MockHttpServletResponse()
+        val ok =
+            responseFactory.respondWithWeakEtag(
+                request = MockHttpServletRequest("GET", "/post/api/v1/posts/tags"),
+                response = res200,
+                cachePolicy = PostPublicReadCachePolicies.TAGS,
+                surrogateKeys = setOf(PostCacheTags.TAGS),
+                weakEtag = weakEtag,
+                startedAtNanos = System.nanoTime(),
+                body = tags,
+            )
+        assertThat(ok.statusCode.value()).isEqualTo(200)
+        assertThat(res200.getHeader(HttpHeaders.ETAG)).isEqualTo(weakEtag)
+
+        val req304 = MockHttpServletRequest("GET", "/post/api/v1/posts/tags").apply { addHeader(HttpHeaders.IF_NONE_MATCH, weakEtag) }
+        val res304 = MockHttpServletResponse()
+        val notModified =
+            responseFactory.respondWithWeakEtag(
+                request = req304,
+                response = res304,
+                cachePolicy = PostPublicReadCachePolicies.TAGS,
+                surrogateKeys = setOf(PostCacheTags.TAGS),
+                weakEtag = weakEtag,
+                startedAtNanos = System.nanoTime(),
+                body = tags,
+            )
+        assertThat(notModified.statusCode.value()).isEqualTo(304)
+    }
+
     private fun feedPost(
         id: Long,
         modifiedAt: Instant,

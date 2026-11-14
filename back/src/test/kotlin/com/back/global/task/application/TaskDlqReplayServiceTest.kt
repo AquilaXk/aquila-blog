@@ -11,7 +11,9 @@ import io.micrometer.core.instrument.simple.SimpleMeterRegistry
 import org.assertj.core.api.Assertions.assertThat
 import org.junit.jupiter.api.Test
 import org.mockito.Mockito.mock
+import org.mockito.Mockito.never
 import org.mockito.Mockito.verify
+import org.mockito.Mockito.verifyNoMoreInteractions
 import org.mockito.Mockito.`when`
 import tools.jackson.module.kotlin.jacksonObjectMapper
 import java.time.Clock
@@ -61,10 +63,12 @@ class TaskDlqReplayServiceTest {
         assertQuarantineMetric(meterRegistry, VALID_TASK_TYPE, TaskQuarantineReason.MALFORMED_ENVELOPE)
         assertQuarantineMetric(meterRegistry, "unregistered", TaskQuarantineReason.UNKNOWN_TASK_TYPE)
         assertQuarantineMetric(meterRegistry, EXPIRING_TASK_TYPE, TaskQuarantineReason.EXPIRED_PAYLOAD)
-        verify(repository).save(valid)
-        verify(repository).save(malformed)
-        verify(repository).save(unknown)
-        verify(repository).save(expired)
+        verify(repository).saveAllTasks(listOf(valid, malformed, unknown, expired))
+        verify(repository, never()).save(valid)
+        verify(repository, never()).save(malformed)
+        verify(repository, never()).save(unknown)
+        verify(repository, never()).save(expired)
+        verifyNoMoreInteractions(repository)
     }
 
     private fun registry(): TaskHandlerRegistry =

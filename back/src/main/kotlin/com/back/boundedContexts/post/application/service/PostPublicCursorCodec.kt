@@ -56,11 +56,15 @@ internal class PostPublicCursorCodec(
     ): CursorToken? {
         val value = raw?.trim().orEmpty()
         if (value.isBlank()) return null
-        val parts = value.split(":")
-        if (parts.size != CURSOR_VERSIONED_PART_COUNT) {
+        val c0 = value.indexOf(':')
+        val c1 = if (c0 >= 0) value.indexOf(':', c0 + 1) else -1
+        val c2 = if (c1 >= 0) value.indexOf(':', c1 + 1) else -1
+        val c3 = if (c2 >= 0) value.indexOf(':', c2 + 1) else -1
+        val c4 = if (c3 >= 0) value.indexOf(':', c3 + 1) else -1
+        if (c4 < 0 || value.indexOf(':', c4 + 1) >= 0) {
             throw AppException(ErrorCode.BAD_REQUEST, "cursor 형식이 올바르지 않습니다.")
         }
-        return parseVersionedCursor(parts, expectedSort)
+        return parseVersionedCursor(value, c0, c1, c2, c3, c4, expectedSort)
     }
 
     fun encodeCursor(
@@ -99,65 +103,138 @@ internal class PostPublicCursorCodec(
     }
 
     private fun parseVersionedCursor(
-        parts: List<String>,
+        value: String,
+        c0: Int,
+        c1: Int,
+        c2: Int,
+        c3: Int,
+        c4: Int,
         expectedSort: PostSearchSortType1,
     ): CursorToken {
         val sortValue =
-            parts[2].toLongOrNull()
+            parseSignedLongRange(value, c1 + 1, c2)
                 ?: throw AppException(ErrorCode.BAD_REQUEST, "cursor sortValue 형식이 올바르지 않습니다.")
         val id =
-            parts[3].toLongOrNull()
+            parseSignedLongRange(value, c2 + 1, c3)
                 ?: throw AppException(ErrorCode.BAD_REQUEST, "cursor id 형식이 올바르지 않습니다.")
-        val cursorSort =
-            runCatching { PostSearchSortType1.valueOf(parts[4].trim()) }.getOrElse {
-                throw AppException(ErrorCode.BAD_REQUEST, "cursor 정렬 모드가 올바르지 않습니다.")
-            }
+        val cursorSort = parseSortRange(value, c3 + 1, c4)
         if (cursorSort != expectedSort) {
             throw AppException(
                 ErrorCode.BAD_REQUEST,
                 "cursor 정렬 모드(${cursorSort.name})가 요청 정렬(${expectedSort.name})과 일치하지 않습니다.",
             )
         }
-        val key = cursorKeyring.keyForVersion(parts[0], clock.instant().epochSecond)
-        val issuedAtEpochSeconds = parseCursorIssuedAt(parts[1])
-        verifyCursorToken(
+        val key = cursorKeyring.keyForVersionRange(value, 0, c0, clock.instant().epochSecond)
+        val issuedAtEpochSeconds =
+            parseCanonicalPositiveDecimalRange(value, c0 + 1, c1)
+                ?: throw AppException(ErrorCode.BAD_REQUEST, "cursor issuedAt 형식이 올바르지 않습니다.")
+        verifyCursorTokenRange(
             sortValue = sortValue,
             id = id,
-            payload = parts.take(CURSOR_VERSIONED_PART_COUNT - 1).joinToString(":"),
-            signature = parts[5],
+            value = value,
+            payloadEnd = c4,
+            signatureStart = c4 + 1,
             key = key,
             issuedAtEpochSeconds = issuedAtEpochSeconds,
         )
         return CursorToken(sortValue, id, cursorSort)
     }
 
-    private fun verifyCursorToken(
+    private fun parseSortRange(
+        value: String,
+        start: Int,
+        end: Int,
+    ): PostSearchSortType1 {
+        var sortStart = start
+        var sortEnd = end
+        while (sortStart < sortEnd && value[sortStart] <= ' ') sortStart++
+        while (sortEnd > sortStart && value[sortEnd - 1] <= ' ') sortEnd--
+        val sortLen = sortEnd - sortStart
+        for (candidate in PostSearchSortType1.entries) {
+            val candidateName = candidate.name
+            if (candidateName.length == sortLen && value.regionMatches(sortStart, candidateName, 0, sortLen)) {
+                return candidate
+            }
+        }
+        throw AppException(ErrorCode.BAD_REQUEST, "cursor 정렬 모드가 올바르지 않습니다.")
+    }
+
+    private fun verifyCursorTokenRange(
         sortValue: Long,
         id: Long,
-        payload: String,
-        signature: String,
+        value: String,
+        payloadEnd: Int,
+        signatureStart: Int,
         key: CursorKey,
         issuedAtEpochSeconds: Long,
     ) {
         if (sortValue < 0 || id <= 0L) {
             throw AppException(ErrorCode.BAD_REQUEST, "cursor 값이 유효하지 않습니다.")
         }
-        val trimmedSignature = signature.trim()
-        if (trimmedSignature.isBlank()) {
+        var sigStart = signatureStart
+        while (sigStart < value.length && value[sigStart] <= ' ') sigStart++
+        if (sigStart >= value.length) {
             throw AppException(ErrorCode.BAD_REQUEST, "cursor 서명이 비어 있습니다.")
         }
         val nowEpochSeconds = clock.instant().epochSecond
         if (issuedAtEpochSeconds > nowEpochSeconds || nowEpochSeconds - issuedAtEpochSeconds > MAX_CURSOR_AGE_SECONDS) {
             throw AppException(ErrorCode.BAD_REQUEST, "cursor가 만료되었습니다.")
         }
-        val expectedSignature = signCursorPayload(payload, key.secretKeySpec)
+        val expectedSignatureBytes = signCursorPayloadSlice(value, payloadEnd, key.secretKeySpec)
+        val sigLen = value.length - sigStart
+        val decodedSignature = decodeRawSignature(value, sigStart, sigLen)
         val isSignatureValid =
-            MessageDigest.isEqual(
-                expectedSignature.toByteArray(StandardCharsets.UTF_8),
-                trimmedSignature.toByteArray(StandardCharsets.UTF_8),
-            )
+            decodedSignature != null &&
+                sigLen == CURSOR_ENCODED_SIGNATURE_LENGTH &&
+                decodedSignature.size == CURSOR_SIGNATURE_BYTES &&
+                MessageDigest.isEqual(expectedSignatureBytes, decodedSignature)
         if (!isSignatureValid) {
             throw AppException(ErrorCode.BAD_REQUEST, "cursor 서명이 유효하지 않습니다.")
+        }
+    }
+
+    private fun signCursorPayloadSlice(
+        value: String,
+        payloadEnd: Int,
+        secretKeySpec: SecretKeySpec,
+    ): ByteArray {
+        val mac = Mac.getInstance(CURSOR_HMAC_ALGORITHM)
+        mac.init(secretKeySpec)
+        val buffer = ByteArray(minOf(payloadEnd.coerceAtLeast(1), 128))
+        var pos = 0
+        for (index in 0 until payloadEnd) {
+            val ch = value[index]
+            if (ch.code >= 0x80) {
+                return mac.doFinal(value.substring(0, payloadEnd).toByteArray(StandardCharsets.UTF_8)).copyOf(CURSOR_SIGNATURE_BYTES)
+            }
+            if (pos >= buffer.size) {
+                mac.update(buffer, 0, pos)
+                pos = 0
+            }
+            buffer[pos++] = ch.code.toByte()
+        }
+        if (pos > 0) {
+            mac.update(buffer, 0, pos)
+        }
+        return mac.doFinal().copyOf(CURSOR_SIGNATURE_BYTES)
+    }
+
+    private fun decodeRawSignature(
+        value: String,
+        sigStart: Int,
+        sigLen: Int,
+    ): ByteArray? {
+        if (sigLen != CURSOR_ENCODED_SIGNATURE_LENGTH) return null
+        val ascii = ByteArray(sigLen)
+        for (index in 0 until sigLen) {
+            val code = value[sigStart + index].code
+            if (code >= 0x80) return null
+            ascii[index] = code.toByte()
+        }
+        return try {
+            Base64.getUrlDecoder().decode(ascii)
+        } catch (_: IllegalArgumentException) {
+            null
         }
     }
 
@@ -172,14 +249,6 @@ internal class PostPublicCursorCodec(
         return Base64.getUrlEncoder().withoutPadding().encodeToString(truncated)
     }
 
-    private fun parseCursorIssuedAt(raw: String): Long {
-        if (!CANONICAL_POSITIVE_DECIMAL.matches(raw)) {
-            throw AppException(ErrorCode.BAD_REQUEST, "cursor issuedAt 형식이 올바르지 않습니다.")
-        }
-        return raw.toLongOrNull()
-            ?: throw AppException(ErrorCode.BAD_REQUEST, "cursor issuedAt 형식이 올바르지 않습니다.")
-    }
-
     private class CursorKey(
         val version: Long,
         secretBytes: ByteArray,
@@ -192,11 +261,13 @@ internal class PostPublicCursorCodec(
         val current: CursorKey,
         private val previous: CursorKey?,
     ) {
-        fun keyForVersion(
-            rawVersion: String,
+        fun keyForVersionRange(
+            raw: String,
+            start: Int,
+            end: Int,
             nowEpochSeconds: Long,
         ): CursorKey {
-            val version = parsePublicVersion(rawVersion)
+            val version = parsePublicVersionRange(raw, start, end)
             if (version == current.version) return current
             val previousKey = previous
             if (previousKey != null && version == previousKey.version) {
@@ -251,22 +322,80 @@ internal class PostPublicCursorCodec(
                 return raw.toLongOrNull() ?: throw IllegalArgumentException("cursor key version is out of range")
             }
 
-            private fun parsePublicVersion(raw: String): Long =
-                try {
-                    parseVersion(raw)
-                } catch (exception: IllegalArgumentException) {
-                    throw AppException(ErrorCode.BAD_REQUEST, "cursor key version이 올바르지 않습니다.")
-                }
+            private fun parsePublicVersionRange(
+                raw: String,
+                start: Int,
+                end: Int,
+            ): Long =
+                parseCanonicalPositiveDecimalRange(raw, start, end)
+                    ?: throw AppException(ErrorCode.BAD_REQUEST, "cursor key version이 올바르지 않습니다.")
         }
     }
 
     companion object {
         private const val CURSOR_HMAC_ALGORITHM = "HmacSHA256"
         private const val CURSOR_SIGNATURE_BYTES = 18
-        private const val CURSOR_VERSIONED_PART_COUNT = 6
+        private const val CURSOR_ENCODED_SIGNATURE_LENGTH = 24
         private const val MIN_CURSOR_SECRET_LENGTH = 32
         private const val MAX_CURSOR_AGE_SECONDS = 86_400L
         private val CANONICAL_POSITIVE_DECIMAL = Regex("[1-9][0-9]*")
+
+        private fun parseCanonicalPositiveDecimalRange(
+            raw: String,
+            start: Int,
+            end: Int,
+        ): Long? {
+            if (start >= end) return null
+            val first = raw[start]
+            if (first !in '1'..'9') return null
+            var result = (first.code - '0'.code).toLong()
+            val overflowThreshold = Long.MAX_VALUE / 10L
+            for (index in start + 1 until end) {
+                val ch = raw[index]
+                if (ch !in '0'..'9') return null
+                val digit = ch.code - '0'.code
+                if (result > overflowThreshold) return null
+                result *= 10L
+                if (result > Long.MAX_VALUE - digit) return null
+                result += digit
+            }
+            return result
+        }
+
+        private fun parseSignedLongRange(
+            raw: String,
+            start: Int,
+            end: Int,
+        ): Long? {
+            if (start >= end) return null
+            var index = start
+            var negative = false
+            var limit = -Long.MAX_VALUE
+            val first = raw[index]
+            if (first < '0') {
+                if (first == '-') {
+                    negative = true
+                    limit = Long.MIN_VALUE
+                } else if (first != '+') {
+                    return null
+                }
+                index++
+                if (index >= end) return null
+            }
+            val multmin = limit / 10L
+            var result = 0L
+            while (index < end) {
+                val ch = raw[index++]
+                if (ch !in '0'..'9') return null
+                val digit = ch.code - '0'.code
+                if (result < multmin) return null
+                result *= 10L
+                if (result < limit + digit) return null
+                result -= digit
+            }
+            return if (negative) result else -result
+        }
+
         private val CURSOR_SECRET_PLACEHOLDER =
             Regex(
                 "^(?:NEED_TO|EMPTY$|change_me|change-me|.*example\\.com$|https://www\\.example\\.com|" +

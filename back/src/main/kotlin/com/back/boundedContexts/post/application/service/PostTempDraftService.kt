@@ -1,12 +1,14 @@
 package com.back.boundedContexts.post.application.service
 
 import com.back.boundedContexts.member.application.port.output.MemberAttrRepositoryPort
+import com.back.boundedContexts.member.application.port.output.MemberRepositoryPort
 import com.back.boundedContexts.member.domain.shared.Member
 import com.back.boundedContexts.member.domain.shared.MemberAttr
 import com.back.boundedContexts.post.application.port.output.PostRepositoryPort
 import com.back.boundedContexts.post.domain.Post
 import com.back.global.exception.application.AppException
 import com.back.global.exception.application.ErrorCode
+import org.springframework.dao.PessimisticLockingFailureException
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
 import kotlin.jvm.optionals.getOrNull
@@ -17,9 +19,9 @@ class PostTempDraftService(
     private val memberAttrRepository: MemberAttrRepositoryPort,
     private val postHydrationService: PostHydrationService,
     private val postCounterService: PostCounterService? = null,
+    private val memberRepository: MemberRepositoryPort? = null,
 ) {
     private val activeTempDraftPostIdAttrName = "activeTempDraftPostId"
-    private val activeTempDraftLockAttrName = "activeTempDraftLock"
 
     fun findTemp(author: Member): Post? {
         val persistenceAuthor = author
@@ -28,32 +30,25 @@ class PostTempDraftService(
 
     @Transactional
     fun getOrCreateTemp(author: Member): Pair<Post, Boolean> {
-        val persistenceAuthor = author
+        val persistenceAuthor = acquireTempDraftAuthorLock(author)
         postHydrationService.hydrateMembersPublishedProfileWorkspaces(listOf(persistenceAuthor))
-        if (!tryAcquireTempDraftLock(persistenceAuthor)) {
-            throw AppException(ErrorCode.RESOURCE_CONFLICT, "다른 탭에서 임시글을 준비 중입니다. 잠시 후 다시 시도해주세요.")
+
+        val existingTemp = resolveTrackedTempPost(persistenceAuthor)
+        if (existingTemp != null) {
+            if (!existingTemp.isTempDraft) {
+                existingTemp.isTempDraft = true
+                postRepository.save(existingTemp)
+            }
+            updateTempDraftMarker(persistenceAuthor, existingTemp.id)
+            postRepository.flush()
+            return existingTemp to false
         }
 
-        return try {
-            val existingTemp = resolveTrackedTempPost(persistenceAuthor)
-            if (existingTemp != null) {
-                if (!existingTemp.isTempDraft) {
-                    existingTemp.isTempDraft = true
-                    postRepository.save(existingTemp)
-                }
-                updateTempDraftMarker(persistenceAuthor, existingTemp.id)
-                postRepository.flush()
-                existingTemp to false
-            } else {
-                val newPost = postRepository.save(Post(0, persistenceAuthor, "임시글", "임시글 입니다.", isTempDraft = true))
-                updateTempDraftMarker(persistenceAuthor, newPost.id)
-                postRepository.flush()
-                postCounterService?.incrementMemberPostsCount(persistenceAuthor)
-                newPost to true
-            }
-        } finally {
-            releaseTempDraftLock(persistenceAuthor)
-        }
+        val newPost = postRepository.save(Post(0, persistenceAuthor, "임시글", "임시글 입니다.", isTempDraft = true))
+        updateTempDraftMarker(persistenceAuthor, newPost.id)
+        postRepository.flush()
+        postCounterService?.incrementMemberPostsCount(persistenceAuthor)
+        return newPost to true
     }
 
     fun isTempDraft(post: Post): Boolean = post.isTempDraft || resolveTrackedTempPostId(post.author) == post.id
@@ -83,14 +78,16 @@ class PostTempDraftService(
             ?.takeIf { it.isNotBlank() }
             ?.toLongOrNull()
 
-    private fun tryAcquireTempDraftLock(author: Member): Boolean {
-        val lockValue = memberAttrRepository.incrementIntValue(author, activeTempDraftLockAttrName, 1)
-        if (lockValue == 1) return true
-        memberAttrRepository.incrementIntValue(author, activeTempDraftLockAttrName, -1)
-        return false
-    }
-
-    private fun releaseTempDraftLock(author: Member) {
-        memberAttrRepository.incrementIntValue(author, activeTempDraftLockAttrName, -1)
+    private fun acquireTempDraftAuthorLock(author: Member): Member {
+        val repo = memberRepository ?: return author
+        return try {
+            repo.findByIdForUpdate(author.id).orElse(author)
+        } catch (exception: PessimisticLockingFailureException) {
+            throw AppException(
+                ErrorCode.RESOURCE_CONFLICT,
+                "다른 탭에서 임시글을 준비 중입니다. 잠시 후 다시 시도해주세요.",
+                exception,
+            )
+        }
     }
 }

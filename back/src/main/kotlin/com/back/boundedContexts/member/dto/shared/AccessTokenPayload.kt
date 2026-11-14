@@ -13,4 +13,9 @@ data class AccessTokenPayload(
     val ipSecurityFingerprint: String? = null,
     val issuedAt: Instant? = null,
     val expiresAt: Instant? = null,
-)
+    val tokenVersion: Int = CURRENT_TOKEN_VERSION,
+) {
+    companion object {
+        const val CURRENT_TOKEN_VERSION = 1
+    }
+}

@@ -41,7 +41,6 @@ on:
       - "tools/test/materialize-compose-test-env.test.mjs"
       - "tools/test/repository-standalone-verification.test.sh"
       - ".github/workflows/**"
-      - ".github/dependabot.yml"
       - "CHANGELOG.md"
       - "README.md"
       - "TODO.md"
@@ -157,6 +156,7 @@ jobs:
           echo "front profile renders front_blue and front_green"
 
       - name: Run Platform archive standalone gate
+        id: standalone_gate
         env:
           STANDALONE_ARTIFACT_DIR: ${{ runner.temp }}/platform-standalone
           TEST_DB_PASSWORD: ${{ secrets.CI_DB_PASSWORD }}
@@ -164,7 +164,7 @@ jobs:
         run: bash tools/repo-split/verify-platform-standalone.sh "${GITHUB_SHA}"
 
       - name: Upload Platform standalone evidence
-        if: always()
+        if: always() && steps.standalone_gate.outcome != 'skipped'
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: platform-standalone-${{ github.sha }}

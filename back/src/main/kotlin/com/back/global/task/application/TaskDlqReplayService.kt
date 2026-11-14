@@ -2,6 +2,7 @@ package com.back.global.task.application
 
 import com.back.global.task.application.port.output.TaskDlqReplayRepositoryPort
 import com.back.global.task.application.port.output.TaskQueueRepositoryPort
+import com.back.global.task.domain.Task
 import io.micrometer.core.instrument.MeterRegistry
 import org.springframework.stereotype.Service
 import java.time.Clock
@@ -59,12 +60,13 @@ class TaskDlqReplayService(
         }
 
         val replayedIds = mutableListOf<Long>()
+        val modifiedTasks = ArrayList<Task>(failedTasks.size)
         var quarantinedCount = 0
         failedTasks.forEach { task ->
             val entry = taskHandlerRegistry.getEntry(task.taskType)
             if (entry == null) {
                 task.markAsQuarantined(TaskQuarantineReason.UNKNOWN_TASK_TYPE.name, now)
-                taskQueueRepository.save(task)
+                modifiedTasks.add(task)
                 quarantinedCount++
                 recordTaskQuarantine(task.taskType, TaskQuarantineReason.UNKNOWN_TASK_TYPE)
                 return@forEach
@@ -83,13 +85,13 @@ class TaskDlqReplayService(
                 )
             } catch (exception: TaskPayloadQuarantineException) {
                 task.markAsQuarantined(exception.reason.name, now)
-                taskQueueRepository.save(task)
+                modifiedTasks.add(task)
                 quarantinedCount++
                 recordTaskQuarantine(task.taskType, exception.reason)
                 return@forEach
             }
             task.replayFailed(now, resetRetryCount)
-            taskQueueRepository.save(task)
+            modifiedTasks.add(task)
             replayedIds += task.id
             val replayCounter =
                 meterRegistry
@@ -99,6 +101,9 @@ class TaskDlqReplayService(
                         task.taskType.ifBlank { "unknown" },
                     )
             replayCounter?.increment()
+        }
+        if (modifiedTasks.isNotEmpty()) {
+            taskQueueRepository.saveAllTasks(modifiedTasks)
         }
 
         return TaskDlqReplayResult(

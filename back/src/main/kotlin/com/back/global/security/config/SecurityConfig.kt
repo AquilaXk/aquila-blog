@@ -54,7 +54,7 @@ class SecurityConfig(
 
                 authorize("/*/api/*/adm/**", hasRole("ADMIN"))
                 authorize("/*/api/*/**", authenticated)
-                authorize("/internal/health/admin-email-auth", permitAll)
+                authorize(internalAdminEmailAuthHealthMatcher(), permitAll)
                 val endpointExposurePolicy = SecurityEndpointExposurePolicy(isProd)
                 if (isProd) {
                     // 프로덕션에서는 k8s/lb health probe 외 actuator 공개를 차단한다.
@@ -152,6 +152,14 @@ class SecurityConfig(
         response.setHeader(HttpHeaders.PRAGMA, "no-cache")
         response.setDateHeader(HttpHeaders.EXPIRES, 0)
     }
+
+    private fun internalAdminEmailAuthHealthMatcher(): RequestMatcher =
+        RequestMatcher { request ->
+            request.requestURI.removePrefix(request.contextPath.orEmpty()) == "/internal/health/admin-email-auth" &&
+                request.method.equals("GET", ignoreCase = true) &&
+                !hasForwardedClientHeaders(request) &&
+                isInternalAddress(request.remoteAddr)
+        }
 
     private fun internalPrometheusScrapeMatcher(): RequestMatcher =
         RequestMatcher { request ->

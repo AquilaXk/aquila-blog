@@ -70,7 +70,7 @@ class MemberSession(
         val storedHash = refreshTokenHash ?: return false
         val expiresAt = refreshTokenExpiresAt ?: return false
         if (!now.isBefore(expiresAt)) return false
-        return storedHash == MemberSessionRefreshTokenPolicy.hash(refreshToken)
+        return MemberSessionRefreshTokenPolicy.matchesHash(storedHash, refreshToken)
     }
 
     fun isRefreshTokenExpired(now: Instant = Instant.now()): Boolean {

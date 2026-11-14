@@ -344,5 +344,91 @@ if grep -Eq 'for file in .*\.env\.prod(\.compose)?|cp .*\.env\.prod(\.compose)?|
 fi
 grep -q "AQUILA_BACKUP_ROOT must not be inside the MinIO data directory" "${PRUNE_SCRIPT}"
 
+# Multi-class run (daily + weekly + monthly) must dump Postgres once and stop/archive MinIO once.
+DEDUP_ROOT="${WORK_DIR}/dedup-root"
+DEDUP_SCRIPT_DIR="${DEDUP_ROOT}/deploy/homeserver"
+DEDUP_EXTERNAL_ROOT="${DEDUP_ROOT}/external"
+DEDUP_BACKUP_ROOT="${DEDUP_EXTERNAL_ROOT}/backups"
+DEDUP_MINIO_DIR="${DEDUP_EXTERNAL_ROOT}/minio"
+DEDUP_BIN="${DEDUP_ROOT}/bin"
+DEDUP_DOCKER_LOG="${DEDUP_ROOT}/docker-calls.log"
+mkdir -p "${DEDUP_SCRIPT_DIR}" "${DEDUP_BACKUP_ROOT}" "${DEDUP_MINIO_DIR}" "${DEDUP_BIN}"
+cp "${CREATE_SCRIPT}" "${DEDUP_SCRIPT_DIR}/create_external_backup.sh"
+chmod +x "${DEDUP_SCRIPT_DIR}/create_external_backup.sh"
+printf '#!/usr/bin/env bash\nexit 0\n' > "${DEDUP_SCRIPT_DIR}/materialize_service_env.sh"
+chmod +x "${DEDUP_SCRIPT_DIR}/materialize_service_env.sh"
+printf 'services: {}\n' > "${DEDUP_SCRIPT_DIR}/docker-compose.prod.yml"
+printf 'minio-sample-object\n' > "${DEDUP_MINIO_DIR}/sample.bin"
+DUMMY_DIGEST="ghcr.io/aquilaxk/test@sha256:$(printf 'a%.0s' {1..64})"
+cat > "${DEDUP_SCRIPT_DIR}/.env.prod" <<ENV
+PROD___SPRING__DATASOURCE__USERNAME=blog_user
+CUSTOM_PROD_DBNAME=blog_prod
+CLOUDFLARED_IMAGE=${DUMMY_DIGEST}
+AUTOHEAL_IMAGE=${DUMMY_DIGEST}
+DOCKER_SOCKET_PROXY_IMAGE=${DUMMY_DIGEST}
+CADDY_IMAGE=${DUMMY_DIGEST}
+UPTIME_KUMA_IMAGE=${DUMMY_DIGEST}
+PROMETHEUS_IMAGE=${DUMMY_DIGEST}
+ALERTMANAGER_IMAGE=${DUMMY_DIGEST}
+POSTGRES_EXPORTER_IMAGE=${DUMMY_DIGEST}
+GRAFANA_IMAGE=${DUMMY_DIGEST}
+LOKI_IMAGE=${DUMMY_DIGEST}
+PROMTAIL_IMAGE=${DUMMY_DIGEST}
+NODE_RUNTIME_IMAGE=${DUMMY_DIGEST}
+DB_IMAGE=${DUMMY_DIGEST}
+REDIS_IMAGE=${DUMMY_DIGEST}
+MINIO_IMAGE=${DUMMY_DIGEST}
+BACK_BLUE_IMAGE=${DUMMY_DIGEST}
+BACK_GREEN_IMAGE=${DUMMY_DIGEST}
+BACK_READ_IMAGE=${DUMMY_DIGEST}
+BACK_ADMIN_IMAGE=${DUMMY_DIGEST}
+BACK_WORKER_IMAGE=${DUMMY_DIGEST}
+ENV
+: > "${DEDUP_DOCKER_LOG}"
+cat > "${DEDUP_BIN}/docker" <<SH
+#!/usr/bin/env bash
+if [[ "\$*" == *"ps -q"* && "\$*" == *"minio_1"* ]]; then
+  printf 'minio-cid-1\n'
+  exit 0
+fi
+if [[ "\$1" == "stop" ]]; then
+  printf 'stop %s\n' "\$*" >> "${DEDUP_DOCKER_LOG}"
+  exit 0
+fi
+if [[ "\$1" == "start" ]]; then
+  printf 'start %s\n' "\$*" >> "${DEDUP_DOCKER_LOG}"
+  exit 0
+fi
+if [[ "\$*" == *"pg_dump"* ]]; then
+  printf 'pg_dump\n' >> "${DEDUP_DOCKER_LOG}"
+  printf '%s\n' '-- postgres dump fixture'
+  exit 0
+fi
+exit 0
+SH
+chmod +x "${DEDUP_BIN}/docker"
+
+PATH="${DEDUP_BIN}:${PATH}" \
+  AQUILA_BACKUP_TIMESTAMP=20261115-030000 \
+  AQUILA_BACKUP_FORCE_WEEKLY=true \
+  AQUILA_BACKUP_FORCE_MONTHLY=true \
+  AQUILA_EXTERNAL_STORAGE_ALLOW_TEST_ROOT=true \
+  AQUILA_EXTERNAL_STORAGE_SKIP_MOUNT_CHECK=true \
+  AQUILA_EXTERNAL_STORAGE_ROOT="${DEDUP_EXTERNAL_ROOT}" \
+  AQUILA_BACKUP_ROOT="${DEDUP_BACKUP_ROOT}" \
+  AQUILA_BACKUP_MIN_FREE_PERCENT=0 \
+    "${DEDUP_SCRIPT_DIR}/create_external_backup.sh" >/dev/null
+
+pg_dump_calls="$(grep -c '^pg_dump$' "${DEDUP_DOCKER_LOG}" || true)"
+minio_stop_calls="$(grep -c '^stop ' "${DEDUP_DOCKER_LOG}" || true)"
+[[ "${pg_dump_calls}" -eq 1 ]] || { echo "expected single pg_dump across multi-class backup, got ${pg_dump_calls}" >&2; exit 1; }
+[[ "${minio_stop_calls}" -eq 1 ]] || { echo "expected single minio_1 stop across multi-class backup, got ${minio_stop_calls}" >&2; exit 1; }
+for cls in daily weekly monthly; do
+  [[ -s "${DEDUP_BACKUP_ROOT}/postgres/${cls}/20261115-030000/dump.sql.enc" ]] || { echo "missing postgres dump for ${cls}" >&2; exit 1; }
+  [[ -s "${DEDUP_BACKUP_ROOT}/minio/${cls}/20261115-030000/minio-data.tar.gz.enc" ]] || { echo "missing minio archive for ${cls}" >&2; exit 1; }
+  [[ -s "${DEDUP_BACKUP_ROOT}/minio/${cls}/20261115-030000/sha256sums.txt" ]] || { echo "missing minio sha256sums for ${cls}" >&2; exit 1; }
+  [[ -s "${DEDUP_BACKUP_ROOT}/minio/${cls}/20261115-030000/hmac-sha256.txt" ]] || { echo "missing minio hmac for ${cls}" >&2; exit 1; }
+done
+
 echo "[external-storage-retention] ok"
 

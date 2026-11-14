@@ -21,6 +21,11 @@ interface PostImageStoragePort {
         val contentType: String,
         val contentLength: Long?,
         val originalFilename: String? = null,
+        val totalContentLength: Long? = null,
+        val isPartialContent: Boolean = false,
+        val rangeUnsatisfiable: Boolean = false,
+        val partialStart: Long? = null,
+        val partialEnd: Long? = null,
     )
 
     data class StoredObjectSummary(
@@ -36,6 +41,11 @@ interface PostImageStoragePort {
     fun uploadPostImage(request: UploadImageRequest): String
 
     fun getPostImage(objectKey: String): StoredObject?
+
+    fun getPostImage(
+        objectKey: String,
+        range: LongRange?,
+    ): StoredObject? = getPostImage(objectKey)
 
     fun deletePostImage(objectKey: String)
 

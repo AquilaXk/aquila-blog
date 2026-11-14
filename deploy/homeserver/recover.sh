@@ -5,11 +5,54 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 COMPOSE_FILE="${SCRIPT_DIR}/docker-compose.prod.yml"
 ENV_FILE="${SCRIPT_DIR}/.env.prod"
+STATE_FILE="${SCRIPT_DIR}/.active_backend"
 CADDY_HOST_FILE="${SCRIPT_DIR}/caddy/Caddyfile"
 RELEASE_STATE_FILE="${SCRIPT_DIR}/.backend-release-state.env"
 
+normalize_bool() {
+  local raw="$1"
+  case "$(echo "${raw}" | tr '[:upper:]' '[:lower:]')" in
+    1|true|yes|on) echo "true" ;;
+    *) echo "false" ;;
+  esac
+}
+
+compose_profiles_from_env_file() {
+  [[ -f "${ENV_FILE}" ]] || return 0
+  trim_quotes "$(env_value "COMPOSE_PROFILES")"
+}
+
+resolve_compose_profiles() {
+  local raw="${COMPOSE_PROFILES:-},$(compose_profiles_from_env_file)"
+  local split_enabled
+  split_enabled="$(normalize_bool "${RUNTIME_SPLIT_ENABLED:-$(trim_quotes "$(env_value "RUNTIME_SPLIT_ENABLED")")}")"
+  if [[ "${split_enabled}" == "true" ]]; then
+    raw="${raw},runtime-split"
+  fi
+
+  local profile out=""
+  local IFS=','
+  for profile in ${raw}; do
+    profile="${profile//[[:space:]]/}"
+    [[ -n "${profile}" ]] || continue
+    [[ ",${out}," == *",${profile},"* ]] && continue
+    if [[ -z "${out}" ]]; then
+      out="${profile}"
+    else
+      out="${out},${profile}"
+    fi
+  done
+  echo "${out}"
+}
+
 compose() {
+  local profiles
   bash "${SCRIPT_DIR}/materialize_service_env.sh" "${ENV_FILE}"
+  profiles="$(resolve_compose_profiles)"
+  if [[ -n "${profiles}" ]]; then
+    COMPOSE_PROFILES="${profiles}" docker compose --env-file "${ENV_FILE}" -f "${COMPOSE_FILE}" "$@"
+    return
+  fi
   docker compose --env-file "${ENV_FILE}" -f "${COMPOSE_FILE}" "$@"
 }
 
@@ -206,6 +249,25 @@ active_upstream() {
     bash "${SCRIPT_DIR}/caddy_upstream_probe.sh" host 2>/dev/null || true
 }
 
+sync_active_backend_state() {
+  local target="$1"
+  if [[ "${target}" != "back_blue" && "${target}" != "back_green" ]]; then
+    return 0
+  fi
+  local current_state=""
+  if [[ -f "${STATE_FILE}" ]]; then
+    current_state="$(tr -d '[:space:]' < "${STATE_FILE}" 2>/dev/null || true)"
+  fi
+  if [[ "${current_state}" == "${target}" ]]; then
+    return 0
+  fi
+  local tmp_state
+  tmp_state="${STATE_FILE}.tmp.$$"
+  printf '%s\n' "${target}" > "${tmp_state}"
+  mv -f "${tmp_state}" "${STATE_FILE}"
+  echo "[state] updated ${STATE_FILE}: ${current_state:-none} -> ${target}"
+}
+
 switch_upstream() {
   local target="$1"
   local current
@@ -228,6 +290,7 @@ switch_upstream() {
   local current_pattern
   current_pattern="${current//_/[_-]}"
   sed -i -E "s/${current_pattern}:8080/${target}:8080/g" "${CADDY_HOST_FILE}"
+  sync_active_backend_state "${target}"
   compose up -d --force-recreate caddy
 }
 
@@ -255,9 +318,15 @@ main() {
   require_runtime_back_images
 
   section "0" "start core services"
-  compose up -d back_blue back_green caddy cloudflared uptime_kuma \
-    loki promtail prometheus grafana \
+  local core_services=(
+    back_blue back_green caddy cloudflared uptime_kuma
+    loki promtail prometheus grafana
     public_edge_probe docker_runtime_probe postgres_exporter
+  )
+  if [[ ",$(resolve_compose_profiles)," == *",runtime-split,"* ]]; then
+    core_services+=(back_read back_admin)
+  fi
+  compose up -d "${core_services[@]}"
 
   section "1" "wait for backend health"
   local blue green
@@ -284,6 +353,7 @@ main() {
     switch_upstream "back_blue"
   else
     echo "[switch] no failover required"
+    sync_active_backend_state "${active}"
   fi
 
   section "3" "tailscale recover"

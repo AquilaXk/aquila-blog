@@ -9,6 +9,7 @@ import com.back.global.web.application.Rq
 import jakarta.servlet.http.HttpServletRequest
 import org.springframework.http.HttpHeaders
 import org.springframework.stereotype.Component
+import java.time.Instant
 
 @Component
 class ApiKeyAuthorityRefreshHandler(
@@ -29,6 +30,7 @@ class ApiKeyAuthorityRefreshHandler(
         clientIp: String,
     ): Boolean {
         if (!AuthRequestMethodPolicy.isMutating(request) || apiKey.isBlank()) return false
+        if (hasFreshCanonicalTokenClaims(payload, sessionKey)) return false
 
         val apiKeyMember = actorApplicationService.findByApiKey(apiKey) ?: return false
         if (!canonicalAdminPolicy.canAuthenticate(apiKeyMember)) {
@@ -64,22 +66,48 @@ class ApiKeyAuthorityRefreshHandler(
             clientIp,
         )
 
-        val rotatedAccessToken =
-            actorApplicationService.genAccessToken(
-                member = apiKeyMember,
-                sessionKey = sessionContext.session?.sessionKey,
+        val resolvedSessionKey = sessionContext.session?.sessionKey
+        val shouldReissueToken =
+            payload.tokenVersion != AccessTokenPayload.CURRENT_TOKEN_VERSION ||
+                payload.id != apiKeyMember.id ||
+                payload.sessionKey != resolvedSessionKey ||
+                payload.email != apiKeyMember.email ||
+                payload.name != apiKeyMember.name ||
+                payload.rememberLoginEnabled != sessionContext.rememberLoginEnabled ||
+                payload.ipSecurityEnabled != sessionContext.ipSecurityEnabled ||
+                payload.ipSecurityFingerprint != sessionContext.ipSecurityFingerprint
+        if (shouldReissueToken) {
+            val rotatedAccessToken =
+                actorApplicationService.genAccessToken(
+                    member = apiKeyMember,
+                    sessionKey = resolvedSessionKey,
+                    rememberLoginEnabled = sessionContext.rememberLoginEnabled,
+                    ipSecurityEnabled = sessionContext.ipSecurityEnabled,
+                    ipSecurityFingerprint = sessionContext.ipSecurityFingerprint,
+                )
+            authCookieService.issueAccessToken(
+                accessToken = rotatedAccessToken,
                 rememberLoginEnabled = sessionContext.rememberLoginEnabled,
-                ipSecurityEnabled = sessionContext.ipSecurityEnabled,
-                ipSecurityFingerprint = sessionContext.ipSecurityFingerprint,
+                sessionKey = resolvedSessionKey,
             )
-        authCookieService.issueAccessToken(
-            accessToken = rotatedAccessToken,
-            rememberLoginEnabled = sessionContext.rememberLoginEnabled,
-            sessionKey = sessionContext.session?.sessionKey,
-        )
-        rq.setHeader(HttpHeaders.AUTHORIZATION, "Bearer $rotatedAccessToken")
+            rq.setHeader(HttpHeaders.AUTHORIZATION, "Bearer $rotatedAccessToken")
+        }
         sessionContext.session?.let { memberSessionUseCase.touchAuthenticated(it) }
         securityContextAuthenticationWriter.write(apiKeyMember, sessionContext.session?.id)
         return true
+    }
+
+    private fun hasFreshCanonicalTokenClaims(
+        payload: AccessTokenPayload,
+        cookieSessionKey: String,
+    ): Boolean {
+        if (payload.tokenVersion != AccessTokenPayload.CURRENT_TOKEN_VERSION) return false
+        val tokenSessionKey = payload.sessionKey?.trim().orEmpty()
+        if (tokenSessionKey.isBlank()) return false
+        val trimmedCookieSessionKey = cookieSessionKey.trim()
+        if (trimmedCookieSessionKey.isNotBlank() && tokenSessionKey != trimmedCookieSessionKey) return false
+        if (!canonicalAdminPolicy.matchesEmail(payload.email)) return false
+        val expiresAt = payload.expiresAt
+        return expiresAt == null || expiresAt.isAfter(Instant.now())
     }
 }

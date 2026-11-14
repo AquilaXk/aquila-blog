@@ -414,7 +414,7 @@ class UploadedFileRetentionServiceConflictRecoveryTest {
 
         override fun findByObjectKey(objectKey: String): UploadedFile? = null
 
-        override fun findByObjectKeyIn(objectKeys: Collection<String>): List<UploadedFile> = emptyList()
+        override fun findByObjectKeyIn(objectKeys: Collection<String>): List<UploadedFile> = objectKeys.mapNotNull(::findByObjectKey)
 
         override fun countByStatus(status: UploadedFileStatus): Long = 0
 

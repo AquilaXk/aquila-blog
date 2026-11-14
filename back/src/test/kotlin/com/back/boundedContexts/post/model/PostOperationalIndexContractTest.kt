@@ -51,6 +51,40 @@ class PostOperationalIndexContractTest {
         assertThat(migrationSql).contains("CREATE INDEX CONCURRENTLY")
     }
 
+    @Test
+    fun `missing operational partial and composite indexes are declared in non-transactional V20261114_01 migration`() {
+        val v2Sql =
+            Files.readString(
+                Path.of(
+                    "src/main/resources/db/migration/V20261114_01__add_missing_operational_indexes_concurrently.sql",
+                ),
+            )
+        val v2Conf =
+            Files.readString(
+                Path.of(
+                    "src/main/resources/db/migration/V20261114_01__add_missing_operational_indexes_concurrently.sql.conf",
+                ),
+            )
+        assertThat(v2Conf).contains("executeInTransaction=false")
+        assertThat(v2Sql).contains("CREATE INDEX CONCURRENTLY")
+        assertThat(v2Sql).doesNotContainIgnoringCase("BEGIN;")
+        assertThat(v2Sql).doesNotContainIgnoringCase("COMMIT;")
+        listOf(
+            "post_idx_public_listed_active_created_at_id_desc",
+            "post_idx_public_listed_active_hit_count_id_desc",
+            "post_idx_public_listed_active_likes_count_id_desc",
+            "post_idx_active_modified_at_id_desc",
+            "post_tag_index_idx_tag_lower_post_id",
+            "post_attr_idx_name_modified_at_desc",
+            "member_session_idx_revoked_at_id_asc",
+            "cloud_file_idx_owner_active_created_id_desc",
+            "cloud_file_idx_active_object_key_pattern",
+            "cloud_video_upload_session_idx_status_modified_id",
+        ).forEach { expectedIndex ->
+            assertThat(v2Sql).contains(expectedIndex)
+        }
+    }
+
     private fun KClass<*>.afterDdlSql(): String =
         java
             .getAnnotationsByType(AfterDDL::class.java)

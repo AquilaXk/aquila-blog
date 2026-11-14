@@ -114,21 +114,37 @@ probe_public_route_code() {
     "https://${api_domain}${path}" || true
 }
 
+escape_curl_config_value() {
+  local value="$1"
+  value="${value//\\/\\\\}"
+  value="${value//\"/\\\"}"
+  printf '%s' "${value}"
+}
+
 query_grafana_datasource_uid_status() {
   local uid="$1"
   local grafana_user grafana_password
   grafana_user="$(trim_quotes "$(env_value "GRAFANA_ADMIN_USER")")"
   grafana_password="$(trim_quotes "$(env_value "GRAFANA_ADMIN_PASSWORD")")"
   [[ -n "${grafana_user}" ]] || grafana_user="admin"
-  [[ -n "${grafana_password}" ]] || grafana_password="change_me_grafana_password"
+  if [[ -z "${grafana_password}" ]]; then
+    printf 'missing_password'
+    return 1
+  fi
+  local auth_config
+  auth_config="$(
+    printf 'user = "%s:%s"\n' \
+      "$(escape_curl_config_value "${grafana_user}")" \
+      "$(escape_curl_config_value "${grafana_password}")"
+  )"
 
   local response code
   response="$(
-    docker run --rm --network "${OBSERVE_NETWORK_NAME}" curlimages/curl:8.7.1 \
+    printf '%s\n' "${auth_config}" | docker run --rm -i --network "${OBSERVE_NETWORK_NAME}" curlimages/curl:8.7.1 \
       --connect-timeout 3 \
       --max-time 8 \
       -sS \
-      -u "${grafana_user}:${grafana_password}" \
+      -K - \
       -w $'\nHTTP_STATUS:%{http_code}\n' \
       "http://grafana:3000/api/datasources/uid/${uid}" || true
   )"

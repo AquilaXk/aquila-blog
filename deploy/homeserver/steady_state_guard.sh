@@ -454,29 +454,42 @@ check_api_readiness() {
   return 1
 }
 
+escape_curl_config_value() {
+  local value="$1"
+  value="${value//\\/\\\\}"
+  value="${value//\"/\\\"}"
+  printf '%s' "${value}"
+}
+
 query_grafana_datasource_by_uid() {
   local grafana_user="$1"
   local grafana_password="$2"
   local datasource_uid="$3"
+  local auth_config
+  auth_config="$(
+    printf 'user = "%s:%s"\n' \
+      "$(escape_curl_config_value "${grafana_user}")" \
+      "$(escape_curl_config_value "${grafana_password}")"
+  )"
 
   local response code
   response="$(
-    compose exec -T grafana curl \
+    printf '%s\n' "${auth_config}" | compose exec -T grafana curl \
       --connect-timeout 3 \
       --max-time 8 \
       -sS \
-      -u "${grafana_user}:${grafana_password}" \
+      -K - \
       -w $'\nHTTP_STATUS:%{http_code}\n' \
       "http://127.0.0.1:3000/api/datasources/uid/${datasource_uid}" 2>/dev/null || true
   )"
   code="$(printf '%s\n' "${response}" | awk -F: '/^HTTP_STATUS:/ {print $2}' | tr -d '\r' | tail -n1)"
   if [[ -z "${code}" || "${code}" == "000" ]]; then
     response="$(
-      docker run --rm --label promtail=ignore --network "${OBSERVE_NETWORK_NAME}" curlimages/curl:8.7.1 \
+      printf '%s\n' "${auth_config}" | docker run --rm -i --label promtail=ignore --network "${OBSERVE_NETWORK_NAME}" curlimages/curl:8.7.1 \
         --connect-timeout 3 \
         --max-time 8 \
         -sS \
-        -u "${grafana_user}:${grafana_password}" \
+        -K - \
         -w $'\nHTTP_STATUS:%{http_code}\n' \
         "http://grafana:3000/api/datasources/uid/${datasource_uid}" || true
     )"
@@ -524,7 +537,10 @@ check_grafana_core_datasources() {
   grafana_user="$(trim_quotes "$(env_value "GRAFANA_ADMIN_USER")")"
   grafana_password="$(trim_quotes "$(env_value "GRAFANA_ADMIN_PASSWORD")")"
   [[ -n "${grafana_user}" ]] || grafana_user="admin"
-  [[ -n "${grafana_password}" ]] || grafana_password="change_me_grafana_password"
+  if [[ -z "${grafana_password}" ]]; then
+    log "FAIL grafana datasources: missing GRAFANA_ADMIN_PASSWORD"
+    return 1
+  fi
 
   local fail_threshold cooldown_seconds
   fail_threshold="$(normalize_positive_int "$(env_value "GRAFANA_DS_FAIL_THRESHOLD")" "3")"
@@ -615,6 +631,20 @@ check_grafana_access_boundary() {
 deploy_lock_is_active() {
   if [[ ! -d "${DEPLOY_LOCK_DIR}" ]]; then
     return 1
+  fi
+
+  local lock_pid=""
+  if [[ -f "${DEPLOY_LOCK_DIR}/pid" ]]; then
+    lock_pid="$(tr -d '[:space:]' < "${DEPLOY_LOCK_DIR}/pid" 2>/dev/null || true)"
+    if [[ "${lock_pid}" =~ ^[0-9]+$ ]]; then
+      if kill -0 "${lock_pid}" 2>/dev/null; then
+        log "skip: deploy lock active pid=${lock_pid}: ${DEPLOY_LOCK_DIR}"
+        return 0
+      fi
+      log "WARN stale deploy lock detected (dead pid=${lock_pid}); removing ${DEPLOY_LOCK_DIR}"
+      rm -rf "${DEPLOY_LOCK_DIR}" 2>/dev/null || true
+      return 1
+    fi
   fi
 
   local lock_mtime now age

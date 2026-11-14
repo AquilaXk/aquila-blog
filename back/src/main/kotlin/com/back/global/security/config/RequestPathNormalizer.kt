@@ -5,17 +5,39 @@ import jakarta.servlet.http.HttpServletRequest
 object RequestPathNormalizer {
     private const val MAX_DECODE_PASSES = 3
     private val MULTIPLE_SLASH_REGEX = Regex("/+")
+    private const val ATTR_RAW_URI = "com.back.RequestPathNormalizer.rawUri"
+    private const val ATTR_CONTEXT_PATH = "com.back.RequestPathNormalizer.contextPath"
+    private const val ATTR_NORMALIZED_PATH = "com.back.RequestPathNormalizer.normalizedPath"
 
     fun normalize(request: HttpServletRequest): String {
         val rawUri = request.requestURI.takeIf { !it.isNullOrBlank() } ?: request.servletPath.orEmpty()
-        return normalizePath(rawUri, request.contextPath)
+        val contextPath = request.contextPath
+        val cachedNormalized = request.getAttribute(ATTR_NORMALIZED_PATH) as? String
+        if (
+            cachedNormalized != null &&
+            request.getAttribute(ATTR_RAW_URI) == rawUri &&
+            request.getAttribute(ATTR_CONTEXT_PATH) == contextPath
+        ) {
+            return cachedNormalized
+        }
+        val normalized = normalizePath(rawUri, contextPath)
+        request.setAttribute(ATTR_RAW_URI, rawUri)
+        request.setAttribute(ATTR_CONTEXT_PATH, contextPath)
+        request.setAttribute(ATTR_NORMALIZED_PATH, normalized)
+        return normalized
     }
 
     fun normalizePath(
         rawUri: String?,
         contextPath: String? = null,
     ): String {
-        val uriWithoutQuery = rawUri.orEmpty().substringBefore('?')
+        val raw = rawUri.orEmpty()
+        val hasContext = !contextPath.isNullOrBlank()
+        if (!hasContext && isCleanNormalizedPath(raw)) {
+            return raw
+        }
+
+        val uriWithoutQuery = raw.substringBefore('?')
         val normalizedContext = contextPath?.trim().orEmpty()
         val strippedContextUri =
             if (normalizedContext.isNotBlank() && uriWithoutQuery.startsWith(normalizedContext)) {
@@ -23,6 +45,9 @@ object RequestPathNormalizer {
             } else {
                 uriWithoutQuery
             }
+        if (isCleanNormalizedPath(strippedContextUri)) {
+            return strippedContextUri
+        }
 
         val preStripped = stripMatrixParametersPerSegment(strippedContextUri)
         val decoded = decodePercentEncodedIteratively(preStripped).replace('\\', '/')
@@ -43,6 +68,27 @@ object RequestPathNormalizer {
         if (segments.isEmpty()) return "/"
         val joined = "/" + segments.joinToString("/")
         return if (preserveTrailingSlash) "$joined/" else joined
+    }
+
+    private fun isCleanNormalizedPath(path: String): Boolean {
+        val len = path.length
+        if (len == 0 || path[0] != '/') return false
+        if (len == 1) return true
+        var prev = '/'
+        for (i in 1 until len) {
+            val ch = path[i]
+            when {
+                ch == '?' || ch == '%' || ch == '\\' || ch == ';' -> return false
+                ch == '/' && prev == '/' -> return false
+                prev == '/' && ch == '.' -> {
+                    if (i + 1 == len || path[i + 1] == '/' || (path[i + 1] == '.' && (i + 2 == len || path[i + 2] == '/'))) {
+                        return false
+                    }
+                }
+            }
+            prev = ch
+        }
+        return true
     }
 
     private fun stripMatrixParametersPerSegment(path: String): String =

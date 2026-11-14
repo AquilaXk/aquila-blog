@@ -6,6 +6,7 @@ import com.back.boundedContexts.post.domain.Post
 import com.back.global.exception.application.AppException
 import com.back.global.exception.application.ErrorCode
 import com.back.global.rsData.RsData
+import com.back.global.web.application.IpAddressNormalizer
 import com.back.global.web.application.Rq
 import com.back.standard.extensions.getOrThrow
 import jakarta.validation.constraints.Positive
@@ -99,5 +100,12 @@ class ApiV1PostInteractionController(
     private fun resolveViewerKey(): String =
         rq.actorOrNull
             ?.let { "member:${it.id}" }
-            ?: "anon:${rq.clientIp}|${rq.userAgent}"
+            ?: run {
+                val clientIp = rq.clientIp
+                if (IpAddressNormalizer.normalize(clientIp) == null) {
+                    ""
+                } else {
+                    "anon:${IpAddressNormalizer.normalizeRateLimitKey(clientIp)}"
+                }
+            }
 }

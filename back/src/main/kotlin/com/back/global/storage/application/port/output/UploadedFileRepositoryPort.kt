@@ -10,6 +10,8 @@ import java.time.Instant
 interface UploadedFileRepositoryPort {
     fun save(entity: UploadedFile): UploadedFile
 
+    fun saveAllUploadedFiles(entities: Collection<UploadedFile>): List<UploadedFile> = entities.map(::save)
+
     fun flush()
 
     fun findByObjectKey(objectKey: String): UploadedFile?

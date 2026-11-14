@@ -1,11 +1,9 @@
 package com.back.boundedContexts.post.application.service
 
 import com.back.boundedContexts.post.model.PostSummarySource
-import java.nio.charset.StandardCharsets
-import java.security.MessageDigest
+import com.back.global.util.Utf8ChunkDigest
 import java.text.BreakIterator
 import java.time.Instant
-import java.util.HexFormat
 import java.util.Locale
 
 object PostSummaryResolver {
@@ -357,10 +355,5 @@ object PostSummaryResolver {
             .replace('\r', '\n')
     }
 
-    private fun sha256(value: String): String =
-        HexFormat.of().formatHex(
-            MessageDigest
-                .getInstance("SHA-256")
-                .digest(value.toByteArray(StandardCharsets.UTF_8)),
-        )
+    private fun sha256(value: String): String = Utf8ChunkDigest.sha256Hex(value)
 }

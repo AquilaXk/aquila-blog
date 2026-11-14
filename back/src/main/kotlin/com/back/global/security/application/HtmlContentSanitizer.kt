@@ -28,6 +28,7 @@ data class ContentHtmlTrustResult(
  */
 object HtmlContentSanitizer {
     const val CURRENT_POLICY_VERSION = "content-html-v1"
+    const val MAX_RAW_HTML_LENGTH = 524_288
 
     private const val SANITIZER_BASE_URI = "https://aquilaxk.local/"
 
@@ -83,7 +84,6 @@ object HtmlContentSanitizer {
             ).addAttributes(
                 ":all",
                 "class",
-                "id",
                 "title",
                 "role",
                 "aria-hidden",
@@ -116,6 +116,7 @@ object HtmlContentSanitizer {
 
     fun sanitizeRichHtmlOrNull(rawHtml: String?): String? {
         if (rawHtml.isNullOrBlank()) return null
+        if (rawHtml.length > MAX_RAW_HTML_LENGTH) return null
 
         val document = Jsoup.parseBodyFragment(rawHtml, SANITIZER_BASE_URI)
         val body = cleaner.clean(document).body()
@@ -178,7 +179,11 @@ object HtmlContentSanitizer {
             ContentHtmlTrustState.TRUSTED_CURRENT -> {
                 if (contentHtmlHash.isNullOrBlank() || contentHtmlSanitizerPolicyVersion != CURRENT_POLICY_VERSION) {
                     unknown()
-                } else if (contentHtml == null || sha256Utf8(contentHtml) != contentHtmlHash) {
+                } else if (
+                    contentHtml == null ||
+                    contentHtml.length > MAX_RAW_HTML_LENGTH ||
+                    sha256Utf8(contentHtml) != contentHtmlHash
+                ) {
                     ContentHtmlTrustResult(null, null, null, ContentHtmlTrustState.REJECTED)
                 } else {
                     ContentHtmlTrustResult(

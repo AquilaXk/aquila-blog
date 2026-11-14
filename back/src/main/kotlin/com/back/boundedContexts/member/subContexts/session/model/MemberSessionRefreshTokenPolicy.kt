@@ -1,5 +1,6 @@
 package com.back.boundedContexts.member.subContexts.session.model
 
+import java.nio.charset.StandardCharsets
 import java.security.MessageDigest
 import java.security.SecureRandom
 import java.util.Base64
@@ -15,7 +16,23 @@ object MemberSessionRefreshTokenPolicy {
     }
 
     fun hash(refreshToken: String): String {
-        val digest = MessageDigest.getInstance("SHA-256").digest(refreshToken.toByteArray(Charsets.UTF_8))
+        val digest = MessageDigest.getInstance("SHA-256").digest(refreshToken.toByteArray(StandardCharsets.UTF_8))
         return encoder.encodeToString(digest)
+    }
+
+    fun matchesHash(
+        expectedHash: String?,
+        rawRefreshToken: String,
+    ): Boolean = constantTimeEquals(expectedHash, hash(rawRefreshToken))
+
+    fun constantTimeEquals(
+        expected: String?,
+        actual: String?,
+    ): Boolean {
+        if (expected == null || actual == null) return false
+        return MessageDigest.isEqual(
+            expected.toByteArray(StandardCharsets.UTF_8),
+            actual.toByteArray(StandardCharsets.UTF_8),
+        )
     }
 }

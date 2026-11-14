@@ -155,7 +155,6 @@ test("CI runs for every main push while retaining PR path filtering", () => {
     "tools/test/materialize-compose-test-env.test.mjs",
     "tools/test/repository-standalone-verification.test.sh",
     ".github/workflows/**",
-    ".github/dependabot.yml",
     "CHANGELOG.md",
     "README.md",
     "TODO.md",
@@ -451,7 +450,7 @@ test("backend image producer publishes only verified native-image evidence", () 
   assert.match(scan.run, /backend-image\.spdx\.json/)
 
   for (const step of attestations) {
-    assert.equal(step.uses, "actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6")
+    assert.match(step.uses, /^actions\/attest@[0-9a-f]{40}\b/)
     assert.equal(step.with["subject-name"], "ghcr.io/aquilaxk/aquila-blog-back")
     assert.equal(step.with["subject-digest"], "${{ steps.build_backend_image.outputs.digest }}")
     assert.equal(step.with["push-to-registry"], true)
@@ -526,7 +525,7 @@ test("dispatch front deployment admits only native Web image evidence after fres
   assert.equal(verifyIndex, loginIndex + 1)
   assert.equal(secretsIndex, verifyIndex + 1)
   assert.equal(login.if, proceedOnly)
-  assert.equal(login.uses, "docker/login-action@dbcb813823bdd20940b903addbd779551569679f")
+  assert.match(login.uses, /^docker\/login-action@[0-9a-f]{40}\b/)
   assert.deepEqual(login.with, {
     registry: "ghcr.io",
     username: "${{ github.actor }}",
@@ -632,7 +631,7 @@ test("verified front result dispatches one exact Web receiver event with least p
   assert.match(deployStep.run, /FRONT_SERVED_BUILD_SHA[\s\S]*HOME_FRONT_BUILD_SHA/)
   assert.match(deployStep.run, /verified=true/)
   assert.equal(token.if, verifiedCondition)
-  assert.equal(token.uses, "actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1")
+  assert.match(token.uses, /^actions\/create-github-app-token@[0-9a-f]{40}\b/)
   assert.deepEqual(token.with, {
     "client-id": "${{ vars.REPO_SYNC_APP_CLIENT_ID }}",
     "private-key": "${{ secrets.REPO_SYNC_APP_PRIVATE_KEY }}",

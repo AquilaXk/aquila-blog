@@ -14,6 +14,8 @@ import tools.jackson.module.kotlin.jacksonObjectMapper
 import java.net.InetSocketAddress
 import java.time.Duration
 import java.time.Instant
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicInteger
 import java.util.concurrent.atomic.AtomicReference
 
@@ -156,19 +158,24 @@ class PostKeywordSearchPipelineServiceTest {
                 )
 
             externalService.rerank("kotlin", candidates, 1, 10, 2)
+            assertThat(externalService.awaitPendingExternalShadowTasks()).isTrue()
 
             responseBody.set("""{"postIds":[1, 2, 0]}""")
             externalService.rerank("kotlin", candidates, 1, 10, 2)
+            assertThat(externalService.awaitPendingExternalShadowTasks()).isTrue()
 
             responseBody.set("""{"other":1}""")
             externalService.rerank("kotlin", candidates, 1, 10, 2)
+            assertThat(externalService.awaitPendingExternalShadowTasks()).isTrue()
 
             responseBody.set("not-json")
             externalService.rerank("kotlin", candidates, 1, 10, 2)
+            assertThat(externalService.awaitPendingExternalShadowTasks()).isTrue()
 
             responseStatus.set(503)
             responseBody.set("unavailable")
             externalService.rerank("kotlin", candidates, 1, 10, 2)
+            assertThat(externalService.awaitPendingExternalShadowTasks()).isTrue()
         } finally {
             server.stop(0)
         }
@@ -182,6 +189,7 @@ class PostKeywordSearchPipelineServiceTest {
                 meterRegistry = meterRegistry,
             )
         failedExternalService.rerank("kotlin", candidates, 1, 10, 2)
+        assertThat(failedExternalService.awaitPendingExternalShadowTasks()).isTrue()
 
         assertThat(
             meterRegistry
@@ -211,6 +219,63 @@ class PostKeywordSearchPipelineServiceTest {
                 .counter()
                 .count(),
         ).isEqualTo(1.0)
+    }
+
+    @Test
+    fun `external shadow HTTP runs asynchronously without blocking rerank result`() {
+        val queryService = mock(SearchRuntimeControlQueryService::class.java)
+        `when`(queryService.isPipelineForceControlEnabled()).thenReturn(true)
+        val meterRegistry = SimpleMeterRegistry()
+        val requestStarted = CountDownLatch(1)
+        val releaseResponse = CountDownLatch(1)
+        val server = HttpServer.create(InetSocketAddress("127.0.0.1", 0), 0)
+        server.createContext("/slow-shadow") { exchange ->
+            requestStarted.countDown()
+            releaseResponse.await(2, TimeUnit.SECONDS)
+            val bytes = "[1, 2]".toByteArray()
+            exchange.sendResponseHeaders(200, bytes.size.toLong())
+            exchange.responseBody.use { it.write(bytes) }
+        }
+        server.start()
+        val endpoint = "http://127.0.0.1:${server.address.port}/slow-shadow"
+        val candidates =
+            listOf(
+                testPost(1L, "kotlin alpha", "kotlin body", Instant.now()),
+                testPost(2L, "kotlin beta", "kotlin body", Instant.now().minusSeconds(60)),
+            )
+
+        try {
+            val externalService =
+                pipeline(
+                    queryService = queryService,
+                    shadowExternalEnabled = true,
+                    shadowExternalEndpoint = endpoint,
+                    meterRegistry = meterRegistry,
+                )
+
+            val result = externalService.rerank("kotlin", candidates, 1, 10, 2)
+            assertThat(result.content).isNotEmpty()
+            assertThat(requestStarted.await(1, TimeUnit.SECONDS)).isTrue()
+            val beforeCount =
+                meterRegistry
+                    .find("post.search.pipeline.shadow.external.result")
+                    .tag("status", "success")
+                    .counter()
+                    ?.count() ?: 0.0
+            assertThat(beforeCount).isZero()
+            releaseResponse.countDown()
+            assertThat(externalService.awaitPendingExternalShadowTasks()).isTrue()
+            val afterCount =
+                meterRegistry
+                    .get("post.search.pipeline.shadow.external.result")
+                    .tag("status", "success")
+                    .counter()
+                    .count()
+            assertThat(afterCount).isEqualTo(1.0)
+        } finally {
+            releaseResponse.countDown()
+            server.stop(0)
+        }
     }
 
     private fun testPost(

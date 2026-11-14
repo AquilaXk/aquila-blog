@@ -34,5 +34,8 @@ interface PostLikeRepository :
 
     fun countByPost(post: Post): Long
 
+    @Query("select pl.post.id, count(pl) from PostLike pl where pl.post.id in :postIds group by pl.post.id")
+    fun countGroupedByPostIdIn(postIds: Collection<Long>): List<Array<Any>>
+
     fun deleteByPost(post: Post)
 }

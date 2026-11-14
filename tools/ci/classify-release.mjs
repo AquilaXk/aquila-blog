@@ -37,7 +37,7 @@ const isPlatformFile = (file) =>
   file.startsWith("tools/") ||
   file.startsWith(".github/workflows/") ||
   file.startsWith(".githooks/") ||
-  [".github/dependabot.yml", "sonar-project.properties"].includes(file)
+  file === "sonar-project.properties"
 
 const isPipelineFile = (file) =>
   file.startsWith(".github/workflows/") ||

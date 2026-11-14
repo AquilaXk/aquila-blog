@@ -58,7 +58,7 @@ class CustomAuthenticationFilter(
     ) {
         val isPublicApi = publicApiRequestMatcher.matches(request)
         val isPublicReadSafe = isPublicApi && isReadSafeMethod(request.method)
-        val allowRefreshRotation = !isPublicReadSafe || isDualAccessPublicReadPath(request)
+        val allowRefreshRotation = !isMediaReadPath(request) && (!isPublicReadSafe || isDualAccessPublicReadPath(request))
 
         try {
             rejectForbiddenQueryParams(request)
@@ -160,8 +160,13 @@ class CustomAuthenticationFilter(
     private fun isDualAccessPublicReadPath(request: HttpServletRequest): Boolean {
         if (!isReadSafeMethod(request.method)) return false
         val path = RequestPathNormalizer.normalize(request)
-        return DUAL_ACCESS_POST_DETAIL_PATH_REGEX.matches(path) ||
-            DUAL_ACCESS_POST_IMAGE_PATH_REGEX.matches(path)
+        return DUAL_ACCESS_POST_DETAIL_PATH_REGEX.matches(path)
+    }
+
+    private fun isMediaReadPath(request: HttpServletRequest): Boolean {
+        if (!isReadSafeMethod(request.method)) return false
+        val path = RequestPathNormalizer.normalize(request)
+        return MEDIA_READ_PATH_REGEX.matches(path)
     }
 
     private fun isReadSafeMethod(method: String?): Boolean =
@@ -196,7 +201,7 @@ class CustomAuthenticationFilter(
         private const val FORBIDDEN_QUERY_PARAM_MESSAGE = "쿼리 파라미터로 인증 토큰을 전달할 수 없습니다."
         private val LOG_CONTROL_CHAR_REGEX = Regex("[\\x00-\\x1F\\x7F]")
         private val DUAL_ACCESS_POST_DETAIL_PATH_REGEX = Regex("^/post/api/[^/]+/posts/\\d+$")
-        private val DUAL_ACCESS_POST_IMAGE_PATH_REGEX = Regex("^/post/api/[^/]+/images/.+$")
+        private val MEDIA_READ_PATH_REGEX = Regex("^/post/api/[^/]+/(?:images|files)/.*$")
         private val FORBIDDEN_QUERY_PARAM_NAMES =
             setOf(
                 "accesstoken",

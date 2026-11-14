@@ -91,4 +91,20 @@ if ! run_with_temp_index "git update-index --add --cacheinfo 100644 '${readme_bl
   exit 1
 fi
 
+for forbidden_path in \
+  ".agents/rules/domain.md" \
+  ".agents/hooks.json" \
+  ".gemini/GEMINI.md" \
+  ".gemini/settings.json"
+do
+  if run_with_temp_index "git update-index --add --cacheinfo 100644 '${readme_blob}' '${forbidden_path}' && bash '${guard}' >'${guard_output}' 2>&1"; then
+    echo "[test] expected tracked ${forbidden_path} to be rejected" >&2
+    exit 1
+  fi
+  if run_with_temp_index "git update-index --add --cacheinfo 100644 '${readme_blob}' '${forbidden_path}' && bash '${guard}' --staged >'${guard_output}' 2>&1"; then
+    echo "[test] expected staged ${forbidden_path} to be rejected" >&2
+    exit 1
+  fi
+done
+
 echo "[test] forbidden tracked docs guard passed"

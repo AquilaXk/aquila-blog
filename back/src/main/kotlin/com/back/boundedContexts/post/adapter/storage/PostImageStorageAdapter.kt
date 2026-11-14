@@ -107,29 +107,42 @@ class PostImageStorageAdapter(
         }
     }
 
-    override fun getPostImage(objectKey: String): PostImageStoragePort.StoredObject? = getStoredObject(objectKey, "이미지를 불러오지 못했습니다.")
+    override fun getPostImage(objectKey: String): PostImageStoragePort.StoredObject? =
+        getStoredObject(objectKey, "이미지를 불러오지 못했습니다.", range = null)
+
+    override fun getPostImage(
+        objectKey: String,
+        range: LongRange?,
+    ): PostImageStoragePort.StoredObject? = getStoredObject(objectKey, "이미지를 불러오지 못했습니다.", range = range)
 
     private fun getStoredObject(
         objectKey: String,
         errorMessage: String,
+        range: LongRange? = null,
     ): PostImageStoragePort.StoredObject? {
         validateObjectKey(objectKey)
         val client = requireClient()
+        val requestBuilder =
+            GetObjectRequest
+                .builder()
+                .bucket(properties.bucket)
+                .key(objectKey)
+        if (range != null) {
+            requestBuilder.range("bytes=${range.first}-${range.last}")
+        }
 
         return try {
-            val response =
-                client.getObject(
-                    GetObjectRequest
-                        .builder()
-                        .bucket(properties.bucket)
-                        .key(objectKey)
-                        .build(),
-                )
+            val response = client.getObject(requestBuilder.build())
+            val parsedRange = parseS3ContentRange(response.response().contentRange())
             PostImageStoragePort.StoredObject(
                 inputStream = response,
                 contentType = response.response().contentType() ?: "application/octet-stream",
                 contentLength = response.response().contentLength(),
                 originalFilename = decodeStoredOriginalFilename(response.response().metadata()["original-filename"]),
+                totalContentLength = parsedRange?.totalLength ?: response.response().contentLength(),
+                isPartialContent = range != null && (parsedRange != null || response.response().contentLength() != null),
+                partialStart = parsedRange?.start ?: range?.first,
+                partialEnd = parsedRange?.end ?: range?.last,
             )
         } catch (_: NoSuchKeyException) {
             null
@@ -138,11 +151,37 @@ class PostImageStorageAdapter(
                 failIfDependencyUnavailable(e)
             }
             if (e.statusCode() == 404) return null
+            if (range != null && e.statusCode() == 416) {
+                return PostImageStoragePort.StoredObject(
+                    inputStream = InputStream.nullInputStream(),
+                    contentType = "application/octet-stream",
+                    contentLength = 0L,
+                    rangeUnsatisfiable = true,
+                )
+            }
             failIfDependencyUnavailable(e)
             logger.error("Post image download failed (objectKey={})", objectKey, e)
             throw AppException(ErrorCode.INTERNAL_ERROR, errorMessage)
         }
     }
+
+    private fun parseS3ContentRange(header: String?): ParsedS3ContentRange? {
+        val raw = header?.trim() ?: return null
+        if (!raw.startsWith("bytes ")) return null
+        val slashIndex = raw.lastIndexOf('/')
+        val dashIndex = raw.indexOf('-', startIndex = 6)
+        if (dashIndex <= 6 || slashIndex <= dashIndex + 1) return null
+        val start = raw.substring(6, dashIndex).toLongOrNull() ?: return null
+        val end = raw.substring(dashIndex + 1, slashIndex).toLongOrNull() ?: return null
+        val total = raw.substring(slashIndex + 1).toLongOrNull()
+        return ParsedS3ContentRange(start, end, total)
+    }
+
+    private data class ParsedS3ContentRange(
+        val start: Long,
+        val end: Long,
+        val totalLength: Long?,
+    )
 
     override fun deletePostImage(objectKey: String) {
         deleteObject(objectKey, "이미지 삭제에 실패했습니다.")

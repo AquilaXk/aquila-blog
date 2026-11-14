@@ -122,8 +122,11 @@ class MemberSessionServiceTest {
 
         val forgedReuseWithinGrace = service.rotateRefreshToken(created.session.sessionKey, "forged-unknown-refresh-token")
         assertThat(forgedReuseWithinGrace).isNull()
-        assertThat(created.session.revokedAt).isNotNull
-        assertThat(created.session.refreshTokenReusedAt).isNotNull
+        assertThat(created.session.revokedAt).isNull()
+        assertThat(created.session.refreshTokenReusedAt).isNull()
+
+        val validRotationAfterForge = service.rotateRefreshToken(created.session.sessionKey, firstRotation.refreshToken)
+        assertThat(validRotationAfterForge).isNotNull
     }
 
     @Test
@@ -190,6 +193,67 @@ class MemberSessionServiceTest {
 
         service.revokeSession(created.session.sessionKey)
         assertThat(redisEntries).doesNotContainKey("auth:session:refresh-grace:${created.session.sessionKey}")
+    }
+
+    @Test
+    fun `Redis get 또는 set이 실패하면 in-memory 회전 유예 폴백으로 동시 회전을 허용한다`() {
+        val store = RecordingMemberSessionStorePort()
+        val failingRedisPort =
+            object : com.back.global.cache.application.port.output.RedisKeyValuePort {
+                override fun isAvailable(): Boolean = true
+
+                override fun get(key: String): String? = throw IllegalStateException("redis read failure")
+
+                override fun set(
+                    key: String,
+                    value: String,
+                    ttl: java.time.Duration?,
+                ): Unit = throw IllegalStateException("redis write failure")
+
+                override fun getAndDelete(key: String): String? = null
+
+                override fun increment(key: String): Long? = null
+
+                override fun incrementAndExpire(
+                    key: String,
+                    ttl: java.time.Duration,
+                ): Long? = null
+
+                override fun expire(
+                    key: String,
+                    ttl: java.time.Duration,
+                ): Boolean = false
+
+                override fun delete(keys: Collection<String>): Long = 0L
+
+                override fun keys(pattern: String): Set<String> = emptySet()
+            }
+        val service =
+            MemberSessionService(
+                memberSessionStorePort = store,
+                cacheManager = ConcurrentMapCacheManager(),
+                touchMinIntervalSeconds = 60,
+                refreshTokenExpirationSeconds = 3600,
+                redisKeyValuePort = failingRedisPort,
+            )
+        val member = Member(63L, "redis-fallback-user", null, "레디스폴백", "redis-fallback@example.com", MemberPolicy.genApiKey())
+        val created =
+            service.createSessionWithRefreshToken(
+                member = member,
+                rememberLoginEnabled = true,
+                ipSecurityEnabled = false,
+                ipSecurityFingerprint = null,
+                createdIp = "203.0.113.24",
+                userAgent = "test-agent",
+            )
+
+        val firstRotation = service.rotateRefreshToken(created.session.sessionKey, created.refreshToken)
+        assertThat(firstRotation).isNotNull
+
+        val concurrentRotationViaFallback = service.rotateRefreshToken(created.session.sessionKey, created.refreshToken)
+        assertThat(concurrentRotationViaFallback).isNotNull
+        assertThat(concurrentRotationViaFallback!!.refreshToken).isEqualTo(firstRotation!!.refreshToken)
+        assertThat(created.session.revokedAt).isNull()
     }
 
     @Test

@@ -58,6 +58,13 @@ class PostHitDedupServiceTest {
     }
 
     @Test
+    fun `viewerKey가 비어 있으면 hit dedupe는 fail-closed로 false를 반환한다`() {
+        val service = service(redisTemplate = redisTemplate)
+
+        assertThat(service.shouldCountHit(postId = 1L, viewerKey = "   ")).isFalse()
+    }
+
+    @Test
     fun `redis provider가 없으면 like dedupe와 unlike dedupe를 service unavailable로 거부한다`() {
         val service = service(redisTemplate = null)
 

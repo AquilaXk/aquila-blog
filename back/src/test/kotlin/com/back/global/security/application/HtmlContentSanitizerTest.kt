@@ -249,4 +249,40 @@ class HtmlContentSanitizerTest {
         assertThat(sanitized).doesNotContain("""type="text"""")
         assertThat(sanitized).doesNotContain("phish")
     }
+
+    @Test
+    @DisplayName("DOM clobbering 방지를 위해 모든 태그에서 id 속성을 제거한다")
+    fun stripsIdAttributesAgainstDomClobbering() {
+        val rawHtml =
+            """<div id="document"><form id="window"><a id="location" href="/posts/1">link</a></form></div>"""
+
+        val sanitized = HtmlContentSanitizer.sanitizeRichHtmlOrNull(rawHtml)
+
+        assertThat(sanitized).isNotNull()
+        assertThat(sanitized).contains("""<a href="/posts/1">link</a>""")
+        assertThat(sanitized).doesNotContain("id=")
+    }
+
+    @Test
+    @DisplayName("입력 HTML이 최대 길이 상한을 초과하면 fail-closed로 거부한다")
+    fun rejectsOversizedHtmlFailClosed() {
+        val exactLimitHtml = "<p>" + "a".repeat(524_281) + "</p>"
+        val oversizedHtml = "<p>" + "a".repeat(524_282) + "</p>"
+        assertThat(exactLimitHtml.length).isEqualTo(524_288)
+        assertThat(oversizedHtml.length).isEqualTo(524_289)
+
+        assertThat(HtmlContentSanitizer.sanitizeRichHtmlOrNull(exactLimitHtml)).isEqualTo(exactLimitHtml)
+        assertThat(HtmlContentSanitizer.sanitizeRichHtmlOrNull(oversizedHtml)).isNull()
+        assertThat(HtmlContentSanitizer.sanitizeForPersistence(oversizedHtml).contentHtmlTrustState)
+            .isEqualTo(ContentHtmlTrustState.REJECTED)
+        val storedVerification =
+            HtmlContentSanitizer.verifyStored(
+                contentHtml = oversizedHtml,
+                contentHtmlHash = HtmlContentSanitizer.sha256Utf8(oversizedHtml),
+                contentHtmlSanitizerPolicyVersion = HtmlContentSanitizer.CURRENT_POLICY_VERSION,
+                contentHtmlTrustState = ContentHtmlTrustState.TRUSTED_CURRENT,
+            )
+        assertThat(storedVerification.contentHtmlTrustState).isEqualTo(ContentHtmlTrustState.REJECTED)
+        assertThat(storedVerification.contentHtml).isNull()
+    }
 }

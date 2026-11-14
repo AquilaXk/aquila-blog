@@ -9,7 +9,6 @@ import com.back.boundedContexts.cloud.application.service.CloudVideoUploadSessio
 import com.back.boundedContexts.cloud.model.CloudFileMediaKind
 import com.back.boundedContexts.cloud.model.CloudVideoUploadSessionStatus
 import com.back.global.exception.application.AppException
-import com.back.global.exception.application.ErrorCode
 import com.back.global.security.domain.SecurityUser
 import com.back.global.storage.application.port.output.CloudStoragePort
 import com.back.support.BaseAdmCloudControllerWebMvcTest
@@ -26,7 +25,6 @@ import org.mockito.Mockito.never
 import org.springframework.http.HttpHeaders
 import org.springframework.http.HttpStatus
 import org.springframework.http.MediaType
-import org.springframework.mock.web.DelegatingServletInputStream
 import org.springframework.mock.web.MockMultipartFile
 import org.springframework.security.core.authority.SimpleGrantedAuthority
 import org.springframework.security.test.context.support.WithMockUser
@@ -357,30 +355,8 @@ class ApiV1AdmCloudControllerWebMvcTest : BaseAdmCloudControllerWebMvcTest() {
     }
 
     @Test
-    @DisplayName("대용량 동영상 조각 chunked body는 service stream 검증으로 위임한다")
-    fun `대용량 동영상 조각 chunked body는 service stream 검증으로 위임한다`() {
-        val request = mock(HttpServletRequest::class.java)
-        given(request.contentLengthLong).willReturn(-1)
-        given(request.inputStream)
-            .willReturn(DelegatingServletInputStream(ByteArrayInputStream(ByteArray(11) { 1 })))
-        given(cloudVideoUploadSessionService.getSession(ownerMemberId = 7L, sessionId = 21L))
-            .willReturn(
-                sampleVideoSessionDto(
-                    byteSize = 10,
-                    partSizeBytes = 10,
-                    totalParts = 1,
-                ),
-            )
-        given(
-            cloudVideoUploadSessionService.uploadPart(
-                ownerMemberId = ArgumentMatchers.eq(7L),
-                sessionId = ArgumentMatchers.eq(21L),
-                partNumber = ArgumentMatchers.eq(1),
-                inputStream = anyInputStream(),
-                contentLength = ArgumentMatchers.eq(-1L),
-            ),
-        ).willThrow(AppException(ErrorCode.BAD_REQUEST, "업로드 조각 크기가 올바르지 않습니다."))
-
+    @DisplayName("대용량 동영상 조각은 Content-Length가 없거나 0 이하일 때 즉시 거부한다")
+    fun `대용량 동영상 조각은 Content-Length가 없거나 0 이하일 때 즉시 거부한다`() {
         val controller =
             ApiV1AdmCloudController(
                 cloudFileService,
@@ -388,23 +364,22 @@ class ApiV1AdmCloudControllerWebMvcTest : BaseAdmCloudControllerWebMvcTest() {
                 cloudExternalPlaybackTokenService,
             )
 
-        assertThatThrownBy {
-            controller.uploadVideoPart(
-                securityUser = adminUser(id = 7L),
-                sessionId = 21L,
-                partNumber = 1,
-                request = request,
-            )
-        }.hasMessageContaining("업로드 조각 크기가 올바르지 않습니다.")
+        for (invalidLength in listOf(-1L, 0L)) {
+            val request = mock(HttpServletRequest::class.java)
+            given(request.contentLengthLong).willReturn(invalidLength)
 
-        then(cloudVideoUploadSessionService).should().getSession(ownerMemberId = 7L, sessionId = 21L)
-        then(cloudVideoUploadSessionService).should().uploadPart(
-            ownerMemberId = ArgumentMatchers.eq(7L),
-            sessionId = ArgumentMatchers.eq(21L),
-            partNumber = ArgumentMatchers.eq(1),
-            inputStream = anyInputStream(),
-            contentLength = ArgumentMatchers.eq(-1L),
-        )
+            assertThatThrownBy {
+                controller.uploadVideoPart(
+                    securityUser = adminUser(id = 7L),
+                    sessionId = 21L,
+                    partNumber = 1,
+                    request = request,
+                )
+            }.isInstanceOf(AppException::class.java)
+                .hasMessageContaining("업로드 조각 크기가 올바르지 않습니다.")
+        }
+
+        then(cloudVideoUploadSessionService).shouldHaveNoInteractions()
     }
 
     @Test

@@ -26,6 +26,7 @@ import java.security.MessageDigest
 import java.time.Clock
 import java.util.HexFormat
 
+private val HEX_FORMAT: HexFormat = HexFormat.of()
 private const val CLOUD_VIDEO_UPLOAD_MAX_MULTIPART_PARTS = 10_000L
 private const val INVALID_PART_SIZE_MESSAGE = "업로드 조각 크기가 올바르지 않습니다."
 private const val PART_CONTENT_CONFLICT_MESSAGE = "이미 다른 내용의 업로드 조각이 저장되어 있습니다."
@@ -956,14 +957,9 @@ class CloudVideoUploadSessionService(
         return total
     }
 
-    private fun ByteArray.toHex(): String = HexFormat.of().formatHex(this)
+    private fun ByteArray.toHex(): String = HEX_FORMAT.formatHex(this)
 
-    private fun String.hexToByteArray(): ByteArray {
-        require(length % 2 == 0) { "hex length must be even" }
-        return ByteArray(length / 2) { index ->
-            substring(index * 2, index * 2 + 2).toInt(16).toByte()
-        }
-    }
+    private fun String.hexToByteArray(): ByteArray = HEX_FORMAT.parseHex(this)
 
     private fun validateFirstPartSignature(
         session: CloudVideoUploadSession,

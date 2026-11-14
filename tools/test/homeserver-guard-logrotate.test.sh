@@ -190,4 +190,70 @@ grep -Fq '0 3 * * * /usr/local/bin/backup.sh' "${cron_store}" || fail "expected 
 ! grep -Fq '* * * * * cd /old' "${cron_store}" || fail "expected legacy 1-minute steady_state_guard entry to be removed"
 grep -Fq "*/5 * * * * cd ${repo_root}/deploy/homeserver && ${repo_root}/deploy/homeserver/steady_state_guard.sh >> ${repo_root}/deploy/homeserver/.steady-state-guard.log 2>&1" "${cron_store}" || fail "expected 5-minute steady_state_guard crontab entry to be installed"
 
+eval "$(extract_function trim_quotes)"
+eval "$(extract_function env_value)"
+eval "$(extract_function escape_curl_config_value)"
+eval "$(extract_function query_grafana_datasource_by_uid)"
+eval "$(extract_function check_grafana_core_datasources)"
+eval "$(extract_function deploy_lock_is_active)"
+
+# Test 8: Missing GRAFANA_ADMIN_PASSWORD fails closed without change_me_grafana_password fallback
+log() {
+  printf '%s\n' "$*" >> "${workdir}/guard-fn.log"
+}
+printf 'GRAFANA_ADMIN_USER=admin\n' > "${ENV_FILE}"
+probe_called=0
+probe_grafana_core_datasources() {
+  probe_called=$(( probe_called + 1 ))
+  return 0
+}
+if check_grafana_core_datasources; then
+  fail "expected check_grafana_core_datasources to fail closed when GRAFANA_ADMIN_PASSWORD is empty"
+fi
+[[ "${probe_called}" -eq 0 ]] || fail "expected missing GRAFANA_ADMIN_PASSWORD not to fall back to probe"
+if grep -q 'change_me_grafana_password' "${guard_script}"; then
+  fail "steady_state_guard.sh must not contain change_me_grafana_password fallback"
+fi
+
+# Test 9: query_grafana_datasource_by_uid passes credentials via stdin curl -K - rather than -u argv
+curl_argv_log="${workdir}/curl-argv.log"
+curl_stdin_log="${workdir}/curl-stdin.log"
+compose() {
+  local sub="$1"
+  shift
+  if [[ "${sub}" == "exec" && "$1" == "-T" && "$2" == "grafana" && "$3" == "curl" ]]; then
+    shift 3
+    printf '%s\n' "$*" > "${curl_argv_log}"
+    cat > "${curl_stdin_log}"
+    printf '{"uid":"prometheus"}\nHTTP_STATUS:200\n'
+    return 0
+  fi
+  return 1
+}
+uid_code="$(query_grafana_datasource_by_uid "admin" 'secret"pw\1' "prometheus")"
+[[ "${uid_code}" == "200" ]] || fail "expected 200 status from curl -K - stub, got ${uid_code}"
+grep -qF -- '-K -' "${curl_argv_log}" || fail "expected curl to read config from stdin (-K -)"
+if grep -qE '(^| )-u( |$)|secret' "${curl_argv_log}"; then
+  fail "curl command line must never contain -u or raw Grafana credentials"
+fi
+grep -qxF 'user = "admin:secret\"pw\\1"' "${curl_stdin_log}" || fail "expected escaped user config in curl stdin"
+
+# Test 10: deploy_lock_is_active inspects .deploy.lock/pid via kill -0
+DEPLOY_LOCK_DIR="${workdir}/deploy.lock"
+DEPLOY_LOCK_TTL_SECONDS=21600
+mkdir -p "${DEPLOY_LOCK_DIR}"
+sleep 60 &
+live_pid=$!
+trap 'kill "${live_pid}" 2>/dev/null || true; rm -rf "${workdir}"' EXIT
+printf '%s\n' "${live_pid}" > "${DEPLOY_LOCK_DIR}/pid"
+deploy_lock_is_active || fail "expected live pid in .deploy.lock/pid to keep deploy lock active"
+kill "${live_pid}" 2>/dev/null || true
+wait "${live_pid}" 2>/dev/null || true
+
+printf '%s\n' "999999" > "${DEPLOY_LOCK_DIR}/pid"
+if deploy_lock_is_active; then
+  fail "expected dead pid in .deploy.lock/pid to clear stale lock immediately even within TTL"
+fi
+[[ ! -d "${DEPLOY_LOCK_DIR}" ]] || fail "expected dead pid deploy lock directory to be removed"
+
 echo "[test] homeserver guard logrotate rules passed"

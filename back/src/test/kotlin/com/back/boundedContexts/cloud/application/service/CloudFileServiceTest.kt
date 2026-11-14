@@ -604,10 +604,10 @@ class CloudFileServiceTest {
     fun `upload는 지원하는 문서 사진 동영상 시그니처를 mediaKind로 분류한다`() {
         val cases =
             listOf(
-                SignatureCase("alias.jpg", "image/jpg", byteArrayOf(0xFF.toByte(), 0xD8.toByte(), 0xFF.toByte()), CloudFileMediaKind.PHOTO),
-                SignatureCase("photo.png", "image/x-png", PNG_BYTES, CloudFileMediaKind.PHOTO),
-                SignatureCase("anim.gif", "image/gif", "GIF89a".toByteArray(), CloudFileMediaKind.PHOTO),
-                SignatureCase("asset.webp", "image/x-webp", "RIFFxxxxWEBP".toByteArray(), CloudFileMediaKind.PHOTO),
+                SignatureCase("alias.jpg", "image/jpg", validRasterImageBytes("jpg"), CloudFileMediaKind.PHOTO),
+                SignatureCase("photo.png", "image/x-png", validRasterImageBytes("png"), CloudFileMediaKind.PHOTO),
+                SignatureCase("anim.gif", "image/gif", validRasterImageBytes("gif"), CloudFileMediaKind.PHOTO),
+                SignatureCase("asset.webp", "image/x-webp", validWebpBytes(), CloudFileMediaKind.PHOTO),
                 SignatureCase("movie.mp4", null, byteArrayOf(0, 0, 0, 0, 0x66, 0x74, 0x79, 0x70, 0, 0, 0, 0), CloudFileMediaKind.VIDEO),
                 SignatureCase("clip.webm", "video/webm", byteArrayOf(0x1A, 0x45, 0xDF.toByte(), 0xA3.toByte()), CloudFileMediaKind.VIDEO),
             )
@@ -628,6 +628,112 @@ class CloudFileServiceTest {
         }
 
         assertThat(storage.uploaded).hasSize(cases.size)
+    }
+
+    @Test
+    @DisplayName("사진 업로드 시 손상된 헤더나 APNG·초대형 차원은 storage 저장 전에 차단한다")
+    fun `upload는 손상된 사진과 APNG 및 차원 초과 이미지를 storage 저장 전에 차단한다`() {
+        val maliciousPhotos =
+            listOf(
+                Triple("truncated.jpg", "image/jpeg", byteArrayOf(0xFF.toByte(), 0xD8.toByte(), 0xFF.toByte())),
+                Triple("truncated.png", "image/png", PNG_BYTES),
+                Triple("apng.png", "image/png", apngWithActlChunk(validRasterImageBytes("png"))),
+                Triple("oversized.png", "image/png", oversizedHeaderPngBytes(5000, 5000)),
+            )
+
+        maliciousPhotos.forEach { (filename, contentType, bytes) ->
+            assertThatThrownBy {
+                service.upload(
+                    ownerMemberId = 7L,
+                    originalFilename = filename,
+                    contentType = contentType,
+                    bytes = bytes,
+                    folderPath = "photos",
+                )
+            }.isInstanceOf(AppException::class.java)
+                .hasMessageContaining("지원하지 않는 이미지 형식")
+        }
+
+        assertThat(storage.uploaded).isEmpty()
+        assertThat(repository.savedFiles).isEmpty()
+    }
+
+    @Test
+    @DisplayName("클라우드 업로드와 콘텐츠 조회 시 S3 외부 I/O는 트랜잭션 밖에서 실행된다")
+    fun `upload와 openContent는 S3 외부 IO를 트랜잭션 밖에서 실행한다`() {
+        val txActiveInsideUpload = mutableListOf<Boolean>()
+        val txActiveInsideOpen = mutableListOf<Boolean>()
+        val trackingStorage =
+            object : com.back.global.storage.application.port.output.CloudStoragePort by storage {
+                override fun upload(
+                    request: com.back.global.storage.application.port.output.CloudStoragePort.UploadRequest,
+                ): com.back.global.storage.application.port.output.CloudStoragePort.UploadResult {
+                    txActiveInsideUpload.add(
+                        org.springframework.transaction.support.TransactionSynchronizationManager
+                            .isActualTransactionActive(),
+                    )
+                    return storage.upload(request)
+                }
+
+                override fun open(objectKey: String): com.back.global.storage.application.port.output.CloudStoragePort.StoredObject? {
+                    txActiveInsideOpen.add(
+                        org.springframework.transaction.support.TransactionSynchronizationManager
+                            .isActualTransactionActive(),
+                    )
+                    return storage.open(objectKey)
+                }
+            }
+        var txBeginCount = 0
+        var txCommitCount = 0
+        val trackingTxManager =
+            object : org.springframework.transaction.support.AbstractPlatformTransactionManager() {
+                override fun doGetTransaction(): Any = Any()
+
+                override fun doBegin(
+                    transaction: Any,
+                    definition: org.springframework.transaction.TransactionDefinition,
+                ) {
+                    txBeginCount++
+                }
+
+                override fun doCommit(status: org.springframework.transaction.support.DefaultTransactionStatus) {
+                    txCommitCount++
+                }
+
+                override fun doRollback(status: org.springframework.transaction.support.DefaultTransactionStatus) = Unit
+            }
+
+        val isolatedService =
+            CloudFileService(
+                cloudFileRepository = repository,
+                cloudStoragePort = trackingStorage,
+                cloudStorageProperties = CloudStorageProperties(),
+                clock = Clock.fixed(Instant.parse("2026-06-12T00:00:00Z"), ZoneOffset.UTC),
+                transactionManager = trackingTxManager,
+            )
+
+        val uploaded =
+            isolatedService.upload(
+                ownerMemberId = 7L,
+                originalFilename = "doc.pdf",
+                contentType = "application/pdf",
+                bytes = "%PDF-1.7".toByteArray(),
+                folderPath = "docs",
+            )
+        storage.objects[repository.savedFiles.single().objectKey] =
+            CloudStoragePort.StoredObject(
+                inputStream = ByteArrayInputStream("%PDF-1.7".toByteArray()),
+                contentType = "application/pdf",
+                contentLength = 8L,
+                originalFilename = "doc.pdf",
+            )
+        val content = isolatedService.openContent(ownerMemberId = 7L, fileId = uploaded.id)
+        content.storedObject.inputStream.close()
+
+        assertThat(txActiveInsideUpload).containsExactly(false)
+        assertThat(txActiveInsideOpen).containsExactly(false)
+        assertThat(txBeginCount).isEqualTo(2)
+        assertThat(txCommitCount).isEqualTo(2)
     }
 
     @Test
@@ -1452,6 +1558,65 @@ class CloudFileServiceTest {
                 }
             }
             return output.toByteArray()
+        }
+
+        private fun validRasterImageBytes(format: String): ByteArray {
+            val image = java.awt.image.BufferedImage(4, 4, java.awt.image.BufferedImage.TYPE_INT_RGB)
+            val output = ByteArrayOutputStream()
+            check(javax.imageio.ImageIO.write(image, format, output)) { "Unsupported test format: $format" }
+            return output.toByteArray()
+        }
+
+        private fun validWebpBytes(): ByteArray =
+            java.util.Base64
+                .getDecoder()
+                .decode("UklGRiQAAABXRUJQVlA4IBgAAAAwAQCdASoBAAEAAwA0JaQAA3AA/vuUAAA=")
+
+        private fun apngWithActlChunk(validPng: ByteArray): ByteArray {
+            val ihdrEnd = 8 + 4 + 4 + 13 + 4
+            val actlData = byteArrayOf(0, 0, 0, 2, 0, 0, 0, 0)
+            val crc = java.util.zip.CRC32()
+            crc.update("acTL".toByteArray(StandardCharsets.US_ASCII))
+            crc.update(actlData)
+            val crcValue = crc.value.toInt()
+            val out = ByteArrayOutputStream()
+            out.write(validPng, 0, ihdrEnd)
+            out.write(byteArrayOf(0, 0, 0, 8))
+            out.write("acTL".toByteArray(StandardCharsets.US_ASCII))
+            out.write(actlData)
+            out.write(
+                byteArrayOf(
+                    (crcValue ushr 24).toByte(),
+                    (crcValue ushr 16).toByte(),
+                    (crcValue ushr 8).toByte(),
+                    crcValue.toByte(),
+                ),
+            )
+            out.write(validPng, ihdrEnd, validPng.size - ihdrEnd)
+            return out.toByteArray()
+        }
+
+        private fun oversizedHeaderPngBytes(
+            width: Int,
+            height: Int,
+        ): ByteArray {
+            val bytes = validRasterImageBytes("png").copyOf()
+            bytes[16] = (width ushr 24).toByte()
+            bytes[17] = (width ushr 16).toByte()
+            bytes[18] = (width ushr 8).toByte()
+            bytes[19] = width.toByte()
+            bytes[20] = (height ushr 24).toByte()
+            bytes[21] = (height ushr 16).toByte()
+            bytes[22] = (height ushr 8).toByte()
+            bytes[23] = height.toByte()
+            val crc = java.util.zip.CRC32()
+            crc.update(bytes, 12, 17)
+            val crcValue = crc.value.toInt()
+            bytes[29] = (crcValue ushr 24).toByte()
+            bytes[30] = (crcValue ushr 16).toByte()
+            bytes[31] = (crcValue ushr 8).toByte()
+            bytes[32] = crcValue.toByte()
+            return bytes
         }
 
         private fun cloudFile(

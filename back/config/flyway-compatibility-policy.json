@@ -55,6 +55,10 @@
     {
       "file": "back/src/main/resources/db/migration/V20260923_02__normalize_post_columns.sql",
       "class": "EXPAND_SAFE"
+    },
+    {
+      "file": "back/src/main/resources/db/migration/V20261114_01__add_missing_operational_indexes_concurrently.sql",
+      "class": "EXPAND_SAFE"
     }
   ],
   "cutovers": [

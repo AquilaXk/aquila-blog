@@ -144,7 +144,8 @@ object HtmlContentSanitizer {
         }
 
         val sanitized = body.html().trim()
-        return sanitized.ifBlank { null }
+        if (sanitized.isBlank() || sanitized.length > MAX_RAW_HTML_LENGTH) return null
+        return sanitized
     }
 
     fun sanitizeForPersistence(rawHtml: String?): ContentHtmlTrustResult {

@@ -285,4 +285,43 @@ class HtmlContentSanitizerTest {
         assertThat(storedVerification.contentHtmlTrustState).isEqualTo(ContentHtmlTrustState.REJECTED)
         assertThat(storedVerification.contentHtml).isNull()
     }
+
+    @Test
+    @DisplayName("입력 길이는 상한 이하이나 정제 직렬화 시 상한을 초과하는 HTML은 저장 단계에서 일관되게 거부한다")
+    fun rejectsSerializationExpandedHtmlExceedingMaxLength() {
+        val expandingHtml = "<a target=_blank href=/x>x</a>".repeat(15_000)
+        assertThat(expandingHtml.length).isLessThanOrEqualTo(HtmlContentSanitizer.MAX_RAW_HTML_LENGTH)
+
+        assertThat(HtmlContentSanitizer.sanitizeRichHtmlOrNull(expandingHtml)).isNull()
+
+        val persisted = HtmlContentSanitizer.sanitizeForPersistence(expandingHtml)
+        assertThat(persisted.contentHtml).isNull()
+        assertThat(persisted.contentHtmlHash).isNull()
+        assertThat(persisted.contentHtmlSanitizerPolicyVersion).isEqualTo(HtmlContentSanitizer.CURRENT_POLICY_VERSION)
+        assertThat(persisted.contentHtmlTrustState).isEqualTo(ContentHtmlTrustState.REJECTED)
+
+        val verified =
+            HtmlContentSanitizer.verifyStored(
+                contentHtml = persisted.contentHtml,
+                contentHtmlHash = persisted.contentHtmlHash,
+                contentHtmlSanitizerPolicyVersion = persisted.contentHtmlSanitizerPolicyVersion,
+                contentHtmlTrustState = persisted.contentHtmlTrustState,
+            )
+        assertThat(verified.contentHtmlTrustState).isEqualTo(ContentHtmlTrustState.REJECTED)
+        assertThat(verified.contentHtml).isNull()
+
+        val withinSerializedLimitHtml = "<a target=_blank href=/x>x</a>".repeat(8_000)
+        val withinPersisted = HtmlContentSanitizer.sanitizeForPersistence(withinSerializedLimitHtml)
+        assertThat(withinPersisted.contentHtmlTrustState).isEqualTo(ContentHtmlTrustState.TRUSTED_CURRENT)
+        assertThat(requireNotNull(withinPersisted.contentHtml).length)
+            .isLessThanOrEqualTo(HtmlContentSanitizer.MAX_RAW_HTML_LENGTH)
+        val withinVerified =
+            HtmlContentSanitizer.verifyStored(
+                contentHtml = withinPersisted.contentHtml,
+                contentHtmlHash = withinPersisted.contentHtmlHash,
+                contentHtmlSanitizerPolicyVersion = withinPersisted.contentHtmlSanitizerPolicyVersion,
+                contentHtmlTrustState = withinPersisted.contentHtmlTrustState,
+            )
+        assertThat(withinVerified).isEqualTo(withinPersisted)
+    }
 }

@@ -1,6 +1,7 @@
 package com.back.global.util
 
 import com.back.boundedContexts.cloud.application.service.metadataEncodedLength
+import com.back.boundedContexts.cloud.application.service.normalizeFilename
 import com.back.boundedContexts.cloud.application.service.takeMetadataEncodedBytes
 import com.back.boundedContexts.member.domain.shared.Member
 import com.back.boundedContexts.member.domain.shared.memberMixin.MemberProfileWorkspaceContent
@@ -69,28 +70,80 @@ class LowLevelOptimizationParityTest {
     }
 
     @Test
-    fun `CloudUploadSupport metadataEncodedLength and takeMetadataEncodedBytes match URLEncoder UTF-8 byte bounds`() {
+    fun `WeakEtagDigestWriter isolates its buffer from nested sha256Hex and sibling writers on the same thread`() {
+        val hex = HexFormat.of()
+        val outer = Utf8ChunkDigest.newWeakEtagWriter()
+        outer.appendAscii("feed|page=1|")
+
+        val nestedPayload = "중첩 호출 버퍼 오염 검증 payload"
+        val nestedSha = Utf8ChunkDigest.sha256Hex(nestedPayload)
+        assertThat(nestedSha).isEqualTo(
+            hex.formatHex(MessageDigest.getInstance("SHA-256").digest(nestedPayload.toByteArray(StandardCharsets.UTF_8))),
+        )
+
+        val sibling = Utf8ChunkDigest.newWeakEtagWriter()
+        val siblingEtag =
+            sibling
+                .appendAscii("other|writer|seed")
+                .finishWeakEtag()
+
+        val outerEtag =
+            outer
+                .appendUtf8("kw=한글")
+                .appendChar('|')
+                .appendLong(42L)
+                .finishWeakEtag()
+
+        val expectedSiblingHash = MessageDigest.getInstance("SHA-256").digest("other|writer|seed".toByteArray(StandardCharsets.UTF_8))
+        val expectedOuterHash = MessageDigest.getInstance("SHA-256").digest("feed|page=1|kw=한글|42".toByteArray(StandardCharsets.UTF_8))
+        assertThat(siblingEtag).isEqualTo("W/\"${hex.formatHex(expectedSiblingHash, 0, 16)}\"")
+        assertThat(outerEtag).isEqualTo("W/\"${hex.formatHex(expectedOuterHash, 0, 16)}\"")
+    }
+
+    @Test
+    fun `CloudUploadSupport metadataEncodedLength and takeMetadataEncodedBytes match S3 percent-20 UTF-8 byte bounds`() {
+        val allAscii = (0..127).map { it.toChar() }.joinToString("")
         val samples =
             listOf(
                 "",
+                allAscii,
                 "simple-file_01.txt*",
                 "공백 포함 파일 이름.png",
-                "한글과 emoji \uD83D\uDE80 섞인 이름 (v2)!@#",
+                "한글과 emoji \uD83D\uDE80 섞인 이름 (v2)!@#+~",
                 "   ___---...***   ",
                 "a".repeat(250) + "가".repeat(60) + "\uD83D\uDE00".repeat(20),
             )
         for (sample in samples) {
-            val encodedBytes = URLEncoder.encode(sample, StandardCharsets.UTF_8).toByteArray(StandardCharsets.UTF_8).size
+            val encodedBytes =
+                URLEncoder
+                    .encode(sample, StandardCharsets.UTF_8)
+                    .replace("+", "%20")
+                    .toByteArray(StandardCharsets.US_ASCII)
+                    .size
             assertThat(metadataEncodedLength(sample)).isEqualTo(encodedBytes)
 
             for (budget in listOf(0, 1, 5, 11, 12, 30, 1024)) {
                 val truncated = sample.takeMetadataEncodedBytes(budget)
                 val truncatedEncodedBytes =
-                    URLEncoder.encode(truncated, StandardCharsets.UTF_8).toByteArray(StandardCharsets.UTF_8).size
+                    URLEncoder
+                        .encode(truncated, StandardCharsets.UTF_8)
+                        .replace("+", "%20")
+                        .toByteArray(StandardCharsets.US_ASCII)
+                        .size
                 assertThat(truncatedEncodedBytes).isLessThanOrEqualTo(budget)
                 assertThat(sample.startsWith(truncated)).isTrue()
             }
         }
+
+        val normalizedSpacedHangul = normalizeFilename("가 ".repeat(100) + ".pdf", "cloud-file")
+        val normalizedS3Bytes =
+            URLEncoder
+                .encode(normalizedSpacedHangul, StandardCharsets.UTF_8)
+                .replace("+", "%20")
+                .toByteArray(StandardCharsets.US_ASCII)
+                .size
+        assertThat(normalizedS3Bytes).isLessThanOrEqualTo(1024)
+        assertThat(normalizedSpacedHangul).endsWith(".pdf")
     }
 
     @Test

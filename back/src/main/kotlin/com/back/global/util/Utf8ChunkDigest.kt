@@ -4,8 +4,9 @@ import java.security.MessageDigest
 import java.util.HexFormat
 
 /**
- * Low-level streaming UTF-8 and decimal ASCII SHA-256 digest helper backed by a 256B ThreadLocal
- * scratch buffer to eliminate full-document `toByteArray(UTF_8)` and multi-KB ETag string copies.
+ * Low-level streaming UTF-8 and decimal ASCII SHA-256 digest helper backed by 256B scratch buffers
+ * (`ThreadLocal` for one-shot [sha256Hex] and per-writer buffer for [WeakEtagDigestWriter]) to
+ * eliminate full-document `toByteArray(UTF_8)` and multi-KB ETag string copies without reentrancy hazard.
  */
 object Utf8ChunkDigest {
     private const val SCRATCH_BUFFER_SIZE = 256
@@ -31,7 +32,7 @@ object Utf8ChunkDigest {
 
     class WeakEtagDigestWriter internal constructor() {
         private val digest = MessageDigest.getInstance("SHA-256")
-        private val buffer = SCRATCH_BUFFER.get()
+        private val buffer = ByteArray(SCRATCH_BUFFER_SIZE)
         private var pos = 0
 
         fun appendAscii(value: String): WeakEtagDigestWriter {

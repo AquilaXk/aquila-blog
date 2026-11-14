@@ -49,18 +49,12 @@ class PostReadCacheInvalidator(
         }
 
         // targetSorts에 해당하는 ranked 정렬 엔트리만 제거해 CREATED_AT, 기본 BOOTSTRAP, SEARCH_NEGATIVE 캐시를 보존한다.
-        listOf(
-            PostQueryCacheNames.FEED,
-            PostQueryCacheNames.FEED_CURSOR_FIRST,
-            PostQueryCacheNames.BOOTSTRAP,
-            PostQueryCacheNames.EXPLORE,
-            PostQueryCacheNames.EXPLORE_CURSOR_FIRST,
-            PostQueryCacheNames.SEARCH,
-        ).forEach { cacheName ->
+        RANKED_SORT_CACHE_SHAPES.forEach { (cacheName, sortAtKeyTail) ->
             evictCacheByTargetSorts(
                 cache = cacheManager.getCache(cacheName),
                 cacheName = cacheName,
                 targetSorts = targetSorts,
+                sortAtKeyTail = sortAtKeyTail,
                 evictReason = evictReason,
             )
         }
@@ -70,6 +64,7 @@ class PostReadCacheInvalidator(
         cache: Cache?,
         cacheName: String,
         targetSorts: List<PostSearchSortType1>,
+        sortAtKeyTail: Boolean,
         evictReason: String,
     ) {
         if (cache == null) return
@@ -78,7 +73,7 @@ class PostReadCacheInvalidator(
             val iterator = native.keys.iterator()
             while (iterator.hasNext()) {
                 val rawKey = iterator.next()?.toString() ?: continue
-                if (matchesTargetSort(rawKey, targetSorts)) {
+                if (matchesTargetSort(rawKey, targetSorts, sortAtKeyTail)) {
                     iterator.remove()
                     recordCacheEvict(cacheName, "key", evictReason)
                 }
@@ -88,8 +83,14 @@ class PostReadCacheInvalidator(
         if (cache is RedisCache && native is RedisCacheWriter) {
             val keyPrefix = cache.cacheConfiguration.getKeyPrefixFor(cacheName)
             targetSorts.forEach { sort ->
-                native.clean(cacheName, "$keyPrefix*:sort=${sort.name}".toByteArray(StandardCharsets.UTF_8))
-                native.clean(cacheName, "$keyPrefix*:sort=${sort.name}:*".toByteArray(StandardCharsets.UTF_8))
+                val pattern =
+                    if (sortAtKeyTail) {
+                        "$keyPrefix*:sort=${sort.name}"
+                    } else {
+                        "$keyPrefix*:sort=${sort.name}:*"
+                    }
+                @Suppress("DEPRECATION")
+                native.clean(cacheName, pattern.toByteArray(StandardCharsets.UTF_8))
                 recordCacheEvict(cacheName, "pattern", evictReason)
             }
             return
@@ -101,10 +102,14 @@ class PostReadCacheInvalidator(
     private fun matchesTargetSort(
         rawKey: String,
         targetSorts: List<PostSearchSortType1>,
+        sortAtKeyTail: Boolean,
     ): Boolean =
         targetSorts.any { sort ->
-            val suffix = ":sort=${sort.name}"
-            rawKey.endsWith(suffix) || rawKey.contains("$suffix:")
+            if (sortAtKeyTail) {
+                rawKey.endsWith(":sort=${sort.name}")
+            } else {
+                rawKey.contains(":sort=${sort.name}:")
+            }
         }
 
     internal fun invalidatePublicDetailCounters(
@@ -185,18 +190,6 @@ class PostReadCacheInvalidator(
 
     private fun PostReadCacheInvalidationRequest.evicts(target: PostReadCacheInvalidationTarget): Boolean = scope.evicts(target)
 
-    private fun clearRankedInteractionExploreAndSearchCaches(evictReason: String) {
-        listOf(
-            PostQueryCacheNames.EXPLORE,
-            PostQueryCacheNames.EXPLORE_CURSOR_FIRST,
-            PostQueryCacheNames.SEARCH,
-            PostQueryCacheNames.SEARCH_NEGATIVE,
-        ).forEach { cacheName ->
-            cacheManager.getCache(cacheName)?.clear()
-            recordCacheEvict(cacheName, "clear", evictReason)
-        }
-    }
-
     private fun evictHotAndSearchFirstPages(
         includeHotReadPages: Boolean,
         includeSearchFirstPage: Boolean,
@@ -268,5 +261,17 @@ class PostReadCacheInvalidator(
             ?.counter("post.read.cache.write.failure", "cache", cacheName, "operation", operation)
             ?.increment()
         logger.warn("Cache write failed (cache={}, operation={})", cacheName, operation, exception)
+    }
+
+    private companion object {
+        private val RANKED_SORT_CACHE_SHAPES =
+            listOf(
+                PostQueryCacheNames.FEED to true,
+                PostQueryCacheNames.FEED_CURSOR_FIRST to true,
+                PostQueryCacheNames.BOOTSTRAP to false,
+                PostQueryCacheNames.EXPLORE to false,
+                PostQueryCacheNames.EXPLORE_CURSOR_FIRST to false,
+                PostQueryCacheNames.SEARCH to false,
+            )
     }
 }

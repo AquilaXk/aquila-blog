@@ -6,6 +6,8 @@ import org.assertj.core.api.Assertions.assertThat
 import org.assertj.core.api.Assertions.assertThatThrownBy
 import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Test
+import org.mockito.ArgumentMatchers
+import org.mockito.Mockito.doAnswer
 import org.mockito.Mockito.doThrow
 import org.mockito.Mockito.mock
 import org.mockito.Mockito.verify
@@ -13,6 +15,11 @@ import org.mockito.Mockito.`when`
 import org.springframework.cache.Cache
 import org.springframework.cache.CacheManager
 import org.springframework.cache.concurrent.ConcurrentMapCacheManager
+import org.springframework.data.redis.cache.RedisCacheConfiguration
+import org.springframework.data.redis.cache.RedisCacheManager
+import org.springframework.data.redis.cache.RedisCacheWriter
+import java.nio.charset.StandardCharsets
+import java.time.Duration
 
 @DisplayName("PostReadCacheInvalidator 테스트")
 class PostReadCacheInvalidatorTest {
@@ -396,6 +403,79 @@ class PostReadCacheInvalidatorTest {
         assertThat(get(PostQueryCacheNames.FEED, "page=1:size=30:sort=CREATED_AT")).isEqualTo("cached")
         assertThat(get(PostQueryCacheNames.EXPLORE, "page=1:size=30:sort=LIKES_COUNT:kw=_:tag=spring")).isNull()
         assertThat(get(PostQueryCacheNames.SEARCH_NEGATIVE, "page=1:size=30:sort=LIKES_COUNT:kw=missing")).isEqualTo("cached")
+    }
+
+    @Test
+    @DisplayName("RedisCache ranked sort 무효화는 캐시별 키 형식에 맞는 단일 패턴만 clean 호출한다")
+    @Suppress("DEPRECATION")
+    fun invalidateRankedSortHotPagesUsesSingleShapeMatchedPatternPerRedisCache() {
+        val store = LinkedHashMap<String, ByteArray>()
+        val cleanedPatterns = mutableListOf<Pair<String, String>>()
+        val redisWriter = mock(RedisCacheWriter::class.java)
+        doAnswer { invocation ->
+            val key = String(invocation.getArgument<ByteArray>(1), StandardCharsets.UTF_8)
+            store[key] = invocation.getArgument(2)
+            null
+        }.`when`(redisWriter).put(
+            ArgumentMatchers.anyString(),
+            ArgumentMatchers.any(ByteArray::class.java),
+            ArgumentMatchers.any(ByteArray::class.java),
+            ArgumentMatchers.nullable(Duration::class.java),
+        )
+        doAnswer { invocation ->
+            val cacheName = invocation.getArgument<String>(0)
+            val pattern = String(invocation.getArgument<ByteArray>(1), StandardCharsets.UTF_8)
+            cleanedPatterns += cacheName to pattern
+            val regex = Regex("^" + pattern.split('*').joinToString(".*", transform = Regex::escape) + "$")
+            store.keys.removeIf { regex.matches(it) }
+            null
+        }.`when`(redisWriter).clean(
+            ArgumentMatchers.anyString(),
+            ArgumentMatchers.any(ByteArray::class.java),
+        )
+
+        val redisCacheManager =
+            RedisCacheManager
+                .builder(redisWriter)
+                .cacheDefaults(RedisCacheConfiguration.defaultCacheConfig())
+                .build()
+        val redisInvalidator = PostReadCacheInvalidator(redisCacheManager, SimpleMeterRegistry())
+
+        redisCacheManager.getCache(PostQueryCacheNames.FEED)!!.put("page=1:size=30:sort=CREATED_AT", "v")
+        redisCacheManager.getCache(PostQueryCacheNames.FEED)!!.put("page=2:size=30:sort=HIT_COUNT", "v")
+        redisCacheManager.getCache(PostQueryCacheNames.FEED_CURSOR_FIRST)!!.put("size=30:sort=CREATED_AT", "v")
+        redisCacheManager.getCache(PostQueryCacheNames.FEED_CURSOR_FIRST)!!.put("size=30:sort=HIT_COUNT", "v")
+        redisCacheManager.getCache(PostQueryCacheNames.BOOTSTRAP)!!.put(
+            PostPublicReadQueryService.buildBootstrapCacheKey(30, PostSearchSortType1.CREATED_AT, ""),
+            "v",
+        )
+        redisCacheManager.getCache(PostQueryCacheNames.BOOTSTRAP)!!.put(
+            PostPublicReadQueryService.buildBootstrapCacheKey(30, PostSearchSortType1.HIT_COUNT, "Kotlin"),
+            "v",
+        )
+        redisCacheManager.getCache(PostQueryCacheNames.EXPLORE)!!.put("page=1:size=30:sort=HIT_COUNT:kw=_:tag=kotlin", "v")
+        redisCacheManager.getCache(PostQueryCacheNames.EXPLORE)!!.put("page=1:size=30:sort=LIKES_COUNT:kw=_:tag=kotlin", "v")
+        redisCacheManager.getCache(PostQueryCacheNames.EXPLORE_CURSOR_FIRST)!!.put("size=30:sort=HIT_COUNT:tag=kotlin", "v")
+        redisCacheManager.getCache(PostQueryCacheNames.SEARCH)!!.put("page=1:size=30:sort=HIT_COUNT:kw=kotlin", "v")
+        redisCacheManager.getCache(PostQueryCacheNames.SEARCH_NEGATIVE)!!.put("page=1:size=30:sort=HIT_COUNT:kw=missing", "v")
+
+        redisInvalidator.invalidateRankedSortHotPages("hit", listOf(PostSearchSortType1.HIT_COUNT))
+
+        assertThat(cleanedPatterns).containsExactly(
+            PostQueryCacheNames.FEED to "${PostQueryCacheNames.FEED}::*:sort=HIT_COUNT",
+            PostQueryCacheNames.FEED_CURSOR_FIRST to "${PostQueryCacheNames.FEED_CURSOR_FIRST}::*:sort=HIT_COUNT",
+            PostQueryCacheNames.BOOTSTRAP to "${PostQueryCacheNames.BOOTSTRAP}::*:sort=HIT_COUNT:*",
+            PostQueryCacheNames.EXPLORE to "${PostQueryCacheNames.EXPLORE}::*:sort=HIT_COUNT:*",
+            PostQueryCacheNames.EXPLORE_CURSOR_FIRST to "${PostQueryCacheNames.EXPLORE_CURSOR_FIRST}::*:sort=HIT_COUNT:*",
+            PostQueryCacheNames.SEARCH to "${PostQueryCacheNames.SEARCH}::*:sort=HIT_COUNT:*",
+        )
+        assertThat(store.keys).containsExactly(
+            "${PostQueryCacheNames.FEED}::page=1:size=30:sort=CREATED_AT",
+            "${PostQueryCacheNames.FEED_CURSOR_FIRST}::size=30:sort=CREATED_AT",
+            "${PostQueryCacheNames.BOOTSTRAP}::size=30:sort=CREATED_AT:tag=_",
+            "${PostQueryCacheNames.EXPLORE}::page=1:size=30:sort=LIKES_COUNT:kw=_:tag=kotlin",
+            "${PostQueryCacheNames.SEARCH_NEGATIVE}::page=1:size=30:sort=HIT_COUNT:kw=missing",
+        )
     }
 
     @Test

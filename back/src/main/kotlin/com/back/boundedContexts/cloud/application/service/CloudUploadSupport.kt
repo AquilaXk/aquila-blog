@@ -318,7 +318,7 @@ private fun buildMask(
     return mask
 }
 
-private val UNENCODED_LOW_MASK: Long = buildMask(48..57, chars = " *-.")
+private val UNENCODED_LOW_MASK: Long = buildMask(48..57, chars = "*-.")
 private val UNENCODED_HIGH_MASK: Long = buildMask((65 - 64)..(90 - 64), (97 - 64)..(122 - 64), chars = "_")
 
 internal fun String.takeMetadataEncodedBytes(maxEncodedBytes: Int): String {

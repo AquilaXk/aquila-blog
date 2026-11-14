@@ -4,6 +4,7 @@ import com.back.boundedContexts.member.application.port.input.ProfileImageReadUs
 import com.back.boundedContexts.post.adapter.storage.PostImageStorageAdapter
 import com.back.boundedContexts.post.application.port.output.PostImageStoragePort
 import com.back.boundedContexts.post.application.port.output.PostRepositoryPort
+import com.back.boundedContexts.post.application.service.PostImageReadAccessService
 import com.back.global.exception.application.AppException
 import com.back.global.storage.application.UploadedFileRetentionService
 import com.back.global.storage.application.port.output.UploadedFileRepositoryPort
@@ -171,9 +172,12 @@ class PostImageRangeAndSecurityHeaderTest {
                         override val maxFileSizeBytes = 10_485_760L
                     },
                 uploadedFileRetentionService = mock(UploadedFileRetentionService::class.java),
-                uploadedFileRepository = uploadedFileRepository,
-                profileImageReadUseCase = mock(ProfileImageReadUseCase::class.java),
-                postRepository = postRepository,
+                postImageReadAccessUseCase =
+                    PostImageReadAccessService(
+                        uploadedFileRepository = uploadedFileRepository,
+                        postRepository = postRepository,
+                        profileImageReadUseCase = mock(ProfileImageReadUseCase::class.java),
+                    ),
             )
 
         assertThatThrownBy {

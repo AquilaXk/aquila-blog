@@ -12,6 +12,7 @@ import com.back.boundedContexts.post.domain.PostWriteRequestIdempotency
 import com.back.boundedContexts.post.dto.AdmDeletedPostDto
 import com.back.boundedContexts.post.dto.AdmDeletedPostSnapshotDto
 import com.back.boundedContexts.post.dto.PostDto
+import com.back.boundedContexts.post.dto.PostInteractionReadStateDto
 import com.back.boundedContexts.post.dto.PostPreviewExtractor
 import com.back.boundedContexts.post.dto.PublicPostDetailContentCacheDto
 import com.back.boundedContexts.post.dto.TagCountDto
@@ -188,6 +189,8 @@ class PostApplicationService(
             }
 
     override fun findPublicDetailContentById(id: Long): PublicPostDetailContentCacheDto? = postRepository.findPublicDetailContentById(id)
+
+    override fun findInteractionReadStateById(id: Long): PostInteractionReadStateDto? = postRepository.findInteractionReadStateById(id)
 
     override fun isPublicDetailReadable(id: Long): Boolean = postRepository.isPublicDetailReadable(id)
 
@@ -893,6 +896,8 @@ class PostApplicationService(
         }
 
     override fun isTempDraft(post: Post): Boolean = postTempDraftService.isTempDraft(post)
+
+    override fun resolveTempDraftPostIds(posts: List<Post>): Set<Long> = postTempDraftService.resolveTempDraftPostIds(posts)
 
     private fun resolveLifecycleCacheInvalidationScope(
         published: Boolean,

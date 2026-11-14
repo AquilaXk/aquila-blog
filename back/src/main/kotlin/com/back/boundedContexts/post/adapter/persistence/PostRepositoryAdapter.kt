@@ -7,6 +7,7 @@ import com.back.boundedContexts.post.domain.Post
 import com.back.boundedContexts.post.domain.PostAttr
 import com.back.boundedContexts.post.dto.AdmDeletedPostDto
 import com.back.boundedContexts.post.dto.AdmDeletedPostSnapshotDto
+import com.back.boundedContexts.post.dto.PostInteractionReadStateDto
 import com.back.boundedContexts.post.dto.PublicPostDetailContentCacheDto
 import org.springframework.data.domain.PageRequest
 import org.springframework.data.domain.Sort
@@ -30,6 +31,8 @@ class PostRepositoryAdapter(
     override fun flush() = postRepository.flush()
 
     override fun findById(id: Long): Optional<Post> = postRepository.findById(id)
+
+    override fun existsById(id: Long): Boolean = postRepository.existsById(id)
 
     override fun findFirstByOrderByIdDesc(): Post? = postRepository.findFirstByOrderByIdDesc()
 
@@ -108,6 +111,8 @@ class PostRepositoryAdapter(
     override fun isPublicDetailReadable(id: Long): Boolean = postRepository.existsByIdAndPublishedTrue(id)
 
     override fun findPublicDetailContentById(id: Long): PublicPostDetailContentCacheDto? = postRepository.findPublicDetailContentById(id)
+
+    override fun findInteractionReadStateById(id: Long): PostInteractionReadStateDto? = postRepository.findInteractionReadStateById(id)
 
     override fun existsByIdAndContentContaining(
         id: Long,

@@ -18,15 +18,49 @@ object Utf8ChunkDigest {
     private val FALSE_BYTES = "false".toByteArray(Charsets.US_ASCII)
     private val NULL_BYTES = "null".toByteArray(Charsets.US_ASCII)
 
-    fun sha256Hex(value: CharSequence): String {
+    class Digest128 internal constructor(
+        val highBits: Long,
+        val lowBits: Long,
+    ) {
+        fun stripeIndex(stripeMask: Int): Int = highBits.toInt() and stripeMask
+
+        override fun equals(other: Any?): Boolean = other is Digest128 && highBits == other.highBits && lowBits == other.lowBits
+
+        override fun hashCode(): Int = (highBits xor (highBits ushr 32) xor lowBits xor (lowBits ushr 32)).toInt()
+    }
+
+    fun sha256Hex(value: CharSequence): String = HEX_FORMAT.formatHex(sha256Bytes(value))
+
+    fun sha256Digest128(value: CharSequence): Digest128 {
+        val bytes = sha256Bytes(value)
+        return Digest128(
+            highBits = packBigEndianLong(bytes, 0),
+            lowBits = packBigEndianLong(bytes, 8),
+        )
+    }
+
+    private fun sha256Bytes(value: CharSequence): ByteArray {
         val digest = MessageDigest.getInstance("SHA-256")
         val buffer = SCRATCH_BUFFER.get()
         val finalPos = encodeUtf8Range(digest, value, 0, value.length, buffer, 0)
         if (finalPos > 0) {
             digest.update(buffer, 0, finalPos)
         }
-        return HEX_FORMAT.formatHex(digest.digest())
+        return digest.digest()
     }
+
+    private fun packBigEndianLong(
+        bytes: ByteArray,
+        offset: Int,
+    ): Long =
+        ((bytes[offset].toLong() and 0xFFL) shl 56) or
+            ((bytes[offset + 1].toLong() and 0xFFL) shl 48) or
+            ((bytes[offset + 2].toLong() and 0xFFL) shl 40) or
+            ((bytes[offset + 3].toLong() and 0xFFL) shl 32) or
+            ((bytes[offset + 4].toLong() and 0xFFL) shl 24) or
+            ((bytes[offset + 5].toLong() and 0xFFL) shl 16) or
+            ((bytes[offset + 6].toLong() and 0xFFL) shl 8) or
+            (bytes[offset + 7].toLong() and 0xFFL)
 
     fun newWeakEtagWriter(): WeakEtagDigestWriter = WeakEtagDigestWriter()
 

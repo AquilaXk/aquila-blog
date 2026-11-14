@@ -169,7 +169,7 @@ class TaskProcessingScheduledJob(
 
     @Scheduled(fixedDelayString = "\${custom.task.processor.fixedDelayMs}")
     // Queue polling is short-lived; keeping the orphan lock window tight avoids multi-hour ready backlog stalls.
-    @SchedulerLock(name = "processTasks", lockAtLeastFor = "PT1M", lockAtMostFor = "PT2M")
+    @SchedulerLock(name = "processTasks", lockAtLeastFor = "PT1S", lockAtMostFor = "PT2M")
     fun processTasks() {
         lifecycleLock.lock()
         try {
@@ -189,14 +189,19 @@ class TaskProcessingScheduledJob(
         recoverStaleProcessingTasks(safeBatchSize)
         refreshPerTypeDynamicLimitsIfNeeded()
 
-        val availableWorkerSlots = resolveAvailableWorkerSlots()
+        var cachedReadyBacklog: Long? = null
+        val readyBacklogProvider = {
+            cachedReadyBacklog ?: countReadyBacklog().also { cachedReadyBacklog = it }
+        }
+
+        val availableWorkerSlots = resolveAvailableWorkerSlots(readyBacklogProvider)
         if (availableWorkerSlots <= 0) {
             queueAvailable.set(1)
             logger.debug("Skip polling tasks because no worker slot is available")
             return
         }
 
-        val fetchLimit = resolveFetchLimit(safeBatchSize, availableWorkerSlots)
+        val fetchLimit = resolveFetchLimit(safeBatchSize, availableWorkerSlots, readyBacklogProvider)
         queueAvailable.set(1)
         meterRegistry?.summary("task.processor.fetch.limit")?.record(fetchLimit.toDouble())
         val dispatchSlots =
@@ -277,9 +282,9 @@ class TaskProcessingScheduledJob(
         return currentInFlight + projectedInFlight < maxAllowed
     }
 
-    private fun resolveAvailableWorkerSlots(): Int {
+    private fun resolveAvailableWorkerSlots(readyBacklogProvider: () -> Long): Int {
         val activeWorkers = (workerConcurrency - concurrencyGate.availablePermits()).coerceAtLeast(0)
-        return concurrencyPolicy.availableWorkerSlots(activeWorkers) { countReadyBacklog() }
+        return concurrencyPolicy.availableWorkerSlots(activeWorkers, readyBacklogProvider)
     }
 
     private fun countReadyBacklog(): Long = taskRepository.countByStatusAndNextRetryAtLessThanEqual(TaskStatus.PENDING, Instant.now(clock))
@@ -294,14 +299,14 @@ class TaskProcessingScheduledJob(
     private fun resolveFetchLimit(
         safeBatchSize: Int,
         availableWorkerSlots: Int,
+        readyBacklogProvider: () -> Long,
     ): Int =
         concurrencyPolicy.fetchLimit(
             safeBatchSize = safeBatchSize,
             availableWorkerSlots = availableWorkerSlots,
             recentHandlerDurationMs = recentHandlerDurationMs.get(),
-        ) {
-            countReadyBacklog()
-        }
+            readyBacklog = readyBacklogProvider,
+        )
 
     private fun tryAcquirePerTypePermit(taskType: String): Boolean {
         val maxAllowed = resolvePerTypeLimit(taskType)

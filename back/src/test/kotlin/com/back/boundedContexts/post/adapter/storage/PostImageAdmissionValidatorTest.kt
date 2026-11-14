@@ -248,6 +248,18 @@ class PostImageAdmissionValidatorTest {
             .hasMessageContaining("400-1")
     }
 
+    @Test
+    @DisplayName("custom Semaphore 생성자와 normalizePostMediaContentType 헬퍼가 정상 동작한다")
+    fun supportsCustomSemaphoreAndMimeNormalization() {
+        val customValidator = PostImageAdmissionValidator(java.util.concurrent.Semaphore(1))
+        withUpload(createImage("png"), "custom-sem.png") { path ->
+            val validated = customValidator.validate(path, "image/x-png")
+            assertThat(validated.contentType).isEqualTo("image/png")
+        }
+        assertThat(normalizePostMediaContentType("image/jpg; charset=utf-8")).isEqualTo("image/jpeg")
+        assertThat(normalizePostMediaContentType(null)).isNull()
+    }
+
     private fun withUpload(
         bytes: ByteArray,
         name: String,

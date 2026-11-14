@@ -5,10 +5,42 @@ import com.back.global.task.domain.TaskStatus
 import org.springframework.data.domain.Pageable
 import java.time.Instant
 
+data class TaskTypeStatusAggregate(
+    val taskType: String,
+    val status: TaskStatus,
+    val count: Long,
+    val oldestModifiedAt: Instant?,
+)
+
+data class TaskTypeReadyAggregate(
+    val taskType: String,
+    val count: Long,
+    val oldestReadyAt: Instant?,
+)
+
+data class TaskTypeCountAggregate(
+    val taskType: String,
+    val count: Long,
+)
+
 interface TaskQueueRepositoryPort {
     fun save(task: Task): Task
 
-    fun saveAllTasks(tasks: Collection<Task>): List<Task> = tasks.map(::save)
+    fun saveAllTasks(tasks: Collection<Task>): List<Task>
+
+    fun summarizeCountsByTaskTypeAndStatus(): List<TaskTypeStatusAggregate>
+
+    fun summarizeReadyPendingByTaskType(
+        status: TaskStatus,
+        now: Instant,
+    ): List<TaskTypeReadyAggregate>
+
+    fun countStaleProcessingByTaskType(
+        status: TaskStatus,
+        modifiedAt: Instant,
+    ): List<TaskTypeCountAggregate>
+
+    fun findLatestFailedTasksByTaskType(): List<Task>
 
     fun countByStatus(status: TaskStatus): Long
 

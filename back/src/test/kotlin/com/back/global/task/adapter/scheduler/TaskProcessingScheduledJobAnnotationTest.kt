@@ -14,7 +14,7 @@ class TaskProcessingScheduledJobAnnotationTest {
 
         assertThat(schedulerLock).isNotNull
         assertThat(schedulerLock.name).isEqualTo("processTasks")
-        assertThat(schedulerLock.lockAtLeastFor).isEqualTo("PT1M")
+        assertThat(schedulerLock.lockAtLeastFor).isEqualTo("PT1S")
         assertThat(schedulerLock.lockAtMostFor).isEqualTo("PT2M")
     }
 }

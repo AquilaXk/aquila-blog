@@ -304,7 +304,7 @@ private fun String.takeCodePoints(maxCodePoints: Long): String {
 
 private fun buildMask(
     vararg ranges: IntRange,
-    chars: String = "",
+    chars: String,
 ): Long {
     var mask = 0L
     for (range in ranges) {

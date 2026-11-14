@@ -2,6 +2,9 @@ package com.back.global.task.application
 
 import com.back.global.task.application.TaskProcessingLockDiagnosticsService.Companion.PROCESS_TASKS_LOCK_KEY
 import com.back.global.task.application.port.output.TaskQueueRepositoryPort
+import com.back.global.task.application.port.output.TaskTypeCountAggregate
+import com.back.global.task.application.port.output.TaskTypeReadyAggregate
+import com.back.global.task.application.port.output.TaskTypeStatusAggregate
 import com.back.global.task.domain.Task
 import com.back.global.task.domain.TaskStatus
 import org.junit.jupiter.api.Assertions.assertEquals
@@ -133,6 +136,22 @@ class TaskProcessingLockDiagnosticsServiceTest {
     ): TaskQueueRepositoryPort =
         object : TaskQueueRepositoryPort {
             override fun save(task: Task): Task = error("not used")
+
+            override fun saveAllTasks(tasks: Collection<Task>): List<Task> = error("not used")
+
+            override fun summarizeCountsByTaskTypeAndStatus(): List<TaskTypeStatusAggregate> = error("not used")
+
+            override fun summarizeReadyPendingByTaskType(
+                status: TaskStatus,
+                now: Instant,
+            ): List<TaskTypeReadyAggregate> = error("not used")
+
+            override fun countStaleProcessingByTaskType(
+                status: TaskStatus,
+                modifiedAt: Instant,
+            ): List<TaskTypeCountAggregate> = error("not used")
+
+            override fun findLatestFailedTasksByTaskType(): List<Task> = error("not used")
 
             override fun countByStatus(status: TaskStatus): Long =
                 when (status) {

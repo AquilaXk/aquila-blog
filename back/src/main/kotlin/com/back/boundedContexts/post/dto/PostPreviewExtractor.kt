@@ -1,18 +1,23 @@
 package com.back.boundedContexts.post.dto
 
+import com.back.global.util.StripedDigestLruCache
 import com.back.global.util.Utf8ChunkDigest
 
+/**
+ * 마크다운 본문/메타데이터에서 썸네일 이미지 URL을 추출한다.
+ *
+ * Reference implementation note: 16-stripe LRU cache partitioning (`digestHead and 15`,
+ * inspired by Apache-2.0 Guava Striped / Caffeine segments) with collision-safe 128-bit
+ * digest keys from [Utf8ChunkDigest.sha256Digest128] to reduce lock contention and
+ * eliminate per-lookup hex string allocations.
+ */
 object PostPreviewExtractor {
     internal const val MAX_CACHE_ENTRIES = 256
     private const val MAX_CACHEABLE_CONTENT_CHARS = 16_384
     private const val MAX_IMAGE_TOKEN_SCAN_CHARS = 512
     private const val NO_THUMBNAIL_SENTINEL = "__NO_THUMBNAIL__"
 
-    private val cacheLock = Any()
-    private val thumbnailCache =
-        object : LinkedHashMap<String, String>(MAX_CACHE_ENTRIES + 1, 0.75f, true) {
-            override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, String>): Boolean = size > MAX_CACHE_ENTRIES
-        }
+    private val thumbnailCache = StripedDigestLruCache<String>(MAX_CACHE_ENTRIES)
 
     private val metadataLineRegex =
         Regex(
@@ -30,17 +35,13 @@ object PostPreviewExtractor {
         if (content.length > MAX_CACHEABLE_CONTENT_CHARS) {
             return computeThumbnail(content)
         }
-        val cacheKey = cacheKeyFor(content)
-        synchronized(cacheLock) {
-            val cached = thumbnailCache[cacheKey]
-            if (cached != null) {
-                return if (cached == NO_THUMBNAIL_SENTINEL) null else cached
-            }
+        val digestKey = Utf8ChunkDigest.sha256Digest128(content)
+        val cached = thumbnailCache.get(digestKey)
+        if (cached != null) {
+            return if (cached == NO_THUMBNAIL_SENTINEL) null else cached
         }
         val result = computeThumbnail(content)
-        synchronized(cacheLock) {
-            thumbnailCache[cacheKey] = result ?: NO_THUMBNAIL_SENTINEL
-        }
+        thumbnailCache.put(digestKey, result ?: NO_THUMBNAIL_SENTINEL)
         return result
     }
 
@@ -144,15 +145,14 @@ object PostPreviewExtractor {
     }
 
     internal fun clearCache() {
-        synchronized(cacheLock) {
-            thumbnailCache.clear()
-        }
+        thumbnailCache.clear()
     }
 
-    internal fun cachedEntryCount(): Int =
-        synchronized(cacheLock) {
-            thumbnailCache.size
-        }
+    internal fun cachedEntryCount(): Int = thumbnailCache.totalSize()
+
+    internal fun stripeCount(): Int = thumbnailCache.stripeCount()
+
+    internal fun stripeEntryCounts(): IntArray = thumbnailCache.stripeSizes()
 
     internal fun cacheKeyFor(content: String): String = Utf8ChunkDigest.sha256Hex(content)
 

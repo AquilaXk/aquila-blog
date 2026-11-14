@@ -5,6 +5,7 @@ import com.back.boundedContexts.post.domain.Post
 import com.back.boundedContexts.post.domain.PostAttr
 import com.back.boundedContexts.post.dto.AdmDeletedPostDto
 import com.back.boundedContexts.post.dto.AdmDeletedPostSnapshotDto
+import com.back.boundedContexts.post.dto.PostInteractionReadStateDto
 import com.back.boundedContexts.post.dto.PublicPostDetailContentCacheDto
 import com.back.standard.dto.post.type1.PostSearchSortType1
 import java.util.Optional
@@ -72,6 +73,8 @@ interface PostRepositoryPort {
 
     fun findById(id: Long): Optional<Post>
 
+    fun existsById(id: Long): Boolean
+
     fun findFirstByOrderByIdDesc(): Post?
 
     fun existsByAuthorAndTitle(
@@ -111,6 +114,8 @@ interface PostRepositoryPort {
     fun isPublicDetailReadable(id: Long): Boolean
 
     fun findPublicDetailContentById(id: Long): PublicPostDetailContentCacheDto?
+
+    fun findInteractionReadStateById(id: Long): PostInteractionReadStateDto?
 
     fun existsByIdAndContentContaining(
         id: Long,

@@ -657,6 +657,54 @@ class PostPublicReadResponseFactoryTest {
                 body = tags,
             )
         assertThat(notModified.statusCode.value()).isEqualTo(304)
+
+        assertThat(
+            responseFactory.buildFeedPageWeakEtag(
+                source = "feed",
+                page = 0,
+                pageSize = 10,
+                sort = PostSearchSortType1.CREATED_AT,
+                data = pageOf(unicodePost),
+            ),
+        ).isNotBlank()
+        assertThat(
+            responseFactory.buildCursorFeedWeakEtag(
+                source = "feed-cursor",
+                pageSize = 10,
+                sort = PostSearchSortType1.CREATED_AT,
+                cursor = null,
+                data = cursorData,
+            ),
+        ).isNotBlank()
+        assertThat(
+            responseFactory.buildCursorFeedEtagSeed(
+                source = "feed-cursor",
+                pageSize = 10,
+                sort = PostSearchSortType1.CREATED_AT,
+                cursor = null,
+                data = cursorData,
+            ),
+        ).contains("tag=|")
+
+        val seedBuilder = PostPublicReadEtagSeedBuilder()
+        assertThat(
+            seedBuilder.buildFeedPageWeakEtag(
+                source = "feed",
+                page = 0,
+                pageSize = 10,
+                sort = PostSearchSortType1.CREATED_AT,
+                data = pageOf(unicodePost),
+            ),
+        ).isNotBlank()
+        assertThat(
+            seedBuilder.buildCursorFeedWeakEtag(
+                source = "feed-cursor",
+                pageSize = 10,
+                sort = PostSearchSortType1.CREATED_AT,
+                cursor = null,
+                data = cursorData,
+            ),
+        ).isNotBlank()
     }
 
     private fun feedPost(

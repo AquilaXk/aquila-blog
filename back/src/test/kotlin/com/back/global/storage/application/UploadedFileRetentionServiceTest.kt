@@ -849,6 +849,39 @@ class UploadedFileRetentionServiceTest : BaseUploadedFileRetentionServiceIntegra
         then(postImageStoragePort).should(never()).deletePostImage(thirdKey)
     }
 
+    @Test
+    fun `UploadedFileRepository saveAllUploadedFiles 기본 메서드가 다건 엔티티를 저장한다`() {
+        val entities =
+            listOf(
+                UploadedFile(
+                    objectKey = "posts/2026/03/save-all-1.png",
+                    bucket = TEST_BUCKET,
+                    contentType = "image/png",
+                    fileSize = 64L,
+                    purpose = UploadedFilePurpose.POST_IMAGE,
+                    ownerType = UploadedFileOwnerType.POST,
+                    ownerId = 101L,
+                    status = UploadedFileStatus.ACTIVE,
+                ),
+                UploadedFile(
+                    objectKey = "posts/2026/03/save-all-2.png",
+                    bucket = TEST_BUCKET,
+                    contentType = "image/png",
+                    fileSize = 128L,
+                    purpose = UploadedFilePurpose.POST_IMAGE,
+                    ownerType = UploadedFileOwnerType.POST,
+                    ownerId = 102L,
+                    status = UploadedFileStatus.ACTIVE,
+                ),
+            )
+
+        val saved = uploadedFileRepository.saveAllUploadedFiles(entities)
+
+        assertThat(saved).hasSize(2)
+        assertThat(uploadedFileRepository.findByObjectKey("posts/2026/03/save-all-1.png")).isNotNull
+        assertThat(uploadedFileRepository.findByObjectKey("posts/2026/03/save-all-2.png")).isNotNull
+    }
+
     private fun expireUpload(objectKey: String) {
         val uploadedFile = uploadedFileRepository.findByObjectKey(objectKey)!!
         uploadedFile.purgeAfter = Instant.now(clock).minusSeconds(60)

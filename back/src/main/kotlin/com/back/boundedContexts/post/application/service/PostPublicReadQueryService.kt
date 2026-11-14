@@ -247,16 +247,16 @@ class PostPublicReadQueryService(
     override fun getPublicPostDetail(id: Long): PostWithContentDto =
         runReadQuery("detail", "id=$id") {
             postReadBulkheadService.withDetailPermit {
-                // 캐시의 과거 공개 상태가 현재 접근 권한을 대신하지 않도록 먼저 확인한다.
-                if (!postUseCase.isPublicDetailReadable(id)) {
+                if (isDetailNegativeCached(id)) {
                     throw AppException(ErrorCode.NOT_FOUND, "존재하지 않는 글입니다.")
                 }
-                if (isDetailNegativeCached(id)) {
+                // 캐시의 과거 공개 상태가 현재 접근 권한을 대신하지 않도록 먼저 확인한다.
+                if (!postUseCase.isPublicDetailReadable(id)) {
+                    markDetailNegativeCache(id)
                     throw AppException(ErrorCode.NOT_FOUND, "존재하지 않는 글입니다.")
                 }
                 val cachedSnapshot = readCachedPublicPostDetailSnapshot(id)
                 if (cachedSnapshot != null) {
-                    clearDetailNegativeCache(id)
                     return@withDetailPermit cachedSnapshot.toPostWithContentDto()
                 }
 
@@ -265,7 +265,6 @@ class PostPublicReadQueryService(
                     val doubleChecked = snapshotCache?.get(id, PublicPostDetailSnapshotCacheDto::class.java)
                     if (doubleChecked != null) {
                         recordCacheResult(PostQueryCacheNames.DETAIL_PUBLIC_SNAPSHOT, "hit")
-                        clearDetailNegativeCache(id)
                         return@withDetailCacheLock doubleChecked.toPostWithContentDto()
                     }
 
@@ -273,7 +272,6 @@ class PostPublicReadQueryService(
                     val content = getOrLoadPublicPostDetailContent(id, loadedPost)
                     val merged = meta.merge(content)
                     cachePublicPostDetailSnapshot(snapshotCache, id, merged)
-                    clearDetailNegativeCache(id)
                     merged
                 }
             }
@@ -467,14 +465,6 @@ class PostPublicReadQueryService(
             }
         if (written) {
             recordCacheResult(PostQueryCacheNames.DETAIL_PUBLIC_NEGATIVE, "put")
-        }
-    }
-
-    private fun clearDetailNegativeCache(id: Long) {
-        recordCacheWriteFailureSafe(PostQueryCacheNames.DETAIL_PUBLIC_NEGATIVE, "evict") {
-            cacheManager
-                .getCache(PostQueryCacheNames.DETAIL_PUBLIC_NEGATIVE)
-                ?.evict(id)
         }
     }
 

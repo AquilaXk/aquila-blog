@@ -102,6 +102,10 @@ class SensitiveQueryRedactorTest {
 
         assertThat(SensitiveQueryRedactor.redactQuery("bad=%GG%26accessToken=leaked"))
             .isEqualTo("bad=%GG&accessToken=[REDACTED]")
+        assertThat(SensitiveQueryRedactor.redactQuery("note=foo%26bar=baz"))
+            .isEqualTo("note=foo%26bar=baz")
+        assertThat(SensitiveQueryRedactor.redactQuery("key_=leaked&page=1"))
+            .isEqualTo("key_=[REDACTED]&page=1")
         assertThat(SensitiveQueryRedactor.redactQuery("accessToken%3Dleaked%GG"))
             .isEqualTo("accessToken=[REDACTED]")
         assertThat(SensitiveQueryRedactor.redactQuery(null)).isEqualTo("-")

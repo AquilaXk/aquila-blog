@@ -15,7 +15,7 @@ import java.time.Instant
 @RestController
 class InternalAdminEmailReadinessController(
     private val adminEmailAuthenticationUseCase: AdminEmailAuthenticationUseCase,
-    private val clock: Clock = Clock.systemUTC(),
+    private val clock: Clock,
 ) {
     @Autowired
     constructor(

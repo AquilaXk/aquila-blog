@@ -891,6 +891,84 @@ class CustomAuthenticationFilterTest {
         }
     }
 
+    @Test
+    @DisplayName("email, name, rememberLoginEnabled, ipSecurityEnabled 클레임이 불일치하면 토큰을 재발급한다")
+    fun `apiKeyAuthorityRefreshHandler reissues token when email name rememberLogin or ipSecurity claims differ`() {
+        configureProductionUrls()
+        val apiKey = "admin-api-key"
+        val sessionKey = "admin-session-key"
+        val clientIp = "203.0.113.14"
+
+        data class ReissueMismatchCase(
+            val email: String = "admin@test.com",
+            val name: String = "aquila",
+            val rememberLoginEnabled: Boolean = true,
+            val ipSecurityEnabled: Boolean = false,
+            val expiresAt: Instant = Instant.now().minusSeconds(1),
+        )
+
+        val cases =
+            listOf(
+                ReissueMismatchCase(email = "stale@test.com", expiresAt = Instant.now().plusSeconds(300)),
+                ReissueMismatchCase(name = "old-name"),
+                ReissueMismatchCase(rememberLoginEnabled = false),
+                ReissueMismatchCase(ipSecurityEnabled = true),
+            )
+
+        cases.forEach { case ->
+            val fixture = CustomAuthenticationFilterFixture()
+            val request = MockHttpServletRequest("PUT", "/post/api/v1/posts/452")
+            val persistedAdmin = Member(54L, "internal-admin", null, "aquila", "admin@test.com", apiKey).also { it.grantAdmin() }
+            val sessionSnapshot =
+                MemberSessionAuthSnapshot(
+                    id = 16L,
+                    memberId = 54L,
+                    sessionKey = sessionKey,
+                    rememberLoginEnabled = true,
+                    ipSecurityEnabled = false,
+                    ipSecurityFingerprint = null,
+                    lastAuthenticatedAt = Instant.now(),
+                )
+            val payload =
+                AccessTokenPayload(
+                    id = 54L,
+                    sessionKey = sessionKey,
+                    username = "internal-admin",
+                    email = case.email,
+                    name = case.name,
+                    rememberLoginEnabled = case.rememberLoginEnabled,
+                    ipSecurityEnabled = case.ipSecurityEnabled,
+                    ipSecurityFingerprint = null,
+                    issuedAt = Instant.now(),
+                    expiresAt = case.expiresAt,
+                    tokenVersion = AccessTokenPayload.CURRENT_TOKEN_VERSION,
+                )
+            given(fixture.actorApplicationService.findByApiKey(apiKey)).willReturn(persistedAdmin)
+            given(fixture.memberSessionUseCase.findActiveSession(54L, sessionKey)).willReturn(activeSession(sessionSnapshot))
+            given(fixture.actorApplicationService.genAccessToken(persistedAdmin, sessionKey, true, false, null))
+                .willReturn("rotated-access-token")
+
+            try {
+                val handled =
+                    fixture.apiKeyAuthorityRefreshHandler().authenticateIfPreferred(
+                        request = request,
+                        apiKey = apiKey,
+                        payload = payload,
+                        sessionKey = sessionKey,
+                        clientIp = clientIp,
+                    )
+                assertThat(handled).isTrue()
+                verify(fixture.authCookieService).issueAccessToken(
+                    accessToken = "rotated-access-token",
+                    rememberLoginEnabled = true,
+                    sessionKey = sessionKey,
+                )
+            } finally {
+                SecurityContextHolder.clearContext()
+            }
+        }
+    }
+
     private fun configureProductionUrls() {
         AppConfig(
             siteBackUrl = "https://api.blog.aquilaxk.site",

@@ -4,6 +4,7 @@ import com.back.boundedContexts.member.domain.shared.Member
 import com.back.boundedContexts.post.application.port.input.PostHitDedupUseCase
 import com.back.boundedContexts.post.application.port.input.PostUseCase
 import com.back.boundedContexts.post.domain.Post
+import com.back.boundedContexts.post.dto.PostInteractionReadStateDto
 import com.back.global.exception.application.AppException
 import com.back.global.exception.application.ErrorCode
 import com.back.global.web.application.Rq
@@ -15,7 +16,9 @@ import org.mockito.BDDMockito.given
 import org.mockito.Mockito.doThrow
 import org.mockito.Mockito.mock
 import org.mockito.Mockito.never
+import org.mockito.Mockito.times
 import org.mockito.Mockito.verify
+import org.mockito.Mockito.verifyNoInteractions
 
 @DisplayName("ApiV1PostInteractionController 단위 테스트")
 class ApiV1PostInteractionControllerTest {
@@ -28,8 +31,8 @@ class ApiV1PostInteractionControllerTest {
     @DisplayName("좋아요 반영 중 DB 증가가 실패하면 Redis 좋아요 상태를 보상 취소하고 예외를 재전파한다")
     fun likeCompensatesRedisStateWhenIncrementLikeFails() {
         val post = publicPost(id = 10L, likesCount = 3)
+        given(postUseCase.findInteractionReadStateById(10L)).willReturn(publicState(id = 10L, likesCount = 3))
         given(postUseCase.findById(10L)).willReturn(post)
-        given(rq.hasRole("ADMIN")).willReturn(false)
         given(rq.actorOrNull).willReturn(null)
         given(rq.clientIp).willReturn("203.0.113.50")
         val expectedViewerKey = "anon:203.0.113.50"
@@ -48,8 +51,8 @@ class ApiV1PostInteractionControllerTest {
     fun unlikeCompensatesRedisStateWhenDecrementLikeFails() {
         val actor = member(id = 7L)
         val post = publicPost(id = 11L, likesCount = 4)
+        given(postUseCase.findInteractionReadStateById(11L)).willReturn(publicState(id = 11L, likesCount = 4))
         given(postUseCase.findById(11L)).willReturn(post)
-        given(rq.hasRole("ADMIN")).willReturn(false)
         given(rq.actorOrNull).willReturn(actor)
         val expectedViewerKey = "member:7"
         given(postHitDedupUseCase.unmarkLikedIfPresent(11L, expectedViewerKey)).willReturn(true)
@@ -66,8 +69,8 @@ class ApiV1PostInteractionControllerTest {
     @DisplayName("좋아요와 좋아요 취소 및 조회수는 dedup 결과에 따라 카운터 반영 여부를 결정한다")
     fun interactionsRespectDedupDecision() {
         val post = publicPost(id = 12L, likesCount = 2, hitCount = 5)
+        given(postUseCase.findInteractionReadStateById(12L)).willReturn(publicState(id = 12L, likesCount = 2, hitCount = 5))
         given(postUseCase.findById(12L)).willReturn(post)
-        given(rq.hasRole("ADMIN")).willReturn(true)
         given(rq.actorOrNull).willReturn(null)
         given(rq.clientIp).willReturn("203.0.113.51")
         val viewerKey = "anon:203.0.113.51"
@@ -87,14 +90,15 @@ class ApiV1PostInteractionControllerTest {
         assertThat(controller.unlike(12L).data).isEqualTo(PostLikeToggleResBody(liked = false, likesCount = 2))
         assertThat(controller.unlike(12L).data).isEqualTo(PostLikeToggleResBody(liked = false, likesCount = 2))
         verify(postUseCase).decrementLike(post)
+        verify(postUseCase, times(3)).findById(12L)
     }
 
     @Test
     @DisplayName("익명 viewer key는 User-Agent 변조와 무관하게 정규화 IP와 IPv6 /64 프리픽스만 사용하고 잘못된 IP는 빈 키를 반환한다")
     fun anonymousViewerKeyIgnoresUserAgentNormalizesIpv6AndRejectsInvalidIp() {
         val post = publicPost(id = 14L, likesCount = 0, hitCount = 1)
+        given(postUseCase.findInteractionReadStateById(14L)).willReturn(publicState(id = 14L, likesCount = 0, hitCount = 1))
         given(postUseCase.findById(14L)).willReturn(post)
-        given(rq.hasRole("ADMIN")).willReturn(false)
         given(rq.actorOrNull).willReturn(null)
         given(rq.clientIp).willReturn("[2001:db8:1:2:aaaa::1]:443", "2001:db8:1:2:bbbb::9", "invalid-ip")
         given(rq.userAgent).willReturn("Agent-A", "Agent-B", "Agent-C")
@@ -107,30 +111,71 @@ class ApiV1PostInteractionControllerTest {
         controller.incrementHit(14L)
 
         verify(postUseCase).incrementHit(post)
+        verify(postUseCase, times(1)).findById(14L)
         verify(postHitDedupUseCase).shouldCountHit(14L, "")
     }
 
     @Test
-    @DisplayName("비공개 글에 대해 읽기 권한이 없는 사용자의 상호작용 요청은 404 예외를 던진다")
+    @DisplayName("비공개 글에 대해 읽기 권한이 없는 사용자와 미존재 글 요청은 엔티티 로드 없이 404 예외를 던진다")
     fun privatePostRejectsUnauthorizedViewer() {
-        val privatePost =
-            Post(
-                id = 13L,
-                author = member(id = 1L),
-                title = "비공개",
-                content = "내용",
-                published = false,
-                listed = false,
-            )
-        given(postUseCase.findById(13L)).willReturn(privatePost)
+        given(postUseCase.findInteractionReadStateById(13L)).willReturn(
+            PostInteractionReadStateDto(id = 13L, authorId = 1L, published = false, hitCount = 0, likesCount = 0),
+        )
         given(rq.hasRole("ADMIN")).willReturn(false)
-        given(rq.actorOrNull).willReturn(null)
+        given(rq.actorOrNull).willReturn(null, member(id = 2L))
 
         assertThatThrownBy { controller.like(13L) }
             .isInstanceOf(AppException::class.java)
             .extracting("errorCode")
             .isEqualTo(ErrorCode.NOT_FOUND)
+        assertThatThrownBy { controller.like(13L) }
+            .isInstanceOf(AppException::class.java)
+            .extracting("errorCode")
+            .isEqualTo(ErrorCode.NOT_FOUND)
+
+        given(postUseCase.findInteractionReadStateById(999L)).willReturn(null)
+        assertThatThrownBy { controller.incrementHit(999L) }
+            .isInstanceOf(AppException::class.java)
+            .extracting("errorCode")
+            .isEqualTo(ErrorCode.NOT_FOUND)
+
+        verify(postUseCase, never()).findById(13L)
+        verify(postUseCase, never()).findById(999L)
+        verifyNoInteractions(postHitDedupUseCase)
     }
+
+    @Test
+    @DisplayName("비공개 글이라도 관리자 또는 작성자는 경량 상태 검증 후 상호작용을 수행할 수 있다")
+    fun privatePostAllowsAuthorAndAdmin() {
+        val author = member(id = 1L)
+        val privatePost = publicPost(id = 15L, hitCount = 2).apply { published = false }
+        given(postUseCase.findInteractionReadStateById(15L)).willReturn(
+            PostInteractionReadStateDto(id = 15L, authorId = 1L, published = false, hitCount = 2, likesCount = 0),
+        )
+        given(postUseCase.findById(15L)).willReturn(privatePost)
+        given(rq.hasRole("ADMIN")).willReturn(false, true)
+        given(rq.actorOrNull).willReturn(author, author, null)
+        given(rq.clientIp).willReturn("203.0.113.55")
+        given(postHitDedupUseCase.shouldCountHit(15L, "member:1")).willReturn(false)
+        given(postHitDedupUseCase.shouldCountHit(15L, "anon:203.0.113.55")).willReturn(false)
+
+        assertThat(controller.incrementHit(15L).data.hitCount).isEqualTo(2)
+        assertThat(controller.incrementHit(15L).data.hitCount).isEqualTo(2)
+        verify(postUseCase, never()).findById(15L)
+    }
+
+    private fun publicState(
+        id: Long,
+        likesCount: Int = 0,
+        hitCount: Int = 0,
+    ): PostInteractionReadStateDto =
+        PostInteractionReadStateDto(
+            id = id,
+            authorId = 1L,
+            published = true,
+            hitCount = hitCount,
+            likesCount = likesCount,
+        )
 
     private fun member(id: Long): Member =
         Member(

@@ -200,6 +200,8 @@ class TaskProcessingScheduledJobPerTypeLimitTest {
 
             assertThat(startedWorkers.get()).isEqualTo(5)
             assertThat(tasks.count { it.status == TaskStatus.PENDING }).isEqualTo(5)
+            verify(fixture.taskRepository, org.mockito.Mockito.times(1))
+                .countByStatusAndNextRetryAtLessThanEqual(pendingStatus(), anyInstant())
         } finally {
             releaseWorkers.countDown()
             fixture.job.shutdownExecutor()

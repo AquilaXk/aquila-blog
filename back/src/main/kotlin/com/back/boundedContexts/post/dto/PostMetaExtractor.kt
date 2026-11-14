@@ -1,7 +1,16 @@
 package com.back.boundedContexts.post.dto
 
+import com.back.global.util.StripedDigestLruCache
 import com.back.global.util.Utf8ChunkDigest
 
+/**
+ * 마크다운 frontmatter/상단 메타 라인에서 tags/categories를 추출한다.
+ *
+ * Reference implementation note: 16-stripe LRU cache partitioning (`digestHead and 15`,
+ * inspired by Apache-2.0 Guava Striped / Caffeine segments) with collision-safe 128-bit
+ * digest keys from [Utf8ChunkDigest.sha256Digest128] to eliminate lock contention and
+ * per-lookup hex string allocations.
+ */
 object PostMetaExtractor {
     internal const val MAX_CACHE_ENTRIES = 512
 
@@ -16,11 +25,7 @@ object PostMetaExtractor {
             categories = emptyList(),
         )
 
-    private val cacheLock = Any()
-    private val metaCache =
-        object : LinkedHashMap<String, PostMeta>(MAX_CACHE_ENTRIES + 1, 0.75f, true) {
-            override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, PostMeta>): Boolean = size > MAX_CACHE_ENTRIES
-        }
+    private val metaCache = StripedDigestLruCache<PostMeta>(MAX_CACHE_ENTRIES)
 
     private val metadataLineRegex =
         Regex(
@@ -30,27 +35,22 @@ object PostMetaExtractor {
 
     fun extract(content: String): PostMeta {
         val metadataBlock = extractMetadataBlock(content) ?: return EMPTY_META
-        val cacheKey = cacheKeyFor(metadataBlock)
-        synchronized(cacheLock) {
-            metaCache[cacheKey]?.let { return it }
-        }
+        val digestKey = Utf8ChunkDigest.sha256Digest128(metadataBlock)
+        metaCache.get(digestKey)?.let { return it }
         val computed = buildMeta(metadataBlock)
-        synchronized(cacheLock) {
-            metaCache[cacheKey] = computed
-        }
+        metaCache.put(digestKey, computed)
         return computed
     }
 
     internal fun clearCache() {
-        synchronized(cacheLock) {
-            metaCache.clear()
-        }
+        metaCache.clear()
     }
 
-    internal fun cachedEntryCount(): Int =
-        synchronized(cacheLock) {
-            metaCache.size
-        }
+    internal fun cachedEntryCount(): Int = metaCache.totalSize()
+
+    internal fun stripeCount(): Int = metaCache.stripeCount()
+
+    internal fun stripeEntryCounts(): IntArray = metaCache.stripeSizes()
 
     internal fun cacheKeyFor(metadataBlock: String): String = Utf8ChunkDigest.sha256Hex(metadataBlock)
 

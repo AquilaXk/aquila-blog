@@ -3,6 +3,9 @@ package com.back.global.task.adapter.persistence
 import com.back.global.task.application.port.output.TaskDlqReplayRepositoryPort
 import com.back.global.task.application.port.output.TaskQueueRepositoryPort
 import com.back.global.task.application.port.output.TaskRetentionRepositoryPort
+import com.back.global.task.application.port.output.TaskTypeCountAggregate
+import com.back.global.task.application.port.output.TaskTypeReadyAggregate
+import com.back.global.task.application.port.output.TaskTypeStatusAggregate
 import com.back.global.task.domain.Task
 import com.back.global.task.domain.TaskStatus
 import org.springframework.data.domain.Pageable
@@ -103,6 +106,66 @@ interface TaskRepository :
         now: Instant,
         limit: Int,
     ): List<Task>
+
+    @Query(
+        """
+        SELECT new com.back.global.task.application.port.output.TaskTypeStatusAggregate(
+            t.taskType,
+            t.status,
+            COUNT(t),
+            MIN(t.modifiedAt)
+        )
+        FROM Task t
+        GROUP BY t.taskType, t.status
+        """,
+    )
+    override fun summarizeCountsByTaskTypeAndStatus(): List<TaskTypeStatusAggregate>
+
+    @Query(
+        """
+        SELECT new com.back.global.task.application.port.output.TaskTypeReadyAggregate(
+            t.taskType,
+            COUNT(t),
+            MIN(t.nextRetryAt)
+        )
+        FROM Task t
+        WHERE t.status = :status
+          AND t.nextRetryAt <= :now
+        GROUP BY t.taskType
+        """,
+    )
+    override fun summarizeReadyPendingByTaskType(
+        status: TaskStatus,
+        now: Instant,
+    ): List<TaskTypeReadyAggregate>
+
+    @Query(
+        """
+        SELECT new com.back.global.task.application.port.output.TaskTypeCountAggregate(
+            t.taskType,
+            COUNT(t)
+        )
+        FROM Task t
+        WHERE t.status = :status
+          AND t.modifiedAt < :modifiedAt
+        GROUP BY t.taskType
+        """,
+    )
+    override fun countStaleProcessingByTaskType(
+        status: TaskStatus,
+        modifiedAt: Instant,
+    ): List<TaskTypeCountAggregate>
+
+    @Query(
+        value = """
+            SELECT DISTINCT ON (task_type) *
+            FROM task
+            WHERE status = 'FAILED'
+            ORDER BY task_type ASC, modified_at DESC, id DESC
+        """,
+        nativeQuery = true,
+    )
+    override fun findLatestFailedTasksByTaskType(): List<Task>
 
     override fun countByStatus(status: TaskStatus): Long
 

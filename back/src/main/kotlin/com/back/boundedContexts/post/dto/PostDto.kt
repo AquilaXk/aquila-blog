@@ -2,6 +2,8 @@ package com.back.boundedContexts.post.dto
 
 import com.back.boundedContexts.post.domain.Post
 import com.back.boundedContexts.post.model.PostSummarySource
+import com.back.standard.dto.page.PageDto
+import com.back.standard.dto.page.PagedResult
 import com.fasterxml.jackson.annotation.JsonCreator
 import java.time.Instant
 
@@ -66,4 +68,18 @@ data class PostDto
         ) : this(post, thumbnail, PostMetaExtractor.extract(post.content))
 
         fun forEventLog() = copy(title = "", summary = "")
+
+        companion object {
+            fun toAdminPageDto(
+                postPage: PagedResult<Post>,
+                tempDraftPostIds: Set<Long>,
+            ): PageDto<PostDto> =
+                PageDto(
+                    postPage.map { post ->
+                        PostDto(post).apply {
+                            tempDraft = post.id in tempDraftPostIds
+                        }
+                    },
+                )
+        }
     }

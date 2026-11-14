@@ -53,6 +53,42 @@ class PostTempDraftService(
 
     fun isTempDraft(post: Post): Boolean = post.isTempDraft || resolveTrackedTempPostId(post.author) == post.id
 
+    fun resolveTempDraftPostIds(posts: List<Post>): Set<Long> {
+        if (posts.isEmpty()) return emptySet()
+        val result = HashSet<Long>(posts.size)
+        val fallbackAuthors = LinkedHashMap<Long, Member>()
+        val pendingCheckPosts = ArrayList<Post>(posts.size)
+        for (post in posts) {
+            if (post.isTempDraft) {
+                result.add(post.id)
+            } else {
+                pendingCheckPosts.add(post)
+                fallbackAuthors.putIfAbsent(post.author.id, post.author)
+            }
+        }
+        if (pendingCheckPosts.isEmpty()) {
+            return result
+        }
+        val trackedPostIdByAuthorId = HashMap<Long, Long>(fallbackAuthors.size * 2)
+        val attrs =
+            memberAttrRepository.findBySubjectInAndNameIn(
+                fallbackAuthors.values.toList(),
+                listOf(activeTempDraftPostIdAttrName),
+            )
+        for (attr in attrs) {
+            val trackedPostId = parseTrackedPostId(attr.strValue)
+            if (trackedPostId != null) {
+                trackedPostIdByAuthorId[attr.subject.id] = trackedPostId
+            }
+        }
+        for (post in pendingCheckPosts) {
+            if (trackedPostIdByAuthorId[post.author.id] == post.id) {
+                result.add(post.id)
+            }
+        }
+        return result
+    }
+
     fun updateTempDraftMarker(
         author: Member,
         postId: Long?,
@@ -71,12 +107,9 @@ class PostTempDraftService(
     }
 
     private fun resolveTrackedTempPostId(author: Member): Long? =
-        memberAttrRepository
-            .findBySubjectAndName(author, activeTempDraftPostIdAttrName)
-            ?.strValue
-            ?.trim()
-            ?.takeIf { it.isNotBlank() }
-            ?.toLongOrNull()
+        parseTrackedPostId(memberAttrRepository.findBySubjectAndName(author, activeTempDraftPostIdAttrName)?.strValue)
+
+    private fun parseTrackedPostId(raw: String?): Long? = raw?.trim()?.takeIf { it.isNotEmpty() }?.toLongOrNull()
 
     private fun acquireTempDraftAuthorLock(author: Member): Member {
         val repo = memberRepository ?: return author

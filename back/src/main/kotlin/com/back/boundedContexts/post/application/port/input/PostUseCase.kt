@@ -3,6 +3,7 @@ package com.back.boundedContexts.post.application.port.input
 import com.back.boundedContexts.member.domain.shared.Member
 import com.back.boundedContexts.post.domain.Post
 import com.back.boundedContexts.post.dto.AdmDeletedPostDto
+import com.back.boundedContexts.post.dto.PostInteractionReadStateDto
 import com.back.boundedContexts.post.dto.PublicPostDetailContentCacheDto
 import com.back.boundedContexts.post.dto.TagCountDto
 import com.back.boundedContexts.post.model.PostSummaryMode
@@ -33,6 +34,8 @@ interface PostUseCase {
     fun isPublicDetailReadable(id: Long): Boolean
 
     fun findPublicDetailContentById(id: Long): PublicPostDetailContentCacheDto?
+
+    fun findInteractionReadStateById(id: Long): PostInteractionReadStateDto?
 
     fun findLatest(): Post?
 
@@ -134,4 +137,6 @@ interface PostUseCase {
     fun getOrCreateTemp(author: Member): Pair<Post, Boolean>
 
     fun isTempDraft(post: Post): Boolean
+
+    fun resolveTempDraftPostIds(posts: List<Post>): Set<Long>
 }

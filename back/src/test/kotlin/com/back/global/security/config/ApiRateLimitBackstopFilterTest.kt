@@ -12,6 +12,9 @@ import org.assertj.core.api.Assertions.assertThat
 import org.assertj.core.api.Assertions.assertThatThrownBy
 import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Test
+import org.mockito.Mockito.spy
+import org.mockito.Mockito.times
+import org.mockito.Mockito.verify
 import org.springframework.beans.factory.NoSuchBeanDefinitionException
 import org.springframework.beans.factory.ObjectProvider
 import org.springframework.mock.env.MockEnvironment
@@ -423,6 +426,39 @@ class ApiRateLimitBackstopFilterTest {
         assertThat(runFilter(filter, "HEAD", "/member/api/v1/auth/me").status).isEqualTo(HttpServletResponse.SC_OK)
         assertThat(runFilter(filter, "GET", "/post/api/v1/adm/posts").status).isEqualTo(429)
         assertThat(runFilter(filter, "GET", "/post/api/v1/posts/feed").status).isEqualTo(HttpServletResponse.SC_OK)
+    }
+
+    @Test
+    @DisplayName("shouldNotFilter에서 판정한 bucket을 재사용해 doFilterInternal에서 중복 경로 매칭을 실행하지 않는다")
+    fun `shouldNotFilter caches resolved bucket so publicApiRequestMatcher runs once per request`() {
+        val redis = InMemoryRedisKeyValuePort()
+        val matcherSpy = spy(TestPublicApiRequestMatchers.defaultMatcher())
+        val filter =
+            ApiRateLimitBackstopFilter(
+                redisKeyValuePortProvider = objectProvider(redis, RedisKeyValuePort::class.java),
+                clientIpResolverProvider = objectProvider(ClientIpResolver(), ClientIpResolver::class.java),
+                meterRegistryProvider = objectProvider(SimpleMeterRegistry(), MeterRegistry::class.java),
+                errorResponseWriter = ErrorResponseWriterTestSupport.createWriter(),
+                environment = MockEnvironment().apply { setActiveProfiles("test") },
+                publicApiRequestMatcher = matcherSpy,
+            )
+
+        val request =
+            MockHttpServletRequest("GET", "/post/api/v1/posts/feed").apply {
+                remoteAddr = "172.19.0.2"
+                addHeader("CF-Connecting-IP", "203.0.113.10")
+            }
+        val response = MockHttpServletResponse()
+        filter.doFilter(request, response, MockFilterChain())
+
+        assertThat(response.status).isEqualTo(HttpServletResponse.SC_OK)
+        verify(matcherSpy, times(1)).isPublicReadSafe("GET", "/post/api/v1/posts/feed")
+
+        val uncachedRequest = MockHttpServletRequest("GET", "/post/api/v1/posts/feed")
+        assertThat(filter.resolveRequestBucket(uncachedRequest).name).isEqualTo("public-read")
+        assertThatThrownBy {
+            filter.resolveRequestBucket(MockHttpServletRequest("OPTIONS", "/post/api/v1/posts/feed"))
+        }.isInstanceOf(IllegalStateException::class.java)
     }
 
     private fun createFilter(

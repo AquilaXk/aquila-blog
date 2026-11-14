@@ -70,6 +70,33 @@ class PostMetaExtractorTest {
     }
 
     @Test
+    fun `16-stripe LRU 캐시는 엔트리를 분산 저장하고 스트라이프별 상한을 유지한다`() {
+        assertThat(PostMetaExtractor.stripeCount()).isEqualTo(16)
+
+        repeat(640) { idx ->
+            val doc =
+                """
+                ---
+                tags: [tag$idx, common]
+                categories: [cat${idx % 4}]
+                ---
+
+                body $idx
+                """.trimIndent()
+            val meta = PostMetaExtractor.extract(doc)
+            assertThat(meta.tags).containsExactly("tag$idx", "common")
+        }
+
+        val stripeCounts = PostMetaExtractor.stripeEntryCounts().toList()
+        assertThat(stripeCounts).hasSize(16)
+        assertThat(stripeCounts.count { it > 0 }).isGreaterThan(8)
+        assertThat(stripeCounts).allSatisfy { count ->
+            assertThat(count).isLessThanOrEqualTo(PostMetaExtractor.MAX_CACHE_ENTRIES / 16)
+        }
+        assertThat(PostMetaExtractor.cachedEntryCount()).isLessThanOrEqualTo(PostMetaExtractor.MAX_CACHE_ENTRIES)
+    }
+
+    @Test
     fun `동일 길이와 동일 32비트 hashCode 를 가진 서로 다른 front matter 도 충돌 없이 각각의 메타를 반환한다`() {
         val firstContent =
             """
@@ -151,7 +178,8 @@ class PostMetaExtractorTest {
         for (index in 1..PostMetaExtractor.MAX_CACHE_ENTRIES) {
             PostMetaExtractor.extract("tags: [warm-$index]\n\n본문")
         }
-        assertThat(PostMetaExtractor.cachedEntryCount()).isEqualTo(PostMetaExtractor.MAX_CACHE_ENTRIES)
+        assertThat(PostMetaExtractor.cachedEntryCount())
+            .isBetween(PostMetaExtractor.MAX_CACHE_ENTRIES / 2, PostMetaExtractor.MAX_CACHE_ENTRIES)
 
         val burstThreads = 16
         val startLatch = CountDownLatch(1)

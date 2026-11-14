@@ -3,6 +3,7 @@ package com.back.boundedContexts.post.application.service
 import com.back.boundedContexts.post.domain.Post
 import com.back.boundedContexts.post.dto.PostMetaExtractor
 import com.back.global.system.application.SearchRuntimeControlQueryService
+import com.back.global.util.TokenBitmaskMatcher
 import com.back.standard.dto.page.PagedResult
 import com.back.standard.dto.post.type1.PostSearchSortType1
 import io.micrometer.core.instrument.MeterRegistry
@@ -30,6 +31,11 @@ import kotlin.math.max
 /**
  * PostKeywordSearchPipelineService는 공개 검색(kw) 랭킹 파이프라인을 전담한다.
  * weighted A/B + shadow-read 비교 + 즉시 롤백(force-control) 플래그를 제공한다.
+ *
+ * Reference implementation note: multi-needle 32-bit bitmask single-pass ASCII case-folding
+ * token scanner inspired by Bitap / shift-or text search algorithms (Apache-2.0 style
+ * multi-pattern lookup tables) with per-post signal precomputation shared across primary
+ * and shadow ranking profiles.
  */
 @Service
 class PostKeywordSearchPipelineService(
@@ -91,10 +97,12 @@ class PostKeywordSearchPipelineService(
         val score: Double,
     )
 
-    private data class SearchSignals(
-        val title: String,
-        val content: String,
-        val tags: List<String>,
+    private data class CandidateSignals(
+        val post: Post,
+        val titleHitCount: Int,
+        val tagHitCount: Int,
+        val contentHitCount: Int,
+        val freshnessTier: Double,
     )
 
     private enum class SearchProfile {
@@ -171,12 +179,14 @@ class PostKeywordSearchPipelineService(
 
         val normalizedKeyword = keyword.trim().lowercase()
         val tokens = buildKeywordTokens(normalizedKeyword)
-        val signalsByPostId = candidates.associate { post -> post.id to buildSignals(post) }
+        val tokenMaskChunks = TokenBitmaskMatcher.compile(tokens)
+        val now = Instant.now()
+        val candidateSignals = candidates.map { post -> buildCandidateSignals(post, tokenMaskChunks, now) }
         val assignedProfile = resolveAssignedProfile(normalizedKeyword)
         val servedRanked =
             when (assignedProfile) {
-                SearchProfile.CONTROL -> rankWithProfile(candidates, signalsByPostId, tokens, controlWeights)
-                SearchProfile.VARIANT -> rankWithProfile(candidates, signalsByPostId, tokens, variantWeights)
+                SearchProfile.CONTROL -> rankWithProfile(candidateSignals, controlWeights)
+                SearchProfile.VARIANT -> rankWithProfile(candidateSignals, variantWeights)
             }
         meterRegistry?.counter("post.search.pipeline.assignment", "profile", assignedProfile.name.lowercase())?.increment()
 
@@ -186,7 +196,7 @@ class PostKeywordSearchPipelineService(
                     SearchProfile.CONTROL -> variantWeights
                     SearchProfile.VARIANT -> controlWeights
                 }
-            val shadowRanked = rankWithProfile(candidates, signalsByPostId, tokens, shadowWeights)
+            val shadowRanked = rankWithProfile(candidateSignals, shadowWeights)
             val primaryPostIds = servedRanked.take(compareTopN).map { it.post.id }
             compareShadowOverlap(
                 source = "internal-ab",
@@ -241,7 +251,11 @@ class PostKeywordSearchPipelineService(
         }.filter { it.isNotBlank() }
     }
 
-    private fun buildSignals(post: Post): SearchSignals {
+    private fun buildCandidateSignals(
+        post: Post,
+        tokenMaskChunks: Array<TokenBitmaskMatcher.MaskChunk>,
+        now: Instant,
+    ): CandidateSignals {
         val extractedTags =
             PostMetaExtractor
                 .extract(post.content)
@@ -251,49 +265,6 @@ class PostKeywordSearchPipelineService(
                 .filter(String::isNotBlank)
                 .distinct()
                 .toList()
-        return SearchSignals(
-            title = post.title,
-            content = post.content,
-            tags = extractedTags,
-        )
-    }
-
-    private fun rankWithProfile(
-        candidates: List<Post>,
-        signalsByPostId: Map<Long, SearchSignals>,
-        tokens: List<String>,
-        weights: SearchWeights,
-    ): List<RankedPost> {
-        val now = Instant.now()
-        return candidates
-            .asSequence()
-            .map { post ->
-                val signals = signalsByPostId[post.id] ?: buildSignals(post)
-                val score = score(post, signals, tokens, weights, now)
-                RankedPost(post, score)
-            }.sortedWith(
-                compareByDescending<RankedPost> { it.score }
-                    .thenByDescending { it.post.createdAt }
-                    .thenByDescending { it.post.id },
-            ).toList()
-    }
-
-    private fun score(
-        post: Post,
-        signals: SearchSignals,
-        tokens: List<String>,
-        weights: SearchWeights,
-        now: Instant,
-    ): Double {
-        var titleHitCount = 0
-        var tagHitCount = 0
-        var contentHitCount = 0
-        for (token in tokens) {
-            if (signals.title.contains(token, ignoreCase = true)) titleHitCount += 1
-            if (signals.tags.any { tag -> tag.contains(token, ignoreCase = true) }) tagHitCount += 1
-            if (signals.content.contains(token, ignoreCase = true)) contentHitCount += 1
-        }
-
         val ageHours = Duration.between(post.createdAt, now).toHours().coerceAtLeast(0)
         val freshnessTier =
             when {
@@ -303,12 +274,33 @@ class PostKeywordSearchPipelineService(
                 ageHours <= 168 -> 6.0
                 else -> 2.0
             }
-
-        return (titleHitCount * weights.titleWeight) +
-            (tagHitCount * weights.tagWeight) +
-            (contentHitCount * weights.contentWeight) +
-            (freshnessTier * weights.freshnessWeight)
+        return CandidateSignals(
+            post = post,
+            titleHitCount = TokenBitmaskMatcher.countMatched(post.title, tokenMaskChunks),
+            tagHitCount = TokenBitmaskMatcher.countMatchedAcross(extractedTags, tokenMaskChunks),
+            contentHitCount = TokenBitmaskMatcher.countMatched(post.content, tokenMaskChunks),
+            freshnessTier = freshnessTier,
+        )
     }
+
+    private fun rankWithProfile(
+        candidateSignals: List<CandidateSignals>,
+        weights: SearchWeights,
+    ): List<RankedPost> =
+        candidateSignals
+            .asSequence()
+            .map { signals ->
+                val score =
+                    (signals.titleHitCount * weights.titleWeight) +
+                        (signals.tagHitCount * weights.tagWeight) +
+                        (signals.contentHitCount * weights.contentWeight) +
+                        (signals.freshnessTier * weights.freshnessWeight)
+                RankedPost(signals.post, score)
+            }.sortedWith(
+                compareByDescending<RankedPost> { it.score }
+                    .thenByDescending { it.post.createdAt }
+                    .thenByDescending { it.post.id },
+            ).toList()
 
     private fun compareShadowOverlap(
         source: String,
@@ -466,6 +458,11 @@ class PostKeywordSearchPipelineService(
                 },
                 ThreadPoolExecutor.AbortPolicy(),
             )
+
+        internal fun countMatchingTokensSinglePass(
+            text: CharSequence,
+            tokens: List<String>,
+        ): Int = TokenBitmaskMatcher.countMatched(text, TokenBitmaskMatcher.compile(tokens))
 
         private fun sharedHttpClient(connectTimeoutMs: Long): HttpClient =
             SHARED_HTTP_CLIENTS.computeIfAbsent(connectTimeoutMs) { timeoutMs ->

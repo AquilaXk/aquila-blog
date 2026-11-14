@@ -238,7 +238,7 @@ class PostImageStorageAdapter(
 
         return PostImageStoragePort.StoredObjectListing(
             objects = objects,
-            isTruncated = hasMore && objects.size >= safeLimit,
+            isTruncated = hasMore,
         )
     }
 

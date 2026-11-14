@@ -1,11 +1,9 @@
 package com.back.global.security.application
 
+import com.back.global.util.Utf8ChunkDigest
 import org.jsoup.Jsoup
 import org.jsoup.safety.Cleaner
 import org.jsoup.safety.Safelist
-import java.nio.charset.StandardCharsets
-import java.security.MessageDigest
-import java.util.HexFormat
 
 enum class ContentHtmlTrustState {
     TRUSTED_CURRENT,
@@ -197,12 +195,7 @@ object HtmlContentSanitizer {
             }
         }
 
-    fun sha256Utf8(value: String): String =
-        HexFormat.of().formatHex(
-            MessageDigest
-                .getInstance("SHA-256")
-                .digest(value.toByteArray(StandardCharsets.UTF_8)),
-        )
+    fun sha256Utf8(value: String): String = Utf8ChunkDigest.sha256Hex(value)
 
     private fun unknown(): ContentHtmlTrustResult = ContentHtmlTrustResult(null, null, null, ContentHtmlTrustState.UNKNOWN)
 }

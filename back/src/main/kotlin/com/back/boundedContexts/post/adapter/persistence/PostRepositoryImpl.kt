@@ -3,13 +3,16 @@ package com.back.boundedContexts.post.adapter.persistence
 import com.back.boundedContexts.member.domain.shared.Member
 import com.back.boundedContexts.post.domain.Post
 import com.back.boundedContexts.post.domain.PostAttr
+import com.back.boundedContexts.post.dto.PostInteractionReadStateDto
 import com.back.boundedContexts.post.dto.PublicPostDetailContentCacheDto
+import com.back.boundedContexts.post.model.PostSummarySource
 import com.back.boundedContexts.post.model.QPost.post
 import com.back.boundedContexts.post.model.QPostTagIndex.postTagIndex
 import com.back.global.security.application.ContentHtmlTrustState
 import com.back.standard.dto.post.type1.PostSearchSortType1
 import com.back.standard.util.QueryDslUtil
 import com.querydsl.core.BooleanBuilder
+import com.querydsl.core.Tuple
 import com.querydsl.core.types.dsl.BooleanExpression
 import com.querydsl.core.types.dsl.Expressions
 import com.querydsl.core.types.dsl.NumberExpression
@@ -89,15 +92,12 @@ class PostRepositoryImpl(
 
         excludePostId?.takeIf { it > 0L }?.let { builder.and(post.id.ne(it)) }
 
-        return queryFactory
-            .selectDistinct(post)
-            .from(post)
-            .leftJoin(post.author)
-            .fetchJoin()
+        return selectSummaryPostQuery()
             .where(builder)
             .orderBy(post.createdAt.desc(), post.id.desc())
             .limit(safeLimit.toLong())
             .fetch()
+            .map(::toSummaryPost)
     }
 
     override fun findPublicDetailById(id: Long): Post? =
@@ -133,6 +133,27 @@ class PostRepositoryImpl(
                     contentHtmlHash = tuple.get(post.contentHtmlHash),
                     contentHtmlSanitizerPolicyVersion = tuple.get(post.contentHtmlSanitizerPolicyVersion),
                     contentHtmlTrustState = tuple.get(post.contentHtmlTrustState) ?: ContentHtmlTrustState.UNKNOWN,
+                )
+            }
+
+    override fun findInteractionReadStateById(id: Long): PostInteractionReadStateDto? =
+        queryFactory
+            .select(
+                post.id,
+                post.author.id,
+                post.published,
+                post.hitCount,
+                post.likesCount,
+            ).from(post)
+            .where(post.id.eq(id))
+            .fetchOne()
+            ?.let { tuple ->
+                PostInteractionReadStateDto(
+                    id = tuple.get(post.id)!!,
+                    authorId = tuple.get(post.author.id)!!,
+                    published = tuple.get(post.published)!!,
+                    hitCount = tuple.get(post.hitCount)!!,
+                    likesCount = tuple.get(post.likesCount)!!,
                 )
             }
 
@@ -367,6 +388,7 @@ class PostRepositoryImpl(
         } else {
             QueryDslUtil.applySorting(idQuery, pageable) { property ->
                 when (property) {
+                    "id" -> post.id
                     "createdAt" -> post.createdAt
                     "modifiedAt" -> post.modifiedAt
                     "authorName" -> post.author.nickname
@@ -374,7 +396,12 @@ class PostRepositoryImpl(
                 }
             }
 
-            if (pageable.sort.isEmpty) idQuery.orderBy(post.id.desc())
+            if (pageable.sort.isEmpty) {
+                idQuery.orderBy(post.id.desc())
+            } else if (pageable.sort.none { it.property == "id" }) {
+                val primaryAscending = pageable.sort.firstOrNull()?.isAscending == true
+                idQuery.orderBy(if (primaryAscending) post.id.asc() else post.id.desc())
+            }
         }
 
         return idQuery
@@ -397,13 +424,10 @@ class PostRepositoryImpl(
         if (ids.isEmpty()) return emptyList()
 
         val rows =
-            queryFactory
-                .selectDistinct(post)
-                .from(post)
-                .leftJoin(post.author)
-                .fetchJoin()
+            selectSummaryPostQuery()
                 .where(post.id.`in`(ids))
                 .fetch()
+                .map(::toSummaryPost)
 
         if (rows.size <= 1) return rows
 
@@ -411,20 +435,72 @@ class PostRepositoryImpl(
         return rows.sortedBy { row -> orderById[row.id] ?: Int.MAX_VALUE }
     }
 
+    private fun selectSummaryPostQuery(): JPAQuery<Tuple> =
+        queryFactory
+            .select(
+                post.id,
+                post.createdAt,
+                post.modifiedAt,
+                post.title,
+                post.content,
+                post.version,
+                post.published,
+                post.listed,
+                post.summaryText,
+                post.summarySource,
+                post.summaryContentHash,
+                post.summaryAlgorithmVersion,
+                post.summaryGeneratedAt,
+                post.thumbnail,
+                post.isTempDraft,
+                post.likesCount,
+                post.hitCount,
+                post.author,
+            ).from(post)
+            .leftJoin(post.author)
+
+    private fun toSummaryPost(tuple: Tuple): Post {
+        val loadedAuthor = tuple.get(post.author)!!
+        val loadedCreatedAt = tuple.get(post.createdAt)
+        val loadedModifiedAt = tuple.get(post.modifiedAt)
+        return Post(
+            id = tuple.get(post.id)!!,
+            author = loadedAuthor,
+            title = tuple.get(post.title)!!,
+            content = tuple.get(post.content)!!,
+            version = tuple.get(post.version),
+            published = tuple.get(post.published)!!,
+            listed = tuple.get(post.listed)!!,
+            contentHtml = null,
+            summaryText = tuple.get(post.summaryText),
+            summarySource = tuple.get(post.summarySource) ?: PostSummarySource.NONE,
+            summaryContentHash = tuple.get(post.summaryContentHash),
+            summaryAlgorithmVersion = tuple.get(post.summaryAlgorithmVersion),
+            summaryGeneratedAt = tuple.get(post.summaryGeneratedAt),
+            thumbnail = tuple.get(post.thumbnail),
+            isTempDraft = tuple.get(post.isTempDraft)!!,
+            likesCount = tuple.get(post.likesCount)!!,
+            hitCount = tuple.get(post.hitCount)!!,
+        ).apply {
+            loadedCreatedAt?.let { createdAt = it }
+            loadedModifiedAt?.let { modifiedAt = it }
+        }
+    }
+
     private fun createCountQuery(builder: BooleanBuilder): JPAQuery<Long> =
         queryFactory
-            .select(post.id.countDistinct())
+            .select(post.id.count())
             .from(post)
             .where(builder)
 
     /**
-     * 공개 목록은 countDistinct 비용이 커서 모든 페이지에서 추정 total을 사용한다.
+     * 공개 목록은 count 비용이 커서 모든 페이지에서 추정 total을 사용한다.
      * 마지막 페이지 판단은 `fetchedSize < pageSize`이면 확정하고, 그 외에는 다음 페이지 존재 가능성을 1건으로 표현한다.
      */
     private fun shouldSkipCountQuery(publicOnly: Boolean): Boolean = publicOnly
 
     /**
-     * Velog의 검색 랭킹 전략(제목 우선 + 보조 신호)을 반영해
+     * 참조 블로그의 검색 랭킹 전략(제목 우선 + 보조 신호)을 반영해
      * title > tags(post_tag_index) > content 순서로 점수를 부여한다.
      * 멀티 토큰 검색은 exact phrase와 token hit를 함께 반영해 후보 풀이 recency로 과도하게 쏠리지 않게 유지한다.
      */

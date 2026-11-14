@@ -45,7 +45,7 @@ interface PostImageStoragePort {
     fun getPostImage(
         objectKey: String,
         range: LongRange?,
-    ): StoredObject? = getPostImage(objectKey)
+    ): StoredObject?
 
     fun deletePostImage(objectKey: String)
 

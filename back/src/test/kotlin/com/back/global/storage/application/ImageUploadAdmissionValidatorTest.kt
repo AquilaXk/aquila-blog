@@ -152,6 +152,133 @@ class ImageUploadAdmissionValidatorTest {
             .isInstanceOf(AppException::class.java)
     }
 
+    @Test
+    @DisplayName("동시성 Semaphore 타임아웃과 인터럽트, 리더 불일치, 손상된 PNG 스트림 경계를 fail-closed 거부한다")
+    fun `rejects concurrency exhaustion interrupts mismatched readers and truncated png streams`() {
+        val validPng = rasterBytes("png", 2, 2)
+        val validPngPath = tempDir.resolve("valid.png")
+        Files.write(validPngPath, validPng)
+
+        val timeoutSemaphore =
+            object : Semaphore(1) {
+                override fun tryAcquire(
+                    timeout: Long,
+                    unit: java.util.concurrent.TimeUnit,
+                ): Boolean = false
+            }
+        assertThatThrownBy { ImageUploadAdmissionValidator(timeoutSemaphore).validate(validPngPath, "image/png") }
+            .isInstanceOf(AppException::class.java)
+            .hasMessageContaining("503")
+
+        val interruptedSemaphore =
+            object : Semaphore(1) {
+                override fun tryAcquire(
+                    timeout: Long,
+                    unit: java.util.concurrent.TimeUnit,
+                ): Boolean = throw InterruptedException("simulated interrupt")
+            }
+        try {
+            assertThatThrownBy { ImageUploadAdmissionValidator(interruptedSemaphore).validate(validPngPath, "image/png") }
+                .isInstanceOf(AppException::class.java)
+            assertThat(Thread.currentThread().isInterrupted).isTrue()
+        } finally {
+            Thread.interrupted()
+        }
+
+        val validator = ImageUploadAdmissionValidator()
+        assertThat(validator.canonicalFormat("bmp")).isNull()
+
+        fun stubReader(
+            formatName: String,
+            decodedImage: BufferedImage? = null,
+        ): javax.imageio.ImageReader =
+            object : javax.imageio.ImageReader(null) {
+                override fun getFormatName(): String = formatName
+
+                override fun getNumImages(allowSearch: Boolean): Int = 1
+
+                override fun getWidth(imageIndex: Int): Int = 2
+
+                override fun getHeight(imageIndex: Int): Int = 2
+
+                override fun getImageTypes(imageIndex: Int): MutableIterator<javax.imageio.ImageTypeSpecifier> =
+                    mutableListOf<javax.imageio.ImageTypeSpecifier>().iterator()
+
+                override fun getStreamMetadata(): javax.imageio.metadata.IIOMetadata? = null
+
+                override fun getImageMetadata(imageIndex: Int): javax.imageio.metadata.IIOMetadata? = null
+
+                override fun read(
+                    imageIndex: Int,
+                    param: javax.imageio.ImageReadParam?,
+                ): BufferedImage? = decodedImage
+            }
+
+        assertThatThrownBy {
+            validator.validateWithReaders(validPngPath, "image/png") { listOf(stubReader("jpeg")).iterator() }
+        }.isInstanceOf(AppException::class.java)
+
+        assertThatThrownBy {
+            validator.validateWithReaders(validPngPath, "image/png") { listOf(stubReader("png", decodedImage = null)).iterator() }
+        }.isInstanceOf(AppException::class.java)
+
+        assertThatThrownBy {
+            validator.rejectAnimatedPngStream(java.io.ByteArrayInputStream(byteArrayOf(1)), 4L)
+        }.isInstanceOf(AppException::class.java)
+
+        assertThatThrownBy {
+            validator.rejectAnimatedPngStream(java.io.ByteArrayInputStream(byteArrayOf(1, 2, 3)), 24L)
+        }.isInstanceOf(AppException::class.java)
+
+        assertThatThrownBy {
+            validator.rejectAnimatedPngStream(java.io.ByteArrayInputStream("NOTAPNG!".toByteArray()), 24L)
+        }.isInstanceOf(AppException::class.java)
+
+        val pngHeaderOnly = byteArrayOf(0x89.toByte(), 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A, 0, 0, 0, 1)
+        assertThatThrownBy {
+            validator.rejectAnimatedPngStream(java.io.ByteArrayInputStream(pngHeaderOnly), 24L)
+        }.isInstanceOf(AppException::class.java)
+
+        val overflowChunk =
+            byteArrayOf(
+                0x89.toByte(),
+                0x50,
+                0x4E,
+                0x47,
+                0x0D,
+                0x0A,
+                0x1A,
+                0x0A,
+                0x00,
+                0x00,
+                0x03,
+                0xE7.toByte(),
+                't'.code.toByte(),
+                'E'.code.toByte(),
+                'X'.code.toByte(),
+                't'.code.toByte(),
+                0,
+                0,
+                0,
+                0,
+            )
+        assertThatThrownBy {
+            validator.rejectAnimatedPngStream(java.io.ByteArrayInputStream(overflowChunk), overflowChunk.size.toLong())
+        }.isInstanceOf(AppException::class.java)
+
+        val zeroSkipStream =
+            object : java.io.InputStream() {
+                private var reads = 0
+
+                override fun skip(n: Long): Long = 0L
+
+                override fun read(): Int = if (reads++ == 0) 0x41 else -1
+            }
+        assertThatThrownBy {
+            ImageUploadAdmissionValidator.skipExact(zeroSkipStream, 2L)
+        }.isInstanceOf(java.io.EOFException::class.java)
+    }
+
     private fun rasterBytes(
         format: String,
         width: Int,

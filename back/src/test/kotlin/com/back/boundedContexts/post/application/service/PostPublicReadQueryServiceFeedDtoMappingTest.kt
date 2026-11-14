@@ -29,11 +29,13 @@ import org.mockito.BDDMockito.then
 import org.mockito.Mockito.doThrow
 import org.mockito.Mockito.mock
 import org.mockito.Mockito.never
+import org.mockito.Mockito.spy
 import org.mockito.Mockito.times
 import org.mockito.Mockito.`when`
 import org.slf4j.LoggerFactory
 import org.springframework.cache.Cache
 import org.springframework.cache.CacheManager
+import org.springframework.cache.concurrent.ConcurrentMapCache
 import org.springframework.cache.concurrent.ConcurrentMapCacheManager
 import tools.jackson.module.kotlin.jacksonObjectMapper
 import java.nio.charset.StandardCharsets
@@ -627,6 +629,43 @@ class PostPublicReadQueryServiceFeedDtoMappingTest {
         assertThat(detail.hitCount).isEqualTo(14)
         then(postUseCase).should(never()).findPublicDetailById(78L)
         then(postUseCase).should(times(1)).findPublicDetailContentById(78L)
+    }
+
+    @Test
+    @DisplayName("상세 negative cache는 DB 가독성 조회보다 먼저 확인하며 miss 시 기록하고 warm hit에는 evict를 호출하지 않는다")
+    fun checksDetailNegativeCacheBeforeDbAndSkipsUnconditionalEvictOnWarmHit() {
+        val postUseCase = mock(PostUseCase::class.java)
+        val negativeCache = spy(ConcurrentMapCache(PostQueryCacheNames.DETAIL_PUBLIC_NEGATIVE))
+        val snapshotCache = ConcurrentMapCache(PostQueryCacheNames.DETAIL_PUBLIC_SNAPSHOT)
+        val cacheManager =
+            mock(CacheManager::class.java).apply {
+                given(getCache(PostQueryCacheNames.DETAIL_PUBLIC_NEGATIVE)).willReturn(negativeCache)
+                given(getCache(PostQueryCacheNames.DETAIL_PUBLIC_SNAPSHOT)).willReturn(snapshotCache)
+            }
+        val service = createService(postUseCase, SimpleMeterRegistry(), cacheManager = cacheManager)
+        given(postUseCase.isPublicDetailReadable(404L)).willReturn(false)
+
+        assertThatThrownBy { service.getPublicPostDetail(404L) }
+            .isInstanceOf(AppException::class.java)
+        assertThat(negativeCache.get(404L)?.get()).isEqualTo(true)
+
+        assertThatThrownBy { service.getPublicPostDetail(404L) }
+            .isInstanceOf(AppException::class.java)
+        then(postUseCase).should(times(1)).isPublicDetailReadable(404L)
+
+        val warmPost = postByAuthor(id = 77L).apply { content = "warm snapshot" }
+        val warmSnapshot =
+            PublicPostDetailSnapshotCacheDto.from(
+                PublicPostDetailMetaCacheDto.from(warmPost).merge(PublicPostDetailContentCacheDto.from(warmPost)),
+            )
+        snapshotCache.put(77L, warmSnapshot)
+        given(postUseCase.isPublicDetailReadable(77L)).willReturn(true)
+
+        val detail = service.getPublicPostDetail(77L)
+
+        assertThat(detail.id).isEqualTo(77L)
+        assertThat(detail.content).isEqualTo("warm snapshot")
+        then(negativeCache).should(never()).evict(77L)
     }
 
     @Test

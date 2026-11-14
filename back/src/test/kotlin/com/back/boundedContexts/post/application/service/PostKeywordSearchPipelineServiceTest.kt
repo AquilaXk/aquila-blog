@@ -278,6 +278,50 @@ class PostKeywordSearchPipelineServiceTest {
         }
     }
 
+    @Test
+    fun `single-pass bitmask token scan matches ignoreCase contains across ascii korean early exit and 32+ tokens`() {
+        val mixedCaseTokens = listOf("Kotlin", "SPRING", "@key", "[tag]", "한글토큰", "boot")
+        val samples =
+            listOf(
+                "",
+                "KOTLIN and spring Boot 한글토큰 with @key and [tag] tail".repeat(20),
+                "`key {tag} unrelated_symbol _underscore 가나다라",
+                "only @KEY appears here",
+                "early match kotlin spring @key [tag] 한글토큰 boot" + " filler padding".repeat(500),
+            )
+
+        for (text in samples) {
+            val expected = mixedCaseTokens.count { token -> text.contains(token, ignoreCase = true) }
+            val actual = PostKeywordSearchPipelineService.countMatchingTokensSinglePass(text, mixedCaseTokens)
+            assertThat(actual).isEqualTo(expected)
+        }
+
+        // 31개 초과(40개) 토큰에서도 모든 청크가 누락 없이 일치해야 한다.
+        val manyTokens = (1..40).map { idx -> "Token_${idx.toString().padStart(2, '0')}" }
+        val textWithSubset = "TOKEN_01 middle token_31 plus TOKEN_32 and token_40 end"
+        val expectedMany = manyTokens.count { token -> textWithSubset.contains(token, ignoreCase = true) }
+        assertThat(expectedMany).isEqualTo(4)
+        assertThat(PostKeywordSearchPipelineService.countMatchingTokensSinglePass(textWithSubset, manyTokens))
+            .isEqualTo(expectedMany)
+        assertThat(PostKeywordSearchPipelineService.countMatchingTokensSinglePass(textWithSubset, emptyList()))
+            .isEqualTo(0)
+        assertThat(PostKeywordSearchPipelineService.countMatchingTokensSinglePass("", manyTokens))
+            .isEqualTo(0)
+        assertThat(PostKeywordSearchPipelineService.countMatchingTokensSinglePass("abc", listOf("", "B")))
+            .isEqualTo(2)
+        val multiTagPost =
+            testPost(
+                id = 88L,
+                title = "unrelated",
+                content = "tags: [kotlin, spring, java]\n\nbody",
+                createdAt = Instant.now(),
+            )
+        val rankedTagsOnly =
+            pipeline(mock(SearchRuntimeControlQueryService::class.java), shadowReadEnabled = false)
+                .rerank("kotlin", listOf(multiTagPost), 1, 10, 1)
+        assertThat(rankedTagsOnly.content).hasSize(1)
+    }
+
     private fun testPost(
         id: Long,
         title: String,

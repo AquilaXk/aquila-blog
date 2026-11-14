@@ -50,6 +50,25 @@ class PostPreviewExtractorTest {
     }
 
     @Test
+    fun `16-stripe LRU 캐시는 썸네일 엔트리를 분산 저장하고 상한을 지킨다`() {
+        assertThat(PostPreviewExtractor.stripeCount()).isEqualTo(16)
+
+        repeat(360) { idx ->
+            val doc = "![img](https://example.com/$idx.png)\n\nbody $idx"
+            assertThat(PostPreviewExtractor.extractThumbnail(doc))
+                .isEqualTo("https://example.com/$idx.png")
+        }
+
+        val stripeCounts = PostPreviewExtractor.stripeEntryCounts().toList()
+        assertThat(stripeCounts).hasSize(16)
+        assertThat(stripeCounts.count { it > 0 }).isGreaterThan(8)
+        assertThat(stripeCounts).allSatisfy { count ->
+            assertThat(count).isLessThanOrEqualTo(PostPreviewExtractor.MAX_CACHE_ENTRIES / 16)
+        }
+        assertThat(PostPreviewExtractor.cachedEntryCount()).isLessThanOrEqualTo(PostPreviewExtractor.MAX_CACHE_ENTRIES)
+    }
+
+    @Test
     fun `header scan skips non-thumbnail frontmatter and metadata lines without matching image syntax inside summary`() {
         val contentWithSummaryImage =
             """

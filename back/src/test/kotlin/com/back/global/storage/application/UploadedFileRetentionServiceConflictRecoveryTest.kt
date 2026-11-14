@@ -410,6 +410,8 @@ class UploadedFileRetentionServiceConflictRecoveryTest {
     private abstract class EmptyUploadedFileRepository : UploadedFileRepositoryPort {
         override fun save(entity: UploadedFile): UploadedFile = entity
 
+        override fun saveAllUploadedFiles(entities: Collection<UploadedFile>): List<UploadedFile> = entities.map(::save)
+
         override fun flush() {}
 
         override fun findByObjectKey(objectKey: String): UploadedFile? = null

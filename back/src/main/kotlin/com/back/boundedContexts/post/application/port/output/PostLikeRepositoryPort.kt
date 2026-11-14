@@ -36,5 +36,5 @@ interface PostLikeRepositoryPort {
 
     fun countByPost(post: Post): Long
 
-    fun countByPostIdIn(postIds: Collection<Long>): Map<Long, Long> = emptyMap()
+    fun countByPostIdIn(postIds: Collection<Long>): Map<Long, Long>
 }

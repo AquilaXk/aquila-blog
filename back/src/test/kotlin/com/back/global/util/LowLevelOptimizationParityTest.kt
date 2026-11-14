@@ -19,6 +19,7 @@ import com.back.boundedContexts.post.dto.PostDto
 import com.back.global.app.AppConfig
 import com.back.global.exception.application.AppException
 import com.back.global.revalidate.CdnCachePurgeService
+import com.back.global.security.application.HtmlContentSanitizer
 import com.back.global.security.config.RequestPathNormalizer
 import com.back.global.storage.application.PostAttachmentRetentionService
 import com.back.global.storage.application.UploadedFileRetentionProperties
@@ -26,6 +27,8 @@ import com.back.global.storage.application.port.output.UploadedFileRepositoryPor
 import com.back.global.storage.config.CloudStorageProperties
 import com.back.global.storage.domain.UploadedFile
 import com.back.global.task.application.TaskFacade
+import com.back.global.web.application.IpAddressNormalizer
+import com.back.global.web.logging.SensitiveQueryRedactor
 import com.back.standard.dto.post.type1.PostSearchSortType1
 import com.back.standard.util.Ut
 import org.assertj.core.api.Assertions.assertThat
@@ -344,5 +347,132 @@ class LowLevelOptimizationParityTest {
     private fun <T> anyNonNull(fallback: T): T {
         ArgumentMatchers.any<T>()
         return fallback
+    }
+
+    @Test
+    fun `WeakEtagDigestWriter handles negative longs, Long MIN_VALUE, and 256-byte chunk flush`() {
+        val rawFirst =
+            Long.MIN_VALUE.toString() +
+                (-42L).toString() +
+                "20:${Long.MIN_VALUE}" +
+                "3:-99"
+        val etagFirst =
+            Utf8ChunkDigest
+                .newWeakEtagWriter()
+                .appendLong(Long.MIN_VALUE)
+                .appendLong(-42L)
+                .appendDecimalLengthPrefixedLong(Long.MIN_VALUE)
+                .appendDecimalLengthPrefixedLong(-99L)
+                .finishWeakEtag()
+        assertThat(etagFirst).isEqualTo("W/\"${Utf8ChunkDigest.sha256Hex(rawFirst).take(32)}\"")
+
+        val rawFlush = "a".repeat(254) + "truenull"
+        val etagFlush =
+            Utf8ChunkDigest
+                .newWeakEtagWriter()
+                .appendAscii("a".repeat(254))
+                .appendBoolean(true)
+                .appendNullLiteral()
+                .finishWeakEtag()
+        assertThat(etagFlush).isEqualTo("W/\"${Utf8ChunkDigest.sha256Hex(rawFlush).take(32)}\"")
+    }
+
+    @Test
+    fun `PostPublicCursorCodec rejects non-positive prefixes and supports long or non-ASCII HMAC slices`() {
+        val secret = "cursor-signing-test-secret-with-sufficient-entropy-0123456789"
+        val clock = Clock.fixed(Instant.parse("2026-11-14T00:00:00Z"), ZoneOffset.UTC)
+        val codec =
+            PostPublicCursorCodec(
+                cursorSigningSecret = secret,
+                cursorSigningKeyVersion = "1",
+                cursorPreviousSigningSecret = "",
+                cursorPreviousSigningKeyVersion = "",
+                cursorPreviousExpiresAtEpochSeconds = "",
+                clock = clock,
+            )
+        val now = clock.instant().epochSecond
+
+        // Leading '*' < '0' triggers else-if branch returning null in parseSignedLongRange
+        assertThatThrownBy {
+            codec.parseCursor("1:$now:*1:1:CREATED_AT:sig", com.back.standard.dto.post.type1.PostSearchSortType1.CREATED_AT)
+        }.isInstanceOf(com.back.global.exception.application.AppException::class.java)
+
+        // Leading '+' passes parseSignedLongRange and fails later on invalid signature (payload > 128 bytes flushes HMAC buffer)
+        val longZeroPadded = "0".repeat(120) + "1"
+        assertThatThrownBy {
+            codec.parseCursor("1:$now:+$longZeroPadded:1:CREATED_AT:sig", com.back.standard.dto.post.type1.PostSearchSortType1.CREATED_AT)
+        }.isInstanceOf(com.back.global.exception.application.AppException::class.java)
+
+        // Non-ASCII slice triggers UTF-8 fallback in signCursorPayloadSlice
+        val keySpec = javax.crypto.spec.SecretKeySpec(secret.toByteArray(Charsets.UTF_8), "HmacSHA256")
+        val macBytes = codec.signCursorPayloadSlice("1:한글:$now:1", 8, keySpec)
+        assertThat(macBytes).isNotEmpty()
+    }
+
+    @Test
+    fun `RequestPathNormalizer decodePercentEncodedSafely keeps original String reference when no percent exists`() {
+        val cleanPath = String(charArrayOf('/', 'p', 'o', 's', 't', '/', 'a', 'p', 'i', '/', 'v', '1'))
+        val decoded = RequestPathNormalizer.decodePercentEncodedSafely(cleanPath)
+
+        assertThat(decoded).isSameAs(cleanPath)
+    }
+
+    @Test
+    fun `IpAddressNormalizer normalizeRateLimitKey covers zero prefixes, leading zeros, zones, and IPv4-mapped addresses`() {
+        assertThat(IpAddressNormalizer.normalizeRateLimitKey("::1"))
+            .isEqualTo("::/64")
+        assertThat(IpAddressNormalizer.normalizeRateLimitKey("2001:db8:1:0::9"))
+            .isEqualTo("2001:db8:1::/64")
+        assertThat(IpAddressNormalizer.normalizeRateLimitKey("2001:0:1:2::9"))
+            .isEqualTo("2001:0:1:2::/64")
+        assertThat(IpAddressNormalizer.normalizeRateLimitKey("[00fe:0000:000a:000b::1]:443"))
+            .isEqualTo("fe:0:a:b::/64")
+        assertThat(IpAddressNormalizer.normalizeRateLimitKey("abcd:ef01:2345:6789::1"))
+            .isEqualTo("abcd:ef01:2345:6789::/64")
+        assertThat(IpAddressNormalizer.normalizeRateLimitKey("fe80::1%eth0"))
+            .isEqualTo("fe80::/64")
+        assertThat(IpAddressNormalizer.normalizeRateLimitKey("::ffff:203.0.113.10"))
+            .isEqualTo("203.0.113.10")
+        assertThat(IpAddressNormalizer.normalize("[2001:db8::1]"))
+            .isEqualTo("2001:db8:0:0:0:0:0:1")
+    }
+
+    @Test
+    fun `SensitiveQueryRedactor keeps exact parity on clean queries, separators, non-ASCII prefixes, and control chars`() {
+        assertThat(SensitiveQueryRedactor.redactQuery("page=2&sort=recent&tag=kotlin"))
+            .isEqualTo("page=2&sort=recent&tag=kotlin")
+        assertThat(SensitiveQueryRedactor.redactQuery(" page=2&co=1&codes=1 "))
+            .isEqualTo("page=2&co=1&codes=1")
+        assertThat(SensitiveQueryRedactor.redactQuery(" \t\r\n"))
+            .isEqualTo("-")
+        assertThat(SensitiveQueryRedactor.redactQuery("\u0001flag=ok"))
+            .isEqualTo("?flag=ok")
+        assertThat(SensitiveQueryRedactor.redactQuery("X-Custom-Token=secret1&user.password=secret2&키_token=secret3"))
+            .isEqualTo("X-Custom-Token=[REDACTED]&user.password=[REDACTED]&키_token=[REDACTED]")
+        assertThat(SensitiveQueryRedactor.redactQuery("page=1&size=10", maxLength = 6))
+            .isEqualTo("page=1")
+        assertThat(SensitiveQueryRedactor.redactQuery("page=1&size=10", maxLength = 7))
+            .isEqualTo("page=1&")
+        assertThat(SensitiveQueryRedactor.decodePercentPasses("plain"))
+            .containsExactly("plain")
+        assertThat(SensitiveQueryRedactor.redactText("failed url=/api?%26token=leaked", 512))
+            .contains("?")
+    }
+
+    @Test
+    fun `HtmlContentSanitizer sha256Utf8 matches JDK UTF-8 digest across multi-byte and multi-chunk HTML`() {
+        val cases =
+            listOf(
+                "",
+                "<p>hello</p>",
+                "<p>한글 🎉 UTF-8 boundary check</p>".repeat(500),
+            )
+        val digest = java.security.MessageDigest.getInstance("SHA-256")
+        val hex = java.util.HexFormat.of()
+        for (html in cases) {
+            val expected = hex.formatHex(digest.digest(html.toByteArray(Charsets.UTF_8)))
+            assertThat(HtmlContentSanitizer.sha256Utf8(html))
+                .isEqualTo(expected)
+        }
     }
 }

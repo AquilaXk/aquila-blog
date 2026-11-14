@@ -8,10 +8,13 @@ import com.back.boundedContexts.member.domain.shared.Member
 import com.back.boundedContexts.member.dto.MemberWithUsernameDto
 import com.back.boundedContexts.post.application.port.output.PostImageStoragePort
 import com.back.boundedContexts.post.application.port.output.PostRepositoryPort
+import com.back.boundedContexts.post.application.service.PostImageReadAccessService
 import com.back.boundedContexts.post.domain.Post
 import com.back.global.app.AdminProperties
 import com.back.global.app.AppConfig
 import com.back.global.exception.application.AppException
+import com.back.global.exception.application.ErrorCode
+import com.back.global.security.domain.SecurityUser
 import com.back.global.storage.application.UploadedFileRetentionService
 import com.back.global.storage.application.UploadedFileUrlCodec
 import com.back.global.storage.application.port.output.UploadedFileRepositoryPort
@@ -19,11 +22,13 @@ import com.back.global.storage.config.CloudStorageProperties
 import com.back.global.storage.domain.UploadedFile
 import com.back.global.storage.domain.UploadedFilePurpose
 import com.back.global.storage.domain.UploadedFileRetentionReason
+import jakarta.servlet.http.HttpServletRequest
 import org.assertj.core.api.Assertions.assertThat
 import org.assertj.core.api.Assertions.assertThatThrownBy
 import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Test
 import org.mockito.Mockito.mock
+import org.mockito.Mockito.never
 import org.mockito.Mockito.verify
 import org.mockito.Mockito.verifyNoInteractions
 import org.mockito.Mockito.`when`
@@ -31,6 +36,7 @@ import org.springframework.http.HttpHeaders
 import org.springframework.http.HttpStatus
 import org.springframework.mock.web.MockHttpServletRequest
 import org.springframework.security.core.authority.SimpleGrantedAuthority
+import org.springframework.transaction.annotation.Transactional
 import org.springframework.web.multipart.MultipartFile
 import java.io.ByteArrayInputStream
 import java.io.InputStream
@@ -52,14 +58,18 @@ class ApiV1PostImageControllerTest {
             canonicalAdminPolicy = CanonicalAdminPolicy(AdminProperties(email = "admin@test.com")),
             currentMemberProfileQueryUseCase = currentMemberProfileQueryUseCase,
         )
+    private val postImageReadAccessService =
+        PostImageReadAccessService(
+            uploadedFileRepository = uploadedFileRepository,
+            postRepository = postRepository,
+            profileImageReadUseCase = profileImageReadPolicy,
+        )
     private val controller =
         ApiV1PostImageController(
             postImageStorageService = postImageStorageService,
             storageProperties = CloudStorageProperties(maxFileSizeBytes = 10 * 1024 * 1024),
             uploadedFileRetentionService = uploadedFileRetentionService,
-            uploadedFileRepository = uploadedFileRepository,
-            postRepository = postRepository,
-            profileImageReadUseCase = profileImageReadPolicy,
+            postImageReadAccessUseCase = postImageReadAccessService,
         )
 
     @Test
@@ -106,7 +116,7 @@ class ApiV1PostImageControllerTest {
         val storedBytes = pngBytes()
         val uploadedFile = postImage(objectKey).apply { attachToPost(30L, UploadedFilePurpose.POST_IMAGE) }
         `when`(uploadedFileRepository.findByObjectKey(objectKey)).thenReturn(uploadedFile)
-        `when`(postRepository.findPublicDetailById(30L)).thenReturn(publicPost(30L))
+        `when`(postRepository.isPublicDetailReadable(30L)).thenReturn(true)
         postImageStorageService.images[objectKey] =
             PostImageStoragePort.StoredObject(
                 inputStream = ByteArrayInputStream(storedBytes),
@@ -127,7 +137,7 @@ class ApiV1PostImageControllerTest {
             .doesNotContain("immutable")
         assertThat(postImageStorageService.imageDownloads).containsExactly(objectKey)
 
-        `when`(postRepository.findPublicDetailById(30L)).thenReturn(null)
+        `when`(postRepository.isPublicDetailReadable(30L)).thenReturn(false)
 
         assertThatThrownBy {
             controller.getPostImage(
@@ -162,7 +172,7 @@ class ApiV1PostImageControllerTest {
         val objectKey = "posts/2026/03/private.png"
         val uploadedFile = postImage(objectKey).apply { attachToPost(40L, UploadedFilePurpose.POST_IMAGE) }
         `when`(uploadedFileRepository.findByObjectKey(objectKey)).thenReturn(uploadedFile)
-        `when`(postRepository.findPublicDetailById(40L)).thenReturn(null)
+        `when`(postRepository.isPublicDetailReadable(40L)).thenReturn(false)
 
         assertThatThrownBy { controller.getPostImage(imageRequest(objectKey)) }
             .isInstanceOf(AppException::class.java)
@@ -178,20 +188,11 @@ class ApiV1PostImageControllerTest {
         val privateKey = "posts/2026/03/private-preview.png"
         val tempFile = postImage(tempKey)
         val privateFile = postImage(privateKey).apply { attachToPost(40L, UploadedFilePurpose.POST_IMAGE) }
-        val privatePost =
-            Post(
-                id = 40L,
-                author = Member(1L, "admin", null, "관리자"),
-                title = "비공개 초안",
-                content = "본문",
-                published = false,
-                listed = false,
-            )
 
         `when`(uploadedFileRepository.findByObjectKey(tempKey)).thenReturn(tempFile)
         `when`(uploadedFileRepository.findByObjectKey(privateKey)).thenReturn(privateFile)
-        `when`(postRepository.findPublicDetailById(40L)).thenReturn(null)
-        `when`(postRepository.findById(40L)).thenReturn(Optional.of(privatePost))
+        `when`(postRepository.isPublicDetailReadable(40L)).thenReturn(false)
+        `when`(postRepository.existsById(40L)).thenReturn(true)
         postImageStorageService.images[tempKey] = storedImage(tempKey)
         postImageStorageService.images[privateKey] = storedImage(privateKey)
 
@@ -238,8 +239,8 @@ class ApiV1PostImageControllerTest {
             .thenReturn(postImage(invalidOwnerIdKey).apply { attachToPost(0L, UploadedFilePurpose.POST_IMAGE) })
         `when`(uploadedFileRepository.findByObjectKey(deletedFileKey))
             .thenReturn(postImage(deletedFileKey).apply { markDeleted() })
-        `when`(postRepository.findPublicDetailById(404L)).thenReturn(null)
-        `when`(postRepository.findById(404L)).thenReturn(Optional.empty())
+        `when`(postRepository.isPublicDetailReadable(404L)).thenReturn(false)
+        `when`(postRepository.existsById(404L)).thenReturn(false)
 
         assertThatThrownBy { controller.getPostImage(imageRequest(tempKey), nonAdminUser) }
             .isInstanceOf(AppException::class.java)
@@ -267,7 +268,7 @@ class ApiV1PostImageControllerTest {
             )
         val sharedFile = postImage(sharedKey).apply { attachToPost(privateOwnerPost.id, UploadedFilePurpose.POST_IMAGE) }
         `when`(uploadedFileRepository.findByObjectKey(sharedKey)).thenReturn(sharedFile)
-        `when`(postRepository.findPublicDetailById(privateOwnerPost.id)).thenReturn(null)
+        `when`(postRepository.isPublicDetailReadable(privateOwnerPost.id)).thenReturn(false)
         `when`(postRepository.existsPublicPostReferencingImage(sharedKey)).thenReturn(true)
         postImageStorageService.images[sharedKey] = storedImage(sharedKey)
 
@@ -282,7 +283,7 @@ class ApiV1PostImageControllerTest {
         val objectKey = "posts/2026/03/tagged-public-image.png"
         val uploadedFile = postImage(objectKey).apply { attachToPost(42L, UploadedFilePurpose.POST_IMAGE) }
         `when`(uploadedFileRepository.findByObjectKey(objectKey)).thenReturn(uploadedFile)
-        `when`(postRepository.findPublicDetailById(42L)).thenReturn(publicPost(42L))
+        `when`(postRepository.isPublicDetailReadable(42L)).thenReturn(true)
         postImageStorageService.images[objectKey] = storedImage(objectKey)
 
         val response = controller.getPostImage(imageRequest(objectKey))
@@ -389,9 +390,9 @@ class ApiV1PostImageControllerTest {
             val sharedPostKey = "posts/2026/03/shared-author-image.png"
             val sharedPostFile = postImage(sharedPostKey).apply { attachToPost(10L) }
             `when`(uploadedFileRepository.findByObjectKey(sharedPostKey)).thenReturn(sharedPostFile)
-            `when`(postRepository.findPublicDetailById(10L)).thenReturn(null)
+            `when`(postRepository.isPublicDetailReadable(10L)).thenReturn(false)
             `when`(postRepository.existsPublicPostReferencingImage(sharedPostKey)).thenReturn(false)
-            `when`(postRepository.findById(10L)).thenReturn(Optional.empty())
+            `when`(postRepository.existsById(10L)).thenReturn(false)
             `when`(postRepository.existsImageReferenceByObjectKey(sharedPostKey)).thenReturn(true)
             postImageStorageService.images[sharedPostKey] = storedImage(sharedPostKey)
 
@@ -453,7 +454,7 @@ class ApiV1PostImageControllerTest {
         val objectKey = "posts/2026/03/truncated-range.png"
         val uploadedFile = postImage(objectKey).apply { attachToPost(30L, UploadedFilePurpose.POST_IMAGE) }
         `when`(uploadedFileRepository.findByObjectKey(objectKey)).thenReturn(uploadedFile)
-        `when`(postRepository.findPublicDetailById(30L)).thenReturn(publicPost(30L))
+        `when`(postRepository.isPublicDetailReadable(30L)).thenReturn(true)
         var closed = false
         val shortStream =
             object : ByteArrayInputStream(byteArrayOf(1, 2)) {
@@ -479,6 +480,127 @@ class ApiV1PostImageControllerTest {
         }.isInstanceOf(java.io.EOFException::class.java)
 
         assertThat(closed).isTrue()
+    }
+
+    @Test
+    @DisplayName("getPostImage는 컨트롤러에 @Transactional을 두지 않고 weak ETag W/ 접두사도 304로 처리한다")
+    fun `getPostImage removes controller transactional boundary and matches weak ETag prefix`() {
+        val getPostImageMethod =
+            ApiV1PostImageController::class.java.getDeclaredMethod(
+                "getPostImage",
+                HttpServletRequest::class.java,
+                SecurityUser::class.java,
+            )
+        assertThat(getPostImageMethod.isAnnotationPresent(Transactional::class.java)).isFalse()
+        val resolveReadPlanTx =
+            PostImageReadAccessService::class.java
+                .getDeclaredMethod(
+                    "resolveReadPlan",
+                    String::class.java,
+                    Long::class.javaObjectType,
+                    Boolean::class.javaPrimitiveType,
+                ).getAnnotation(Transactional::class.java)
+        assertThat(resolveReadPlanTx).isNotNull
+        assertThat(resolveReadPlanTx.readOnly).isTrue()
+
+        val objectKey = "posts/2026/03/weak-etag.png"
+        val uploadedFile = postImage(objectKey).apply { attachToPost(30L, UploadedFilePurpose.POST_IMAGE) }
+        `when`(uploadedFileRepository.findByObjectKey(objectKey)).thenReturn(uploadedFile)
+        `when`(postRepository.isPublicDetailReadable(30L)).thenReturn(true)
+        postImageStorageService.images[objectKey] = storedImage(objectKey)
+
+        val firstResponse = controller.getPostImage(imageRequest(objectKey))
+        val weakEtag = "W/${requireNotNull(firstResponse.headers.eTag)}"
+        val notModifiedResponse =
+            controller.getPostImage(
+                imageRequest(objectKey).apply { addHeader(HttpHeaders.IF_NONE_MATCH, " , \"other\", $weakEtag") },
+            )
+        assertThat(
+            controller
+                .getPostImage(
+                    imageRequest(objectKey).apply { addHeader(HttpHeaders.IF_NONE_MATCH, "W/\"mismatch\"") },
+                ).statusCode,
+        ).isEqualTo(HttpStatus.OK)
+
+        assertThat(notModifiedResponse.statusCode).isEqualTo(HttpStatus.NOT_MODIFIED)
+        assertThat(postImageStorageService.imageDownloads).containsExactly(objectKey, objectKey)
+    }
+
+    @Test
+    @DisplayName("이미지 objectKey 디코딩은 +를 보존하고 잘못된 퍼센트 인코딩은 BAD_REQUEST로 거부한다")
+    fun `extractObjectKey preserves plus sign and rejects malformed percent escapes with BAD_REQUEST`() {
+        val objectKey = "posts/2026/03/c++logo.png"
+        val uploadedFile = postImage(objectKey).apply { attachToPost(31L, UploadedFilePurpose.POST_IMAGE) }
+        `when`(uploadedFileRepository.findByObjectKey(objectKey)).thenReturn(uploadedFile)
+        `when`(postRepository.isPublicDetailReadable(31L)).thenReturn(true)
+        postImageStorageService.images[objectKey] = storedImage(objectKey)
+
+        val response = controller.getPostImage(imageRequest(objectKey))
+        assertThat(response.statusCode).isEqualTo(HttpStatus.OK)
+
+        val utf8ObjectKey = "posts/2026/03/한+a/logo.png"
+        val utf8UploadedFile = postImage(utf8ObjectKey).apply { attachToPost(32L, UploadedFilePurpose.POST_IMAGE) }
+        `when`(uploadedFileRepository.findByObjectKey(utf8ObjectKey)).thenReturn(utf8UploadedFile)
+        `when`(postRepository.isPublicDetailReadable(32L)).thenReturn(true)
+        postImageStorageService.images[utf8ObjectKey] = storedImage(utf8ObjectKey)
+        val utf8Response = controller.getPostImage(imageRequest("posts/2026/03/%ED%95%9C+a%2flogo.png"))
+        assertThat(utf8Response.statusCode).isEqualTo(HttpStatus.OK)
+
+        listOf(
+            "posts/2026/03/bad%ZZ.png",
+            "posts/2026/03/bad%2",
+            "posts/2026/03/bad%FF.png",
+        ).forEach { invalidPath ->
+            assertThatThrownBy { controller.getPostImage(imageRequest(invalidPath)) }
+                .isInstanceOf(AppException::class.java)
+                .extracting("errorCode")
+                .isEqualTo(ErrorCode.BAD_REQUEST)
+        }
+    }
+
+    @Test
+    @DisplayName("ownerId가 공개 게시글이면 isPublicDetailReadable만 조회하고 findFirstReferencingPostId는 생략한다")
+    fun `public owner post image uses isPublicDetailReadable and skips findFirstReferencingPostId`() {
+        val objectKey = "posts/2026/03/owner-public.png"
+        val uploadedFile = postImage(objectKey).apply { attachToPost(42L, UploadedFilePurpose.POST_IMAGE) }
+        `when`(uploadedFileRepository.findByObjectKey(objectKey)).thenReturn(uploadedFile)
+        `when`(postRepository.isPublicDetailReadable(42L)).thenReturn(true)
+        postImageStorageService.images[objectKey] = storedImage(objectKey)
+
+        val response = controller.getPostImage(imageRequest(objectKey))
+
+        assertThat(response.statusCode).isEqualTo(HttpStatus.OK)
+        assertThat(response.headers.getFirst("Surrogate-Key"))
+            .contains("post-id-42")
+            .contains("post:42")
+        verify(postRepository).isPublicDetailReadable(42L)
+        verify(postRepository, never()).findPublicDetailById(42L)
+        verify(postRepository, never()).findFirstReferencingPostId(objectKey)
+    }
+
+    @Test
+    @DisplayName("존재하지 않거나 이미지 목적이 아닌 파일은 NOT_FOUND로 차단한다")
+    fun `missing uploaded file and unsupported purpose are rejected with NOT_FOUND`() {
+        val attachmentKey = "posts/2026/03/attachment.pdf"
+        val attachmentFile =
+            UploadedFile(
+                objectKey = attachmentKey,
+                bucket = "blog-images",
+                contentType = "application/pdf",
+                fileSize = 128L,
+                purpose = UploadedFilePurpose.POST_FILE,
+            )
+        `when`(uploadedFileRepository.findByObjectKey(attachmentKey)).thenReturn(attachmentFile)
+        `when`(uploadedFileRepository.findByObjectKey("posts/2026/03/missing.png")).thenReturn(null)
+
+        assertThatThrownBy { controller.getPostImage(imageRequest(attachmentKey)) }
+            .isInstanceOf(AppException::class.java)
+            .extracting("errorCode")
+            .isEqualTo(ErrorCode.NOT_FOUND)
+        assertThatThrownBy { controller.getPostImage(imageRequest("posts/2026/03/missing.png")) }
+            .isInstanceOf(AppException::class.java)
+            .extracting("errorCode")
+            .isEqualTo(ErrorCode.NOT_FOUND)
     }
 
     private fun postImage(objectKey: String): UploadedFile =
@@ -550,16 +672,6 @@ class ApiV1PostImageControllerTest {
             originalFilename = objectKey.substringAfterLast('/'),
         )
 
-    private fun publicPost(id: Long): Post =
-        Post(
-            id = id,
-            author = Member(1L, "admin", null, "관리자"),
-            title = "공개 글",
-            content = "본문",
-            published = true,
-            listed = true,
-        )
-
     private class FakePostImageStoragePort : PostImageStoragePort {
         var nextImageKey: String = "posts/placeholder/image.png"
         var lastImageContentLength: Long? = null
@@ -577,6 +689,11 @@ class ApiV1PostImageControllerTest {
             imageDownloads += objectKey
             return images[objectKey]
         }
+
+        override fun getPostImage(
+            objectKey: String,
+            range: LongRange?,
+        ): PostImageStoragePort.StoredObject? = getPostImage(objectKey)
 
         override fun deletePostImage(objectKey: String) {}
 

@@ -2,7 +2,7 @@ package com.back.boundedContexts.post.adapter.web
 
 import com.back.boundedContexts.post.application.port.input.PostHitDedupUseCase
 import com.back.boundedContexts.post.application.port.input.PostUseCase
-import com.back.boundedContexts.post.domain.Post
+import com.back.boundedContexts.post.dto.PostInteractionReadStateDto
 import com.back.global.exception.application.AppException
 import com.back.global.exception.application.ErrorCode
 import com.back.global.rsData.RsData
@@ -30,14 +30,19 @@ class ApiV1PostInteractionController(
     fun incrementHit(
         @PathVariable @Positive id: Long,
     ): RsData<PostHitResBody> {
-        val post = findReadablePost(id)
-        if (postHitDedupUseCase.shouldCountHit(id, resolveViewerKey())) {
-            postUseCase.incrementHit(post)
-        }
+        val state = findReadableInteractionState(id)
+        val hitCount =
+            if (postHitDedupUseCase.shouldCountHit(id, resolveViewerKey())) {
+                val post = postUseCase.findById(id).getOrThrow()
+                postUseCase.incrementHit(post)
+                post.hitCount
+            } else {
+                state.hitCount
+            }
         return RsData(
             "200-1",
             "조회수를 반영했습니다.",
-            PostHitResBody(post.hitCount),
+            PostHitResBody(hitCount),
         )
     }
 
@@ -46,21 +51,27 @@ class ApiV1PostInteractionController(
     fun like(
         @PathVariable @Positive id: Long,
     ): RsData<PostLikeToggleResBody> {
-        val post = findReadablePost(id)
+        val state = findReadableInteractionState(id)
         val viewerKey = resolveViewerKey()
-        if (postHitDedupUseCase.markLikedIfAbsent(id, viewerKey)) {
-            runCatching { postUseCase.incrementLike(post) }
-                .onFailure {
+        val likesCount =
+            if (postHitDedupUseCase.markLikedIfAbsent(id, viewerKey)) {
+                try {
+                    val post = postUseCase.findById(id).getOrThrow()
+                    postUseCase.incrementLike(post)
+                    post.likesCount
+                } catch (ex: Throwable) {
                     postHitDedupUseCase.unmarkLikedIfPresent(id, viewerKey)
-                    throw it
+                    throw ex
                 }
-        }
+            } else {
+                state.likesCount
+            }
         return RsData(
             "200-1",
             "좋아요를 반영했습니다.",
             PostLikeToggleResBody(
                 liked = true,
-                likesCount = post.likesCount,
+                likesCount = likesCount,
             ),
         )
     }
@@ -70,31 +81,40 @@ class ApiV1PostInteractionController(
     fun unlike(
         @PathVariable @Positive id: Long,
     ): RsData<PostLikeToggleResBody> {
-        val post = findReadablePost(id)
+        val state = findReadableInteractionState(id)
         val viewerKey = resolveViewerKey()
-        if (postHitDedupUseCase.unmarkLikedIfPresent(id, viewerKey)) {
-            runCatching { postUseCase.decrementLike(post) }
-                .onFailure {
+        val likesCount =
+            if (postHitDedupUseCase.unmarkLikedIfPresent(id, viewerKey)) {
+                try {
+                    val post = postUseCase.findById(id).getOrThrow()
+                    postUseCase.decrementLike(post)
+                    post.likesCount
+                } catch (ex: Throwable) {
                     postHitDedupUseCase.markLikedIfAbsent(id, viewerKey)
-                    throw it
+                    throw ex
                 }
-        }
+            } else {
+                state.likesCount
+            }
         return RsData(
             "200-1",
             "좋아요 취소를 반영했습니다.",
             PostLikeToggleResBody(
                 liked = false,
-                likesCount = post.likesCount,
+                likesCount = likesCount,
             ),
         )
     }
 
-    private fun findReadablePost(id: Long): Post {
-        val post = postUseCase.findById(id).getOrThrow()
-        if (!rq.hasRole("ADMIN") && !post.canRead(rq.actorOrNull)) {
+    private fun findReadableInteractionState(id: Long): PostInteractionReadStateDto {
+        val state =
+            postUseCase.findInteractionReadStateById(id)
+                ?: throw AppException(ErrorCode.NOT_FOUND, "존재하지 않는 글입니다.")
+        val canRead = state.published || rq.hasRole("ADMIN") || rq.actorOrNull?.id == state.authorId
+        if (!canRead) {
             throw AppException(ErrorCode.NOT_FOUND, "존재하지 않는 글입니다.")
         }
-        return post
+        return state
     }
 
     private fun resolveViewerKey(): String =

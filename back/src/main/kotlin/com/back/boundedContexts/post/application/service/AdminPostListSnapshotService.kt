@@ -20,12 +20,7 @@ class AdminPostListSnapshotService(
     )
     override fun getFirstPageSnapshot(sort: PostSearchSortType1): PageDto<PostDto> {
         val postPage = postUseCase.findPagedByKwForAdmin("", sort, 1, DEFAULT_ADMIN_POST_PAGE_SIZE)
-        return PageDto(
-            postPage.map { post ->
-                PostDto(post).apply {
-                    tempDraft = postUseCase.isTempDraft(post)
-                }
-            },
-        )
+        val tempDraftPostIds = postUseCase.resolveTempDraftPostIds(postPage.content)
+        return PostDto.toAdminPageDto(postPage, tempDraftPostIds)
     }
 }

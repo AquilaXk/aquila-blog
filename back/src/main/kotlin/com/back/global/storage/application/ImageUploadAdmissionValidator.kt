@@ -11,6 +11,8 @@ import java.util.Locale
 import java.util.concurrent.Semaphore
 import java.util.concurrent.TimeUnit
 import javax.imageio.ImageIO
+import javax.imageio.ImageReader
+import javax.imageio.stream.ImageInputStream
 
 /**
  * Shared fail-closed image admission validator used across post and cloud storage.
@@ -30,12 +32,18 @@ class ImageUploadAdmissionValidator(
     fun validate(
         path: Path,
         declaredContentType: String?,
+    ): ValidatedImage = validateWithReaders(path, declaredContentType, ImageIO::getImageReaders)
+
+    internal fun validateWithReaders(
+        path: Path,
+        declaredContentType: String?,
+        imageReadersFactory: (ImageInputStream) -> Iterator<ImageReader>,
     ): ValidatedImage {
         val preScreened = preScreenImageHeader(path, declaredContentType)
         val imageInput = ImageIO.createImageInputStream(path.toFile()) ?: throw invalidImage()
 
         imageInput.use { input ->
-            val readers = ImageIO.getImageReaders(input)
+            val readers = imageReadersFactory(input)
             if (!readers.hasNext()) throw invalidImage()
 
             val reader = readers.next()
@@ -45,10 +53,6 @@ class ImageUploadAdmissionValidator(
                 reader.setInput(input, false, true)
                 val canonicalFormat = canonicalFormat(reader.formatName) ?: throw invalidImage()
                 if (canonicalFormat.contentType != preScreened.contentType) {
-                    throw invalidImage()
-                }
-                val normalizedDeclaredType = normalizeImageMediaContentType(declaredContentType)
-                if (normalizedDeclaredType != null && normalizedDeclaredType != canonicalFormat.contentType) {
                     throw invalidImage()
                 }
 
@@ -135,41 +139,49 @@ class ImageUploadAdmissionValidator(
         if (fileSize < PNG_SIGNATURE_BYTES.toLong()) throw invalidImage()
 
         BufferedInputStream(Files.newInputStream(path), IO_BUFFER_BYTES).use { input ->
-            val scratch = ByteArray(PNG_CHUNK_HEADER_BYTES)
-            if (readFully(input, scratch, PNG_SIGNATURE_BYTES) != PNG_SIGNATURE_BYTES) {
+            rejectAnimatedPngStream(input, fileSize)
+        }
+    }
+
+    internal fun rejectAnimatedPngStream(
+        input: InputStream,
+        fileSize: Long,
+    ) {
+        if (fileSize < PNG_SIGNATURE_BYTES.toLong()) throw invalidImage()
+        val scratch = ByteArray(PNG_CHUNK_HEADER_BYTES)
+        if (readFully(input, scratch, PNG_SIGNATURE_BYTES) != PNG_SIGNATURE_BYTES) {
+            throw invalidImage()
+        }
+        if (readInt64BE(scratch, 0) != PNG_SIGNATURE_WORD) {
+            throw invalidImage()
+        }
+
+        var offset = PNG_SIGNATURE_BYTES.toLong()
+        var chunkCount = 0
+        while (offset + PNG_CHUNK_OVERHEAD <= fileSize) {
+            chunkCount += 1
+            if (chunkCount > MAX_PNG_CHUNKS) throw invalidImage()
+
+            if (readFully(input, scratch, PNG_CHUNK_HEADER_BYTES) != PNG_CHUNK_HEADER_BYTES) {
                 throw invalidImage()
             }
-            if (readInt64BE(scratch, 0) != PNG_SIGNATURE_WORD) {
+            val dataLength = readUint32BE(scratch, 0)
+            val chunkType = readInt32BE(scratch, 4)
+            if (dataLength > fileSize - offset - PNG_CHUNK_OVERHEAD) {
+                throw invalidImage()
+            }
+            if (chunkType == APNG_ACTL_CHUNK_WORD) {
                 throw invalidImage()
             }
 
-            var offset = PNG_SIGNATURE_BYTES.toLong()
-            var chunkCount = 0
-            while (offset + PNG_CHUNK_OVERHEAD <= fileSize) {
-                chunkCount += 1
-                if (chunkCount > MAX_PNG_CHUNKS) throw invalidImage()
-
-                if (readFully(input, scratch, PNG_CHUNK_HEADER_BYTES) != PNG_CHUNK_HEADER_BYTES) {
-                    throw invalidImage()
-                }
-                val dataLength = readUint32BE(scratch, 0)
-                val chunkType = readInt32BE(scratch, 4)
-                if (dataLength > fileSize - offset - PNG_CHUNK_OVERHEAD) {
-                    throw invalidImage()
-                }
-                if (chunkType == APNG_ACTL_CHUNK_WORD) {
-                    throw invalidImage()
-                }
-
-                skipExact(input, dataLength + PNG_CRC_BYTES)
-                offset += PNG_CHUNK_OVERHEAD + dataLength
-                if (chunkType == PNG_IEND_CHUNK_WORD) return
-            }
+            skipExact(input, dataLength + PNG_CRC_BYTES)
+            offset += PNG_CHUNK_OVERHEAD + dataLength
+            if (chunkType == PNG_IEND_CHUNK_WORD) return
         }
         throw invalidImage()
     }
 
-    private fun canonicalFormat(formatName: String): CanonicalImageFormat? =
+    internal fun canonicalFormat(formatName: String): CanonicalImageFormat? =
         when (formatName.trim().lowercase(Locale.ROOT)) {
             "jpeg", "jpg" -> CanonicalImageFormat(JPEG_CONTENT_TYPE, ".jpg")
             "png" -> CanonicalImageFormat(PNG_CONTENT_TYPE, ".png")
@@ -328,7 +340,7 @@ class ImageUploadAdmissionValidator(
             return total
         }
 
-        private fun skipExact(
+        internal fun skipExact(
             input: InputStream,
             count: Long,
         ) {

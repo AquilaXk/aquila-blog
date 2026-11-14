@@ -193,7 +193,7 @@ internal class PostPublicCursorCodec(
         }
     }
 
-    private fun signCursorPayloadSlice(
+    internal fun signCursorPayloadSlice(
         value: String,
         payloadEnd: Int,
         secretKeySpec: SecretKeySpec,

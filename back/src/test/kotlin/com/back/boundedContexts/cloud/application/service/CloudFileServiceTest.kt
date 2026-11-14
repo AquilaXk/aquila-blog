@@ -734,6 +734,13 @@ class CloudFileServiceTest {
         assertThat(txActiveInsideOpen).containsExactly(false)
         assertThat(txBeginCount).isEqualTo(2)
         assertThat(txCommitCount).isEqualTo(2)
+
+        assertThatThrownBy { isolatedService.executeWriteTransaction<String?> { null } }
+            .isInstanceOf(IllegalStateException::class.java)
+            .hasMessageContaining("Write transaction returned null")
+        assertThatThrownBy { isolatedService.executeReadOnlyTransaction<String?> { null } }
+            .isInstanceOf(IllegalStateException::class.java)
+            .hasMessageContaining("Read-only transaction returned null")
     }
 
     @Test

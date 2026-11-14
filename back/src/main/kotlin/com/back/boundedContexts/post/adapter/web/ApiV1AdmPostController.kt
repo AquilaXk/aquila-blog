@@ -91,13 +91,8 @@ class ApiV1AdmPostController(
             return adminPostListSnapshotService.getFirstPageSnapshot(sort)
         }
         val postPage = postUseCase.findPagedByKwForAdmin(kw, sort, validPage, validPageSize, validStatus)
-        return PageDto(
-            postPage.map { post ->
-                PostDto(post).apply {
-                    tempDraft = postUseCase.isTempDraft(post)
-                }
-            },
-        )
+        val tempDraftPostIds = postUseCase.resolveTempDraftPostIds(postPage.content)
+        return PostDto.toAdminPageDto(postPage, tempDraftPostIds)
     }
 
     @GetMapping("/deleted")

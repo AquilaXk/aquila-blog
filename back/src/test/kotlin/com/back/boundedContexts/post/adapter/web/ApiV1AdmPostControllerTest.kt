@@ -248,6 +248,37 @@ class ApiV1AdmPostControllerTest : BaseAdmPostControllerWebMvcTest() {
     }
 
     @Test
+    @WithMockUser(roles = ["ADMIN"])
+    fun `관리자 글 목록 조회는 페이지 내 임시글 여부를 resolveTempDraftPostIds로 일괄 판별한다`() {
+        val trackedPost = samplePost(id = 201, title = "추적 임시글", content = "본문1", published = false, listed = false)
+        val regularPost = samplePost(id = 202, title = "일반 글", content = "본문2", published = true, listed = true)
+        val page = PagedResult(content = listOf(trackedPost, regularPost), page = 1, pageSize = 20, totalElements = 2)
+        given(
+            postUseCase.findPagedByKwForAdmin(
+                "추적",
+                com.back.standard.dto.post.type1.PostSearchSortType1.MODIFIED_AT,
+                1,
+                20,
+                "all",
+            ),
+        ).willReturn(page)
+        given(postUseCase.resolveTempDraftPostIds(page.content)).willReturn(setOf(201L))
+
+        mvc
+            .get("/post/api/v1/adm/posts") {
+                param("kw", "추적")
+            }.andExpect {
+                status { isOk() }
+                jsonPath("$.content[0].tempDraft") { value(true) }
+                jsonPath("$.content[1].tempDraft") { value(false) }
+            }
+
+        then(postUseCase).should().resolveTempDraftPostIds(page.content)
+        then(postUseCase).should(never()).isTempDraft(trackedPost)
+        then(postUseCase).should(never()).isTempDraft(regularPost)
+    }
+
+    @Test
     @WithMockUser(roles = ["USER"])
     fun `일반 사용자는 관리자 글 목록을 조회할 수 없다`() {
         mvc.get("/post/api/v1/adm/posts").andExpect {

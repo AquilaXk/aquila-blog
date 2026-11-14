@@ -50,10 +50,13 @@ class ApiRateLimitBackstopFilter(
     }
 
     override fun shouldNotFilter(request: HttpServletRequest): Boolean {
+        request.removeAttribute(RESOLVED_BUCKET_ATTRIBUTE)
         if (!enabled) return true
         val path = requestPath(request)
         if (path == "/actuator" || path.startsWith("/actuator/")) return true
-        return bucketFor(request.method, path) == null
+        val bucket = bucketFor(request.method, path) ?: return true
+        request.setAttribute(RESOLVED_BUCKET_ATTRIBUTE, bucket)
+        return false
     }
 
     override fun doFilterInternal(
@@ -61,8 +64,7 @@ class ApiRateLimitBackstopFilter(
         response: HttpServletResponse,
         filterChain: FilterChain,
     ) {
-        val path = requestPath(request)
-        val bucket = bucketFor(request.method, path) ?: error("ApiRateLimitBackstopFilter invoked without a rate-limit bucket.")
+        val bucket = resolveRequestBucket(request)
 
         val redisKeyValuePort = redisKeyValuePortProvider.getIfAvailable()
         if (redisKeyValuePort == null || !redisKeyValuePort.isAvailable()) {
@@ -170,12 +172,23 @@ class ApiRateLimitBackstopFilter(
         meterRegistryProvider.getIfAvailable()?.counter("api_rate_limit_result_total", "bucket", bucket, "result", result)?.increment()
     }
 
-    private data class Bucket(
+    internal fun resolveRequestBucket(request: HttpServletRequest): Bucket {
+        val cached = request.getAttribute(RESOLVED_BUCKET_ATTRIBUTE) as? Bucket
+        if (cached != null) {
+            request.removeAttribute(RESOLVED_BUCKET_ATTRIBUTE)
+            return cached
+        }
+        return bucketFor(request.method, requestPath(request))
+            ?: error("ApiRateLimitBackstopFilter invoked without a rate-limit bucket.")
+    }
+
+    internal data class Bucket(
         val name: String,
         val limit: Int,
     )
 
     companion object {
+        private const val RESOLVED_BUCKET_ATTRIBUTE = "com.back.security.rateLimit.resolvedBucket"
         private val WINDOW = Duration.ofMinutes(1)
         private val SAFE_METHODS = setOf("GET", "HEAD")
         private val API_PATH_REGEX = Regex("^/[^/]+/api/.*")

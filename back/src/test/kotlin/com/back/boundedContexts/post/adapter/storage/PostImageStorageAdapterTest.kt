@@ -152,6 +152,35 @@ class PostImageStorageAdapterTest {
     }
 
     @Test
+    @DisplayName("listObjects는 결과 수가 limit 미만이어도 S3 응답이 truncated이면 isTruncated=true를 반환한다")
+    fun listObjectsMarksTruncatedWhenResponseIsTruncatedEvenBelowLimit() {
+        val s3Client =
+            RecordingS3Client(
+                ListObjectsV2Response
+                    .builder()
+                    .contents(s3Object("posts/2026/06/a.png", 10))
+                    .isTruncated(true)
+                    .build(),
+            )
+        val adapter =
+            PostImageStorageAdapter(
+                CloudStorageProperties(
+                    enabled = true,
+                    bucket = TEST_BUCKET,
+                    keyPrefix = "posts",
+                ),
+            )
+        ReflectionTestUtils.setField(adapter, "s3Client", s3Client)
+
+        val listing = adapter.listObjects("posts/2026/06", limit = 10)
+
+        assertThat(listing.isTruncated).isTrue()
+        assertThat(listing.objects).containsExactly(
+            PostImageStoragePort.StoredObjectSummary("posts/2026/06/a.png", 10),
+        )
+    }
+
+    @Test
     @DisplayName("listObjects dependency 실패는 safe reason과 DOWN 상태로 fail closed 한다")
     fun listObjectsRecordsDependencyFailureAndFailsClosed() {
         val failures =

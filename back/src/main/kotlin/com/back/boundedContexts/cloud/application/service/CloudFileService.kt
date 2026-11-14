@@ -438,13 +438,13 @@ class CloudFileService(
         return word == ZIP_LOCAL_HEADER_WORD || word == ZIP_EOCD_WORD || word == ZIP_SPANNED_WORD
     }
 
-    private fun <T> executeWriteTransaction(block: () -> T): T {
+    internal fun <T> executeWriteTransaction(block: () -> T): T {
         val manager = transactionManager ?: return block()
         return TransactionTemplate(manager).execute { block() }
             ?: throw IllegalStateException("Write transaction returned null")
     }
 
-    private fun <T> executeReadOnlyTransaction(block: () -> T): T {
+    internal fun <T> executeReadOnlyTransaction(block: () -> T): T {
         val manager = transactionManager ?: return block()
         val template =
             TransactionTemplate(manager).apply {

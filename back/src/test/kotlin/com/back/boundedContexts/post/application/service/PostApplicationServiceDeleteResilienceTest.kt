@@ -33,6 +33,9 @@ import com.back.global.task.application.TaskRetryPolicy
 import com.back.global.task.application.port.output.TaskQueueInsertPort
 import com.back.global.task.application.port.output.TaskQueueInsertResult
 import com.back.global.task.application.port.output.TaskQueueRepositoryPort
+import com.back.global.task.application.port.output.TaskTypeCountAggregate
+import com.back.global.task.application.port.output.TaskTypeReadyAggregate
+import com.back.global.task.application.port.output.TaskTypeStatusAggregate
 import com.back.global.task.domain.Task
 import com.back.global.task.domain.TaskStatus
 import com.back.standard.util.Ut
@@ -645,6 +648,22 @@ class PostApplicationServiceDeleteResilienceTest {
             savedTasks += task
             return task
         }
+
+        override fun saveAllTasks(tasks: Collection<Task>): List<Task> = tasks.map(::save)
+
+        override fun summarizeCountsByTaskTypeAndStatus(): List<TaskTypeStatusAggregate> = unsupported()
+
+        override fun summarizeReadyPendingByTaskType(
+            status: TaskStatus,
+            now: Instant,
+        ): List<TaskTypeReadyAggregate> = unsupported()
+
+        override fun countStaleProcessingByTaskType(
+            status: TaskStatus,
+            modifiedAt: Instant,
+        ): List<TaskTypeCountAggregate> = unsupported()
+
+        override fun findLatestFailedTasksByTaskType(): List<Task> = unsupported()
 
         override fun countByStatus(status: TaskStatus): Long = unsupported()
 

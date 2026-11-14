@@ -8,6 +8,7 @@ import org.slf4j.LoggerFactory
 import org.springframework.beans.factory.annotation.Value
 import org.springframework.stereotype.Service
 import tools.jackson.databind.ObjectMapper
+import java.time.Clock
 import java.util.concurrent.ConcurrentHashMap
 
 /**
@@ -34,6 +35,8 @@ class PostRecommendFeatureStoreService(
 
     private data class PersistedFeatureSnapshot(
         val version: Int,
+        val postVersion: Long?,
+        val modifiedAtEpochMs: Long?,
         val hitCount: Int,
         val likesCount: Int,
         val contentLength: Int,
@@ -53,48 +56,69 @@ class PostRecommendFeatureStoreService(
     private val staleMillis = staleSeconds.coerceIn(10, 86_400) * 1_000
     private val localCacheTtlMillis = localCacheTtlSeconds.coerceIn(5, 3_600) * 1_000
     private val localCache = ConcurrentHashMap<Long, LocalCacheEntry>()
+    internal var clock: Clock = Clock.systemUTC()
 
     fun resolveForPosts(posts: List<Post>): Map<Long, RecommendFeatureVector> {
         if (posts.isEmpty()) return emptyMap()
+        val now = clock.millis()
         if (!enabled) {
-            return posts.associate { post -> post.id to buildSnapshot(post).toFeatureVector(post) }
+            return posts.associate { post -> post.id to buildSnapshot(post, now).toFeatureVector(post) }
         }
+
+        val resolved = LinkedHashMap<Long, RecommendFeatureVector>(posts.size)
+        val uncachedPosts = ArrayList<Post>(posts.size)
+        for (post in posts) {
+            val cached = resolveCachedSnapshot(post, now)
+            if (cached != null) {
+                resolved[post.id] = cached.toFeatureVector(post)
+            } else {
+                uncachedPosts.add(post)
+            }
+        }
+        if (uncachedPosts.isEmpty()) return resolved
 
         val attrByPostId =
             postAttrRepository
-                .findBySubjectInAndNameIn(posts, listOf(FEATURE_STORE_ATTR_NAME))
+                .findBySubjectInAndNameIn(uncachedPosts, listOf(FEATURE_STORE_ATTR_NAME))
                 .associateBy { it.subject.id }
 
-        return posts.associate { post ->
-            post.id to resolveFeature(post, attrByPostId[post.id])
+        for (post in uncachedPosts) {
+            resolved[post.id] = resolveMissFeature(post, attrByPostId[post.id], now)
         }
+        return resolved
     }
 
     fun refresh(post: Post) {
         if (!enabled) return
-        val snapshot = buildSnapshot(post)
+        val now = clock.millis()
+        val snapshot = buildSnapshot(post, now)
         persistSnapshot(post, snapshot)
-        cacheSnapshot(post.id, snapshot)
+        cacheSnapshot(post.id, snapshot, now)
     }
 
     fun evict(postId: Long) {
         localCache.remove(postId)
     }
 
-    private fun resolveFeature(
+    internal fun localCacheSize(): Int = localCache.size
+
+    private fun resolveCachedSnapshot(
         post: Post,
-        persistedAttr: PostAttr?,
-    ): RecommendFeatureVector {
-        val now = System.currentTimeMillis()
-        val cachedSnapshot =
+        now: Long,
+    ): PersistedFeatureSnapshot? {
+        val snapshot =
             localCache[post.id]
                 ?.takeIf { it.expiresAtEpochMs > now }
                 ?.snapshot
+                ?: return null
+        return snapshot.takeIf { !isSnapshotStale(it, now) && matchesPost(post, it) }
+    }
 
-        if (cachedSnapshot != null && !isSnapshotStale(cachedSnapshot, now) && matchesPost(post, cachedSnapshot)) {
-            return cachedSnapshot.toFeatureVector(post)
-        }
-
+    private fun resolveMissFeature(
+        post: Post,
+        persistedAttr: PostAttr?,
+        now: Long,
+    ): RecommendFeatureVector {
         val persistedSnapshot =
             persistedAttr
                 ?.strValue
@@ -102,13 +126,13 @@ class PostRecommendFeatureStoreService(
                 ?.takeIf { !isSnapshotStale(it, now) && matchesPost(post, it) }
 
         if (persistedSnapshot != null) {
-            cacheSnapshot(post.id, persistedSnapshot)
+            cacheSnapshot(post.id, persistedSnapshot, now)
             return persistedSnapshot.toFeatureVector(post)
         }
 
-        val rebuilt = buildSnapshot(post)
-        persistSnapshot(post, rebuilt)
-        cacheSnapshot(post.id, rebuilt)
+        // 읽기 경로에서는 write TX가 없으므로 DB(post_attr) 저장 없이 L1 캐시만 채운다.
+        val rebuilt = buildSnapshot(post, now)
+        cacheSnapshot(post.id, rebuilt, now)
         return rebuilt.toFeatureVector(post)
     }
 
@@ -136,9 +160,27 @@ class PostRecommendFeatureStoreService(
     private fun cacheSnapshot(
         postId: Long,
         snapshot: PersistedFeatureSnapshot,
+        nowEpochMs: Long,
     ) {
-        val expiresAt = System.currentTimeMillis() + localCacheTtlMillis
-        localCache[postId] = LocalCacheEntry(expiresAt, snapshot)
+        localCache[postId] = LocalCacheEntry(nowEpochMs + localCacheTtlMillis, snapshot)
+        if (localCache.size > MAX_LOCAL_CACHE_ENTRIES) {
+            evictOverflowEntries(nowEpochMs)
+        }
+    }
+
+    private fun evictOverflowEntries(nowEpochMs: Long) {
+        localCache.entries.removeIf { it.value.expiresAtEpochMs <= nowEpochMs }
+        while (localCache.size > MAX_LOCAL_CACHE_ENTRIES) {
+            var oldestKey: Long? = null
+            var oldestExpiry = Long.MAX_VALUE
+            for ((key, entry) in localCache) {
+                if (entry.expiresAtEpochMs <= oldestExpiry) {
+                    oldestExpiry = entry.expiresAtEpochMs
+                    oldestKey = key
+                }
+            }
+            oldestKey?.let(localCache::remove)
+        }
     }
 
     private fun isSnapshotStale(
@@ -152,11 +194,16 @@ class PostRecommendFeatureStoreService(
     ): Boolean {
         val content = post.content
         return snapshot.version == SNAPSHOT_VERSION &&
+            snapshot.postVersion == post.version &&
+            snapshot.modifiedAtEpochMs == post.modifiedAt.toEpochMilli() &&
             snapshot.contentLength == content.length &&
             snapshot.contentHash == content.hashCode()
     }
 
-    private fun buildSnapshot(post: Post): PersistedFeatureSnapshot {
+    private fun buildSnapshot(
+        post: Post,
+        nowEpochMs: Long,
+    ): PersistedFeatureSnapshot {
         val content = post.content
         val normalizedTags =
             PostMetaExtractor
@@ -171,13 +218,15 @@ class PostRecommendFeatureStoreService(
 
         return PersistedFeatureSnapshot(
             version = SNAPSHOT_VERSION,
+            postVersion = post.version,
+            modifiedAtEpochMs = post.modifiedAt.toEpochMilli(),
             hitCount = post.hitCount.coerceAtLeast(0),
             likesCount = post.likesCount.coerceAtLeast(0),
             contentLength = content.length,
             contentHash = content.hashCode(),
             dwellProxySeconds = estimateDwellProxySeconds(content),
             normalizedTags = normalizedTags,
-            capturedAtEpochMs = System.currentTimeMillis(),
+            capturedAtEpochMs = nowEpochMs,
         )
     }
 
@@ -197,6 +246,7 @@ class PostRecommendFeatureStoreService(
 
     companion object {
         private const val FEATURE_STORE_ATTR_NAME = "recommendFeatureStoreV1"
-        private const val SNAPSHOT_VERSION = 2
+        private const val SNAPSHOT_VERSION = 3
+        private const val MAX_LOCAL_CACHE_ENTRIES = 2_048
     }
 }

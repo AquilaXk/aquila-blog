@@ -199,6 +199,59 @@ class PostApplicationUseCaseCollaboratorTest {
         then(postRepository).should().flush()
     }
 
+    @Test
+    fun `resolveTempDraftPostIds batches member attr lookup once for non-flag posts and handles edge cases`() {
+        val postRepository = mock(PostRepositoryPort::class.java)
+        val memberAttrRepository = mock(MemberAttrRepositoryPort::class.java)
+        val postHydrationService = mock(PostHydrationService::class.java)
+        val service = PostTempDraftService(postRepository, memberAttrRepository, postHydrationService)
+
+        assertThat(service.resolveTempDraftPostIds(emptyList())).isEmpty()
+        org.mockito.Mockito.verifyNoInteractions(memberAttrRepository)
+
+        val author1 = testMember(1L)
+        val flaggedOnlyPost = testPost(id = 100L, author = author1).apply { isTempDraft = true }
+        assertThat(service.resolveTempDraftPostIds(listOf(flaggedOnlyPost))).containsExactly(100L)
+        org.mockito.Mockito.verifyNoInteractions(memberAttrRepository)
+
+        val author2 = testMember(2L)
+        val author3 = testMember(3L)
+        val author4 = testMember(4L)
+        val author5 = testMember(5L)
+
+        val trackedPost = testPost(id = 201L, author = author2)
+        val unmatchedAuthor2Post = testPost(id = 202L, author = author2)
+        val blankAttrPost = testPost(id = 301L, author = author3)
+        val invalidAttrPost = testPost(id = 401L, author = author4)
+        val differentTargetPost = testPost(id = 501L, author = author5)
+
+        given(
+            memberAttrRepository.findBySubjectInAndNameIn(
+                listOf(author2, author3, author4, author5),
+                listOf("activeTempDraftPostId"),
+            ),
+        ).willReturn(
+            listOf(
+                MemberAttr(1L, author2, "activeTempDraftPostId", " 201 "),
+                MemberAttr(2L, author3, "activeTempDraftPostId", "   "),
+                MemberAttr(3L, author4, "activeTempDraftPostId", "not-a-number"),
+                MemberAttr(4L, author5, "activeTempDraftPostId", "999"),
+            ),
+        )
+
+        val resolved =
+            service.resolveTempDraftPostIds(
+                listOf(flaggedOnlyPost, trackedPost, unmatchedAuthor2Post, blankAttrPost, invalidAttrPost, differentTargetPost),
+            )
+
+        assertThat(resolved).containsExactlyInAnyOrder(100L, 201L)
+        then(memberAttrRepository).should(times(1)).findBySubjectInAndNameIn(
+            listOf(author2, author3, author4, author5),
+            listOf("activeTempDraftPostId"),
+        )
+        then(memberAttrRepository).should(org.mockito.Mockito.never()).findBySubjectAndName(author2, "activeTempDraftPostId")
+    }
+
     private fun testMember(id: Long = 1): Member =
         Member(id = id, username = "user-$id", nickname = "작성자$id", apiKey = "api-key-$id").also {
             val now = Instant.now()

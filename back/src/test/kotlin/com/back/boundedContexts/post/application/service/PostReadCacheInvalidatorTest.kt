@@ -520,6 +520,60 @@ class PostReadCacheInvalidatorTest {
         assertThat(get(PostQueryCacheNames.DETAIL_PUBLIC_NEGATIVE, 201L)).isEqualTo("cached")
     }
 
+    @Test
+    @DisplayName("비표준 nativeCache 구현체는 ranked sort 무효화 시 clear fallback을 수행한다")
+    fun invalidateRankedSortHotPagesFallsBackToClearForOpaqueCache() {
+        var clearedCount = 0
+        val opaqueCache =
+            object : org.springframework.cache.Cache {
+                override fun getName(): String = PostQueryCacheNames.FEED
+
+                override fun getNativeCache(): Any = Any()
+
+                override fun get(key: Any) = null
+
+                override fun <T : Any> get(
+                    key: Any,
+                    type: Class<T>?,
+                ): T? = null
+
+                override fun <T : Any> get(
+                    key: Any,
+                    valueLoader: java.util.concurrent.Callable<T>,
+                ): T? = null
+
+                override fun put(
+                    key: Any,
+                    value: Any?,
+                ) = Unit
+
+                override fun evict(key: Any) = Unit
+
+                override fun clear() {
+                    clearedCount++
+                }
+            }
+        val opaqueManager =
+            org.springframework.cache.support.SimpleCacheManager().apply {
+                setCaches(listOf(opaqueCache))
+                initializeCaches()
+            }
+        val opaqueInvalidator = PostReadCacheInvalidator(opaqueManager, meterRegistry)
+
+        opaqueInvalidator.invalidateRankedSortHotPages("opaque", listOf(PostSearchSortType1.HIT_COUNT))
+
+        assertThat(clearedCount).isEqualTo(1)
+        assertThat(
+            meterRegistry
+                .find("post.read.cache.evict")
+                .tag("cache", PostQueryCacheNames.FEED)
+                .tag("scope", "clear")
+                .tag("reason", "opaque")
+                .counter()
+                ?.count(),
+        ).isEqualTo(1.0)
+    }
+
     private fun put(
         cacheName: String,
         key: Any,

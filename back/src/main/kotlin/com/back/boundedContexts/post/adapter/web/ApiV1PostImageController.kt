@@ -1,9 +1,10 @@
 package com.back.boundedContexts.post.adapter.web
 
 import com.back.boundedContexts.member.application.port.input.ProfileImageReadUseCase
+import com.back.boundedContexts.post.application.port.input.PostImageReadAccessUseCase
 import com.back.boundedContexts.post.application.port.output.PostImageStoragePort
-import com.back.boundedContexts.post.application.port.output.PostRepositoryPort
 import com.back.boundedContexts.post.application.support.PostCacheTags
+import com.back.boundedContexts.post.dto.PostImageReadPlanDto
 import com.back.global.exception.application.AppException
 import com.back.global.exception.application.ErrorCode
 import com.back.global.rsData.RsData
@@ -11,12 +12,8 @@ import com.back.global.security.domain.SecurityUser
 import com.back.global.storage.application.ImageUploadAdmissionValidator
 import com.back.global.storage.application.UploadedFileRetentionService
 import com.back.global.storage.application.UploadedFileUrlCodec
-import com.back.global.storage.application.port.output.UploadedFileRepositoryPort
 import com.back.global.storage.config.StoragePropertiesPort
-import com.back.global.storage.domain.UploadedFile
-import com.back.global.storage.domain.UploadedFileOwnerType
 import com.back.global.storage.domain.UploadedFilePurpose
-import com.back.global.storage.domain.UploadedFileStatus
 import jakarta.servlet.http.HttpServletRequest
 import org.springframework.core.io.InputStreamResource
 import org.springframework.core.io.Resource
@@ -26,7 +23,6 @@ import org.springframework.http.HttpStatus
 import org.springframework.http.MediaType
 import org.springframework.http.ResponseEntity
 import org.springframework.security.core.annotation.AuthenticationPrincipal
-import org.springframework.transaction.annotation.Transactional
 import org.springframework.web.bind.annotation.GetMapping
 import org.springframework.web.bind.annotation.PostMapping
 import org.springframework.web.bind.annotation.RequestMapping
@@ -35,7 +31,9 @@ import org.springframework.web.bind.annotation.RestController
 import org.springframework.web.multipart.MultipartFile
 import java.io.EOFException
 import java.io.InputStream
-import java.net.URLDecoder
+import java.nio.ByteBuffer
+import java.nio.charset.CharacterCodingException
+import java.nio.charset.CodingErrorAction
 import java.nio.charset.StandardCharsets
 import java.util.Base64
 import java.util.concurrent.TimeUnit
@@ -46,9 +44,7 @@ class ApiV1PostImageController(
     private val postImageStorageService: PostImageStoragePort,
     private val storageProperties: StoragePropertiesPort,
     private val uploadedFileRetentionService: UploadedFileRetentionService,
-    private val uploadedFileRepository: UploadedFileRepositoryPort,
-    private val postRepository: PostRepositoryPort,
-    private val profileImageReadUseCase: ProfileImageReadUseCase,
+    private val postImageReadAccessUseCase: PostImageReadAccessUseCase,
 ) {
     companion object {
         private const val POST_IMAGE_MAX_FILE_SIZE_BYTES = 8L * 1024 * 1024
@@ -102,7 +98,6 @@ class ApiV1PostImageController(
     }
 
     @GetMapping("/images/**")
-    @Transactional(readOnly = true)
     fun getPostImage(
         request: HttpServletRequest,
         @AuthenticationPrincipal securityUser: SecurityUser? = null,
@@ -114,27 +109,12 @@ class ApiV1PostImageController(
                 "잘못된 이미지 경로입니다.",
                 IMAGE_NOT_FOUND_MESSAGE,
             )
-        val uploadedFile = uploadedFileRepository.findByObjectKey(objectKey) ?: throw postImageNotFound()
-        val access =
-            when (uploadedFile.purpose) {
-                UploadedFilePurpose.PROFILE_IMAGE ->
-                    try {
-                        profileImageReadUseCase.resolve(objectKey, uploadedFile, securityUser?.id)
-                    } catch (ex: AppException) {
-                        resolvePostImageAccess(
-                            uploadedFile = uploadedFile,
-                            securityUser = securityUser,
-                            notFound = { ex },
-                        )
-                    }
-                UploadedFilePurpose.POST_IMAGE ->
-                    resolvePostImageAccess(
-                        uploadedFile = uploadedFile,
-                        securityUser = securityUser,
-                        notFound = ::postImageNotFound,
-                    )
-                else -> throw postImageNotFound()
-            }
+        val readPlan =
+            postImageReadAccessUseCase.resolveReadPlan(
+                objectKey = objectKey,
+                viewerId = securityUser?.id,
+                isAdmin = isAdminUser(securityUser),
+            )
         val etag =
             "\"" +
                 Base64
@@ -147,8 +127,8 @@ class ApiV1PostImageController(
                 ResponseEntity
                     .status(HttpStatus.NOT_MODIFIED)
                     .eTag(etag),
-                access,
-                uploadedFile,
+                readPlan,
+                objectKey,
             ).build()
         }
 
@@ -170,8 +150,8 @@ class ApiV1PostImageController(
                     .status(HttpStatus.REQUESTED_RANGE_NOT_SATISFIABLE)
                     .header(HttpHeaders.CONTENT_RANGE, "bytes */$totalSuffix")
                     .eTag(etag),
-                access,
-                uploadedFile,
+                readPlan,
+                objectKey,
             ).build()
         }
 
@@ -196,8 +176,8 @@ class ApiV1PostImageController(
                         .header(HttpHeaders.CONTENT_RANGE, "bytes $resolvedStart-$clampedEnd/$totalLength")
                         .contentLength(sliceLength)
                         .eTag(etag),
-                    access,
-                    uploadedFile,
+                    readPlan,
+                    objectKey,
                 ).body(InputStreamResource(image.inputStream))
             }
 
@@ -209,8 +189,8 @@ class ApiV1PostImageController(
                         .status(HttpStatus.REQUESTED_RANGE_NOT_SATISFIABLE)
                         .header(HttpHeaders.CONTENT_RANGE, "bytes */*")
                         .eTag(etag),
-                    access,
-                    uploadedFile,
+                    readPlan,
+                    objectKey,
                 ).build()
             }
             val range = parseSingleRange(rangeHeader, totalLength)
@@ -221,8 +201,8 @@ class ApiV1PostImageController(
                         .status(HttpStatus.REQUESTED_RANGE_NOT_SATISFIABLE)
                         .header(HttpHeaders.CONTENT_RANGE, "bytes */$totalLength")
                         .eTag(etag),
-                    access,
-                    uploadedFile,
+                    readPlan,
+                    objectKey,
                 ).build()
             }
 
@@ -236,8 +216,8 @@ class ApiV1PostImageController(
                     .header(HttpHeaders.CONTENT_RANGE, "bytes ${range.first}-${range.last}/$totalLength")
                     .contentLength(range.last - range.first + 1)
                     .eTag(etag),
-                access,
-                uploadedFile,
+                readPlan,
+                objectKey,
             ).body(body)
         }
 
@@ -248,8 +228,8 @@ class ApiV1PostImageController(
                     .contentType(MediaType.parseMediaType(canonicalMimeType))
                     .header(HttpHeaders.ACCEPT_RANGES, "bytes")
                     .eTag(etag),
-                access,
-                uploadedFile,
+                readPlan,
+                objectKey,
             )
 
         val finalizedBuilder =
@@ -261,72 +241,31 @@ class ApiV1PostImageController(
         return finalizedBuilder.body(InputStreamResource(image.inputStream))
     }
 
-    private fun resolvePostImageAccess(
-        uploadedFile: UploadedFile,
-        securityUser: SecurityUser?,
-        notFound: () -> AppException,
-    ): ProfileImageReadUseCase.Access {
-        val isAdmin = isAdminUser(securityUser)
-        if (uploadedFile.status == UploadedFileStatus.TEMP) {
-            if (isAdmin) return ProfileImageReadUseCase.Access.OWNER_ONLY
-            throw notFound()
-        }
-        if (
-            uploadedFile.status != UploadedFileStatus.ACTIVE ||
-            uploadedFile.ownerType !in setOf(UploadedFileOwnerType.POST, UploadedFileOwnerType.MEMBER_PROFILE)
-        ) {
-            throw notFound()
-        }
-
-        val postId =
-            if (uploadedFile.ownerType == UploadedFileOwnerType.POST) {
-                uploadedFile.ownerId?.takeIf { it > 0L }
-            } else {
-                null
-            }
-        if ((postId != null && postRepository.findPublicDetailById(postId) != null) ||
-            postRepository.existsPublicPostReferencingImage(uploadedFile.objectKey)
-        ) {
-            return ProfileImageReadUseCase.Access.PUBLIC
-        }
-        if (isAdmin &&
-            (
-                (postId != null && postRepository.findById(postId).isPresent) ||
-                    postRepository.existsImageReferenceByObjectKey(uploadedFile.objectKey)
-            )
-        ) {
-            return ProfileImageReadUseCase.Access.OWNER_ONLY
-        }
-        throw notFound()
-    }
-
     private fun isAdminUser(securityUser: SecurityUser?): Boolean = securityUser?.authorities?.any { it.authority == "ROLE_ADMIN" } == true
-
-    private fun postImageNotFound(): AppException = AppException(ErrorCode.NOT_FOUND, IMAGE_NOT_FOUND_MESSAGE)
 
     private fun withImageCacheControl(
         builder: ResponseEntity.BodyBuilder,
-        access: ProfileImageReadUseCase.Access,
-        uploadedFile: UploadedFile,
+        readPlan: PostImageReadPlanDto,
+        objectKey: String,
     ): ResponseEntity.BodyBuilder {
         val securedBuilder =
             builder
                 .header("X-Content-Type-Options", "nosniff")
                 .header("Content-Security-Policy", "default-src 'none'; sandbox")
-        return if (access == ProfileImageReadUseCase.Access.OWNER_ONLY) {
+        return if (readPlan.access == ProfileImageReadUseCase.Access.OWNER_ONLY) {
             securedBuilder
                 .cacheControl(CacheControl.noStore().cachePrivate())
                 .header(HttpHeaders.VARY, HttpHeaders.COOKIE)
-        } else if (uploadedFile.purpose == UploadedFilePurpose.POST_IMAGE) {
+        } else if (readPlan.purpose == UploadedFilePurpose.POST_IMAGE) {
             val cacheTags =
                 buildSet {
                     add(PostCacheTags.IMAGES)
-                    add("post-image:${uploadedFile.objectKey}")
-                    uploadedFile.ownerId?.takeIf { it > 0L }?.let {
+                    add("post-image:$objectKey")
+                    readPlan.ownerPostId?.let {
                         add(PostCacheTags.byPostId(it))
                         add("post:$it")
                     }
-                    postRepository.findFirstReferencingPostId(uploadedFile.objectKey)?.takeIf { it > 0L }?.let {
+                    readPlan.referencingPostId?.let {
                         add(PostCacheTags.byPostId(it))
                         add("post:$it")
                     }
@@ -339,15 +278,13 @@ class ApiV1PostImageController(
                         .cachePublic(),
                 ).header("Surrogate-Key", cacheTags.joinToString(" "))
                 .header("Cache-Tag", cacheTags.joinToString(","))
-        } else if (uploadedFile.purpose == UploadedFilePurpose.PROFILE_IMAGE) {
+        } else {
             securedBuilder.cacheControl(
                 CacheControl
                     .maxAge(3600, TimeUnit.SECONDS)
                     .staleWhileRevalidate(86400, TimeUnit.SECONDS)
                     .cachePublic(),
             )
-        } else {
-            securedBuilder.cacheControl(CacheControl.noCache().cachePublic())
         }
     }
 
@@ -379,18 +316,93 @@ class ApiV1PostImageController(
 
         val encodedKey = path.removePrefix(prefix).trim()
         if (encodedKey.isBlank()) throw AppException(ErrorCode.NOT_FOUND, notFoundMessage)
-        return URLDecoder.decode(encodedKey, StandardCharsets.UTF_8)
+        return decodeRfc3986PathSegment(encodedKey, invalidPathMessage)
     }
+
+    private fun decodeRfc3986PathSegment(
+        encoded: String,
+        invalidPathMessage: String,
+    ): String {
+        val firstPercent = encoded.indexOf('%')
+        if (firstPercent < 0) return encoded
+
+        val len = encoded.length
+        val out = StringBuilder(len)
+        out.append(encoded, 0, firstPercent)
+        val byteBuffer = ByteArray(len - firstPercent)
+        val decoder =
+            StandardCharsets.UTF_8
+                .newDecoder()
+                .onMalformedInput(CodingErrorAction.REPORT)
+                .onUnmappableCharacter(CodingErrorAction.REPORT)
+        var i = firstPercent
+        while (i < len) {
+            val ch = encoded[i]
+            if (ch != '%') {
+                out.append(ch)
+                i++
+                continue
+            }
+            var byteCount = 0
+            while (i < len && encoded[i] == '%') {
+                if (i + 2 >= len) throw AppException(ErrorCode.BAD_REQUEST, invalidPathMessage)
+                val hi = hexNibble(encoded[i + 1])
+                val lo = hexNibble(encoded[i + 2])
+                if (hi < 0 || lo < 0) throw AppException(ErrorCode.BAD_REQUEST, invalidPathMessage)
+                byteBuffer[byteCount++] = ((hi shl 4) or lo).toByte()
+                i += 3
+            }
+            try {
+                out.append(decoder.decode(ByteBuffer.wrap(byteBuffer, 0, byteCount)))
+            } catch (_: CharacterCodingException) {
+                throw AppException(ErrorCode.BAD_REQUEST, invalidPathMessage)
+            }
+            decoder.reset()
+        }
+        return out.toString()
+    }
+
+    private fun hexNibble(ch: Char): Int =
+        when (ch) {
+            in '0'..'9' -> ch.code - '0'.code
+            in 'a'..'f' -> ch.code - 'a'.code + 10
+            in 'A'..'F' -> ch.code - 'A'.code + 10
+            else -> -1
+        }
 
     private fun isNotModified(
         ifNoneMatch: String?,
         currentEtag: String,
     ): Boolean {
         if (ifNoneMatch.isNullOrBlank()) return false
-        return ifNoneMatch
-            .split(",")
-            .map { it.trim() }
-            .any { it == "*" || it == currentEtag }
+        var start = 0
+        val length = ifNoneMatch.length
+        while (start <= length) {
+            val commaIndex = ifNoneMatch.indexOf(',', start)
+            val end = if (commaIndex >= 0) commaIndex else length
+            var left = start
+            var right = end
+            while (left < right && ifNoneMatch[left] <= ' ') left++
+            while (right > left && ifNoneMatch[right - 1] <= ' ') right--
+            if (left < right) {
+                val tokenLength = right - left
+                if (tokenLength == 1 && ifNoneMatch[left] == '*') return true
+                val matchStart =
+                    if (tokenLength >= 2 && ifNoneMatch[left] == 'W' && ifNoneMatch[left + 1] == '/') {
+                        left + 2
+                    } else {
+                        left
+                    }
+                if (right - matchStart == currentEtag.length &&
+                    ifNoneMatch.regionMatches(matchStart, currentEtag, 0, currentEtag.length)
+                ) {
+                    return true
+                }
+            }
+            if (commaIndex < 0) break
+            start = commaIndex + 1
+        }
+        return false
     }
 
     private fun parseSingleRange(

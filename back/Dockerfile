@@ -5,7 +5,7 @@
 # =========================
 # Digest pin source:
 # docker buildx imagetools inspect eclipse-temurin:25-jdk
-FROM eclipse-temurin:25-jdk@sha256:201fbb8886b2d273218aa3a192f0afbf7b5ff65ee8cc6ef47f5dce2171f013ea AS jdk-source
+FROM eclipse-temurin:25-jdk@sha256:b8705e936964c228dfce359e63dbf08f6c69cb380ed1d576b1f6b1064f15567d AS jdk-source
 
 # =========================
 # 2️⃣ Build Stage
@@ -55,7 +55,7 @@ RUN set -e \
 # =========================
 # Oracle GraalVM base can require x86-64-v3 on older CPUs.
 # Use Temurin for broader CPU compatibility.
-FROM eclipse-temurin:25-jdk@sha256:201fbb8886b2d273218aa3a192f0afbf7b5ff65ee8cc6ef47f5dce2171f013ea AS extractor
+FROM eclipse-temurin:25-jdk@sha256:b8705e936964c228dfce359e63dbf08f6c69cb380ed1d576b1f6b1064f15567d AS extractor
 
 WORKDIR /app
 
@@ -67,7 +67,7 @@ RUN java -Djarmode=tools -jar app.jar extract
 # =========================
 # 4️⃣ Runtime Stage
 # =========================
-FROM eclipse-temurin:25-jdk@sha256:201fbb8886b2d273218aa3a192f0afbf7b5ff65ee8cc6ef47f5dce2171f013ea
+FROM eclipse-temurin:25-jdk@sha256:b8705e936964c228dfce359e63dbf08f6c69cb380ed1d576b1f6b1064f15567d
 
 ENV LANG=ko_KR.UTF-8
 ENV LC_ALL=ko_KR.UTF-8

@@ -9,11 +9,20 @@ import org.mockito.Mockito.verifyNoInteractions
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.jdbc.core.JdbcTemplate
 import org.springframework.jdbc.datasource.LazyConnectionDataSourceProxy
+import org.springframework.test.context.TestPropertySource
 import org.springframework.transaction.PlatformTransactionManager
 import org.springframework.transaction.TransactionDefinition
 import org.springframework.transaction.support.TransactionTemplate
 import javax.sql.DataSource
 
+@TestPropertySource(
+    properties = [
+        "spring.jpa.properties.hibernate.generate_statistics=true",
+        "spring.task.scheduling.enabled=false",
+        "custom.task.processor.enabled=false",
+        "custom.runtime.worker-enabled=false",
+    ],
+)
 class JpaConfigLazyConnectionDataSourceIntegrationTest : BaseSeededIntegrationTest() {
     @Autowired
     private lateinit var dataSource: DataSource

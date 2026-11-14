@@ -12,10 +12,19 @@ import org.assertj.core.api.Assertions.assertThat
 import org.hibernate.SessionFactory
 import org.junit.jupiter.api.Test
 import org.springframework.beans.factory.annotation.Autowired
+import org.springframework.test.context.TestPropertySource
 import java.sql.Timestamp
 import java.time.Instant
 import java.util.UUID
 
+@TestPropertySource(
+    properties = [
+        "spring.jpa.properties.hibernate.generate_statistics=true",
+        "spring.task.scheduling.enabled=false",
+        "custom.task.processor.enabled=false",
+        "custom.runtime.worker-enabled=false",
+    ],
+)
 class TaskQueueDiagnosticsIntegrationTest : BaseTransactionalIntegrationTest() {
     @Autowired
     private lateinit var taskQueueRepositoryPort: TaskQueueRepositoryPort

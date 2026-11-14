@@ -7,6 +7,7 @@ import com.back.boundedContexts.post.dto.AdmDeletedPostSnapshotDto
 import org.springframework.data.domain.Page
 import org.springframework.data.domain.PageImpl
 import org.springframework.data.domain.Pageable
+import org.springframework.data.support.PageableExecutionUtils
 import org.springframework.jdbc.core.JdbcTemplate
 import org.springframework.stereotype.Component
 
@@ -85,13 +86,6 @@ class PostDeletedQueryRepository(
             limit ? offset ?
             """.trimIndent()
 
-        val countSql =
-            """
-            select count(*)
-            from post p
-            where $whereClause
-            """.trimIndent()
-
         val listParams =
             mutableListOf<Any>().apply {
                 add(PUBLISHED_PROFILE_WORKSPACE_ATTR_NAME)
@@ -101,14 +95,6 @@ class PostDeletedQueryRepository(
                 }
                 add(pageable.pageSize)
                 add(pageable.offset)
-            }
-
-        val countParams =
-            mutableListOf<Any>().apply {
-                if (hasKeyword) {
-                    add(escapedKw)
-                    add(escapedKw)
-                }
             }
 
         val rows =
@@ -137,10 +123,25 @@ class PostDeletedQueryRepository(
                 *listParams.toTypedArray(),
             )
 
-        val total =
-            jdbcTemplate.queryForObject(countSql, Long::class.java, *countParams.toTypedArray()) ?: 0L
+        if (pageable.offset == 0L && rows.size < pageable.pageSize) {
+            return PageImpl(rows, pageable, rows.size.toLong())
+        }
 
-        return PageImpl(rows, pageable, total)
+        return PageableExecutionUtils.getPage(rows, pageable) {
+            val countSql =
+                """
+                select count(*)
+                from post p
+                where $whereClause
+                """.trimIndent()
+            val countParams =
+                if (hasKeyword) {
+                    arrayOf<Any>(escapedKw, escapedKw)
+                } else {
+                    emptyArray()
+                }
+            jdbcTemplate.queryForObject(countSql, Long::class.java, *countParams) ?: 0L
+        }
     }
 
     fun softDeleteById(id: Long): Boolean {
@@ -208,11 +209,27 @@ class PostDeletedQueryRepository(
         return deletedRows > 0
     }
 
-    private fun escapeLike(value: String): String =
-        value
-            .replace("\\", "\\\\")
-            .replace("%", "\\%")
-            .replace("_", "\\_")
+    private fun escapeLike(value: String): String {
+        var firstSpecial = -1
+        for (i in 0 until value.length) {
+            val ch = value[i]
+            if (ch == '\\' || ch == '%' || ch == '_') {
+                firstSpecial = i
+                break
+            }
+        }
+        if (firstSpecial < 0) return value
+        val sb = StringBuilder(value.length + 4)
+        sb.append(value, 0, firstSpecial)
+        for (i in firstSpecial until value.length) {
+            val ch = value[i]
+            if (ch == '\\' || ch == '%' || ch == '_') {
+                sb.append('\\')
+            }
+            sb.append(ch)
+        }
+        return sb.toString()
+    }
 
     private fun resolveAuthorProfileImgUrl(
         rawWorkspace: String?,

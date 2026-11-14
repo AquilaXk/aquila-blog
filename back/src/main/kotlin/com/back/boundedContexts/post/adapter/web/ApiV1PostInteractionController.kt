@@ -120,12 +120,6 @@ class ApiV1PostInteractionController(
     private fun resolveViewerKey(): String =
         rq.actorOrNull
             ?.let { "member:${it.id}" }
-            ?: run {
-                val clientIp = rq.clientIp
-                if (IpAddressNormalizer.normalize(clientIp) == null) {
-                    ""
-                } else {
-                    "anon:${IpAddressNormalizer.normalizeRateLimitKey(clientIp)}"
-                }
-            }
+            ?: IpAddressNormalizer.normalizeRateLimitKeyOrNull(rq.clientIp)?.let { "anon:$it" }
+            ?: ""
 }

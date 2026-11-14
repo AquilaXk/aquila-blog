@@ -20,14 +20,16 @@ object IpAddressNormalizer {
 
     fun normalize(raw: String?): String? = resolveInetAddress(raw)?.hostAddress
 
-    fun normalizeRateLimitKey(raw: String?): String {
-        val address = resolveInetAddress(raw) ?: return UNKNOWN_RATE_LIMIT_KEY
+    fun normalizeRateLimitKeyOrNull(raw: String?): String? {
+        val address = resolveInetAddress(raw) ?: return null
         return if (address is Inet6Address) {
             formatIpv6Prefix64(address.address)
         } else {
             address.hostAddress
         }
     }
+
+    fun normalizeRateLimitKey(raw: String?): String = normalizeRateLimitKeyOrNull(raw) ?: UNKNOWN_RATE_LIMIT_KEY
 
     private fun resolveInetAddress(raw: String?): InetAddress? {
         if (raw.isNullOrBlank()) return null

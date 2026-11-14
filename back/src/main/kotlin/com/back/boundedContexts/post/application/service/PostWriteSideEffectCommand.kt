@@ -55,10 +55,19 @@ data class PostAttachmentObjectKeySnapshot(
             previousContent: String?,
             currentContent: String?,
             deletedContent: String?,
+            preExtractedCurrentKeys: UploadedFileUrlCodec.PartitionedObjectKeys? = null,
         ): PostAttachmentObjectKeySnapshot {
             check(currentContent == null || deletedContent == null) {
                 "Post attachment task cannot sync and delete in one payload"
             }
+            val currentKeys =
+                if (currentContent == null) {
+                    null
+                } else {
+                    preExtractedCurrentKeys ?: UploadedFileUrlCodec.extractPartitionedObjectKeysFromContent(currentContent)
+                }
+            val previousKeys = previousContent?.let(UploadedFileUrlCodec::extractPartitionedObjectKeysFromContent)
+            val deletedKeys = deletedContent?.let(UploadedFileUrlCodec::extractPartitionedObjectKeysFromContent)
             return PostAttachmentObjectKeySnapshot(
                 action =
                     when {
@@ -66,20 +75,14 @@ data class PostAttachmentObjectKeySnapshot(
                         deletedContent != null -> PostAttachmentTaskAction.DELETE
                         else -> PostAttachmentTaskAction.NONE
                     },
-                currentImageObjectKeys = extractImageKeys(currentContent),
-                previousImageObjectKeys = extractImageKeys(previousContent),
-                currentFileObjectKeys = extractFileKeys(currentContent),
-                previousFileObjectKeys = extractFileKeys(previousContent),
-                deletedImageObjectKeys = extractImageKeys(deletedContent),
-                deletedFileObjectKeys = extractFileKeys(deletedContent),
+                currentImageObjectKeys = currentKeys?.imageKeys?.sorted().orEmpty(),
+                previousImageObjectKeys = previousKeys?.imageKeys?.sorted().orEmpty(),
+                currentFileObjectKeys = currentKeys?.fileKeys?.sorted().orEmpty(),
+                previousFileObjectKeys = previousKeys?.fileKeys?.sorted().orEmpty(),
+                deletedImageObjectKeys = deletedKeys?.imageKeys?.sorted().orEmpty(),
+                deletedFileObjectKeys = deletedKeys?.fileKeys?.sorted().orEmpty(),
             )
         }
-
-        private fun extractImageKeys(content: String?): List<String> =
-            content?.let(UploadedFileUrlCodec::extractImageObjectKeysFromContent)?.sorted().orEmpty()
-
-        private fun extractFileKeys(content: String?): List<String> =
-            content?.let(UploadedFileUrlCodec::extractFileObjectKeysFromContent)?.sorted().orEmpty()
     }
 }
 
@@ -94,6 +97,7 @@ internal data class PostWriteSideEffectCommand(
     val evictReason: String,
     val recommendationAction: PostRecommendationSideEffect,
     val operationUid: UUID = UUID.randomUUID(),
+    val preExtractedCurrentKeys: UploadedFileUrlCodec.PartitionedObjectKeys? = null,
 )
 
 enum class PostRecommendationSideEffect {

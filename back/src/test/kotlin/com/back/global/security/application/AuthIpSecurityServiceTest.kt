@@ -26,6 +26,8 @@ class AuthIpSecurityServiceTest {
         assertThat(service.matches(expected, " 203.0.113.18 ")).isTrue()
         assertThat(service.matches(null, "203.0.113.18")).isFalse()
         assertThat(service.matches(" ", "203.0.113.18")).isFalse()
+        assertThat(service.matches("short-invalid", "203.0.113.18")).isFalse()
+        assertThat(service.matches("x".repeat(43), "203.0.113.18")).isFalse()
         assertThat(service.matches(expected, "not-an-ip")).isFalse()
         assertThat(service.matches(expected, "203.0.113.19")).isFalse()
     }

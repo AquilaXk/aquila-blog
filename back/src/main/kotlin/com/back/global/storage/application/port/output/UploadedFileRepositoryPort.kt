@@ -34,6 +34,8 @@ interface UploadedFileRepositoryPort {
 
     fun countByStatus(status: UploadedFileStatus): Long
 
+    fun countGroupedByStatus(): Map<UploadedFileStatus, Long>
+
     fun countByStatusInAndPurgeAfterLessThanEqual(
         statuses: Collection<UploadedFileStatus>,
         purgeAfter: Instant,

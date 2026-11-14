@@ -4,19 +4,22 @@ import java.security.MessageDigest
 import java.util.HexFormat
 
 /**
- * Low-level streaming UTF-8 and decimal ASCII SHA-256 digest helper backed by 256B scratch buffers
- * (`ThreadLocal` for one-shot [sha256Hex] and per-writer buffer for [WeakEtagDigestWriter]) to
- * eliminate full-document `toByteArray(UTF_8)` and multi-KB ETag string copies without reentrancy hazard.
+ * Low-level streaming UTF-8 and decimal ASCII SHA-256 digest helper backed by 512B scratch buffers
+ * (local buffer for one-shot [sha256Hex]/[sha256Digest128] and per-writer buffer for
+ * [WeakEtagDigestWriter]) and prototype-cloned `MessageDigest` instances to eliminate
+ * full-document `toByteArray(UTF_8)`, multi-KB ETag string copies, and repeated provider lookups.
  */
 object Utf8ChunkDigest {
-    private const val SCRATCH_BUFFER_SIZE = 256
+    private const val SCRATCH_BUFFER_SIZE = 512
     private const val MAX_DECIMAL_DIGITS = 20
     private val HEX_FORMAT = HexFormat.of()
-    private val SCRATCH_BUFFER = ThreadLocal.withInitial { ByteArray(SCRATCH_BUFFER_SIZE) }
+    private val SHA256_PROTOTYPE = MessageDigest.getInstance("SHA-256")
     private val MIN_LONG_ASCII_BYTES = "-9223372036854775808".toByteArray(Charsets.US_ASCII)
     private val TRUE_BYTES = "true".toByteArray(Charsets.US_ASCII)
     private val FALSE_BYTES = "false".toByteArray(Charsets.US_ASCII)
     private val NULL_BYTES = "null".toByteArray(Charsets.US_ASCII)
+
+    private fun newSha256Digest(): MessageDigest = SHA256_PROTOTYPE.clone() as MessageDigest
 
     class Digest128 internal constructor(
         val highBits: Long,
@@ -40,8 +43,8 @@ object Utf8ChunkDigest {
     }
 
     private fun sha256Bytes(value: CharSequence): ByteArray {
-        val digest = MessageDigest.getInstance("SHA-256")
-        val buffer = SCRATCH_BUFFER.get()
+        val digest = newSha256Digest()
+        val buffer = ByteArray(SCRATCH_BUFFER_SIZE)
         val finalPos = encodeUtf8Range(digest, value, 0, value.length, buffer, 0)
         if (finalPos > 0) {
             digest.update(buffer, 0, finalPos)
@@ -65,7 +68,7 @@ object Utf8ChunkDigest {
     fun newWeakEtagWriter(): WeakEtagDigestWriter = WeakEtagDigestWriter()
 
     class WeakEtagDigestWriter internal constructor() {
-        private val digest = MessageDigest.getInstance("SHA-256")
+        private val digest = newSha256Digest()
         private val buffer = ByteArray(SCRATCH_BUFFER_SIZE)
         private var pos = 0
 

@@ -324,4 +324,38 @@ class HtmlContentSanitizerTest {
             )
         assertThat(withinVerified).isEqualTo(withinPersisted)
     }
+
+    @Test
+    @DisplayName("target=_blank 링크 rel 토큰 병합은 기존 순서·중복 제거 및 대소문자 target을 일관되게 유지한다")
+    fun mergesRelTokensInSinglePassWithDeduplication() {
+        val rawHtml =
+            """
+            <p>
+                <a id="a1" href="https://a.example" target="_blank" rel="   ">blank-rel</a>
+                <a id="a2" href="https://b.example" target="_BLANK" rel="noreferrer">noreferrer-only</a>
+                <a id="a3" href="https://c.example" target=" _blank " rel="noopener">noopener-only</a>
+                <a id="a4" href="https://d.example" target="_blank" rel="nofollow   external nofollow noopener noopener noreferrer noreferrer">deduped</a>
+                <a id="a5" href="https://e.example" target="_self" rel="nofollow">same-tab</a>
+                <input type="TEXT" value="x" />
+                <input type="CHECKBOX" checked />
+            </p>
+            """.trimIndent()
+
+        val sanitized = HtmlContentSanitizer.sanitizeRichHtmlOrNull(rawHtml)
+
+        assertThat(sanitized).isNotNull()
+        val doc = org.jsoup.Jsoup.parseBodyFragment(requireNotNull(sanitized))
+        val links = doc.select("a")
+        assertThat(links).hasSize(5)
+        assertThat(links[0].attr("rel")).isEqualTo("noopener noreferrer")
+        assertThat(links[1].attr("rel")).isEqualTo("noreferrer noopener")
+        assertThat(links[2].attr("rel")).isEqualTo("noopener noreferrer")
+        assertThat(links[3].attr("rel")).isEqualTo("nofollow external noopener noreferrer")
+        assertThat(links[4].attr("rel")).isEqualTo("nofollow")
+
+        val inputs = doc.select("input")
+        assertThat(inputs).hasSize(1)
+        assertThat(inputs[0].attr("type")).isEqualTo("checkbox")
+        assertThat(inputs[0].hasAttr("disabled")).isTrue()
+    }
 }

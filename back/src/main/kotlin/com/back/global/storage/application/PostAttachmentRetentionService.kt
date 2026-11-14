@@ -67,14 +67,15 @@ class PostAttachmentRetentionService(
         postId: Long,
         content: String,
     ) {
+        val partitionedKeys = UploadedFileUrlCodec.extractPartitionedObjectKeysFromContent(content)
         restorePostAttachmentKeys(
             postId = postId,
-            keys = UploadedFileUrlCodec.extractImageObjectKeysFromContent(content),
+            keys = partitionedKeys.imageKeys,
             purpose = UploadedFilePurpose.POST_IMAGE,
         )
         restorePostAttachmentKeys(
             postId = postId,
-            keys = UploadedFileUrlCodec.extractFileObjectKeysFromContent(content),
+            keys = partitionedKeys.fileKeys,
             purpose = UploadedFilePurpose.POST_FILE,
         )
     }

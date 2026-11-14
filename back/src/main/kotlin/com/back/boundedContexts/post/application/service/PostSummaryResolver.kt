@@ -1,5 +1,6 @@
 package com.back.boundedContexts.post.application.service
 
+import com.back.boundedContexts.post.dto.PostHeaderMetadataMatcher
 import com.back.boundedContexts.post.model.PostSummarySource
 import com.back.global.util.Utf8ChunkDigest
 import java.text.BreakIterator
@@ -29,22 +30,12 @@ object PostSummaryResolver {
     private val inlineCodeRegex = Regex("`+([^`]+?)`+")
     private val htmlTagRegex = Regex("<[^>]+>")
     private val footnoteReferenceRegex = Regex("\\[\\^[^]]+]")
-    private val headingRegex = Regex("^#{1,6}\\s+(.*)$")
-    private val listMarkerRegex = Regex("^\\s*(?:[-+*]|\\d+[.)])\\s+")
-    private val tableDelimiterRegex =
-        Regex("^\\s*\\|?\\s*:?-{3,}:?\\s*(?:\\|\\s*:?-{3,}:?\\s*)+\\|?\\s*$")
-    private val fenceRegex = Regex("^\\s{0,3}(`{3,}|~{3,}).*$")
     private val summaryPrefixRegex =
         Regex("^(?:요약|summary)(?:\\*\\*|__)?\\s*[:：-]?\\s*", RegexOption.IGNORE_CASE)
     private val greetingRegex =
         Regex(
             "^(?:안녕하세요(?:[.!?]|\\s|$)|시작하며(?:[.!?]|\\s|$)|" +
                 "들어가며(?:[.!?]|\\s|$)|introduction(?:[.!?]|\\s|$))",
-            RegexOption.IGNORE_CASE,
-        )
-    private val leadingMetadataLineRegex =
-        Regex(
-            "^\\s*(?:tag|tags|category|categories|summary|description|excerpt|thumbnail|thumb|cover|coverimage|cover_image)\\s*:\\s*.+$",
             RegexOption.IGNORE_CASE,
         )
 
@@ -68,13 +59,13 @@ object PostSummaryResolver {
     ): ResolvedPostSummary {
         val normalizedContent = normalizeLineEndings(content)
         val hash = sha256(normalizedContent)
-        val bodyLines = stripLeadingMetadataLines(splitFrontmatter(normalizedContent).lines())
-        val leading = extractLeadingSummaryBlock(bodyLines)
+        val bodyStartOffset = skipLeadingMetadataOffset(normalizedContent, splitFrontmatterOffset(normalizedContent))
+        val leading = extractLeadingSummaryBlock(normalizedContent, bodyStartOffset)
         if (leading.isNotBlank()) {
             return derived(leading, PostSummarySource.LEADING_BLOCK, hash, ALGORITHM_VERSION, now)
         }
 
-        val prose = extractFirstMeaningfulParagraph(title, bodyLines)
+        val prose = extractFirstMeaningfulParagraph(title, normalizedContent, bodyStartOffset)
         if (prose.isNotBlank()) {
             return derived(prose, PostSummarySource.EXTRACTED, hash, ALGORITHM_VERSION, now)
         }
@@ -120,49 +111,104 @@ object PostSummaryResolver {
         return ResolvedPostSummary(limit(normalized), source, hash, version, now)
     }
 
-    private fun splitFrontmatter(content: String): String {
-        val trimmed = content.trimStart()
-        if (!trimmed.startsWith("---")) return trimmed
-        val firstNewline = trimmed.indexOf('\n')
-        if (firstNewline < 0 || trimmed.substring(0, firstNewline).trimEnd() != "---") return trimmed
+    private fun splitFrontmatterOffset(content: String): Int {
+        val len = content.length
+        val trimmedStart = skipWhitespaceStart(content, 0, len)
+        if (!content.startsWith("---", startIndex = trimmedStart)) return trimmedStart
+        val firstNewline = content.indexOf('\n', startIndex = trimmedStart)
+        if (firstNewline < 0 || !isTrimmedTripleDash(content, trimmedStart, firstNewline)) return trimmedStart
         var cursor = firstNewline + 1
-        while (cursor <= trimmed.length) {
-            val lineEnd = trimmed.indexOf('\n', cursor).let { if (it < 0) trimmed.length else it }
-            if (trimmed.substring(cursor, lineEnd).trim() == "---") {
-                return if (lineEnd < trimmed.length) trimmed.substring(lineEnd + 1).trimStart() else ""
+        while (cursor <= len) {
+            val nextNl = content.indexOf('\n', startIndex = cursor)
+            val lineEnd = if (nextNl < 0) len else nextNl
+            if (isTrimmedTripleDash(content, cursor, lineEnd)) {
+                return if (lineEnd < len) skipWhitespaceStart(content, lineEnd + 1, len) else len
             }
-            cursor = lineEnd + 1
+            if (nextNl < 0) break
+            cursor = nextNl + 1
         }
-        return trimmed
+        return trimmedStart
     }
 
-    private fun stripLeadingMetadataLines(lines: List<String>): List<String> {
-        var index = 0
-        while (index < lines.size && (lines[index].isBlank() || leadingMetadataLineRegex.matches(lines[index]))) {
-            index += 1
-        }
-        return lines.subList(index, lines.size)
+    private fun skipWhitespaceStart(
+        text: String,
+        start: Int,
+        end: Int,
+    ): Int {
+        var pos = start
+        while (pos < end && text[pos].isWhitespace()) pos++
+        return pos
     }
 
-    private fun extractLeadingSummaryBlock(lines: List<String>): String {
-        val firstContentIndex = lines.indexOfFirst { it.isNotBlank() }
-        if (
-            firstContentIndex < 0 ||
-            !lines[firstContentIndex].trimStart().startsWith('>')
-        ) {
-            return ""
-        }
+    private fun isTrimmedTripleDash(
+        text: String,
+        rawStart: Int,
+        rawEnd: Int,
+    ): Boolean {
+        var start = rawStart
+        var end = rawEnd
+        while (start < end && text[start].isWhitespace()) start++
+        while (end > start && text[end - 1].isWhitespace()) end--
+        return end - start == 3 && text[start] == '-' && text[start + 1] == '-' && text[start + 2] == '-'
+    }
 
-        val quoteLines = mutableListOf<String>()
-        for (index in firstContentIndex until lines.size) {
-            val trimmed = lines[index].trimStart()
-            if (!trimmed.startsWith('>')) break
-            quoteLines += trimmed.removePrefix(">").trimStart()
+    private fun skipLeadingMetadataOffset(
+        content: String,
+        startOffset: Int,
+    ): Int {
+        var cursor = startOffset
+        val len = content.length
+        while (cursor < len) {
+            val nextNl = content.indexOf('\n', startIndex = cursor)
+            val lineEnd = if (nextNl < 0) len else nextNl
+            val firstNonWs = skipWhitespaceStart(content, cursor, lineEnd)
+            if (firstNonWs < lineEnd) {
+                val colonIndex = content.indexOf(':', startIndex = firstNonWs)
+                if (colonIndex !in firstNonWs until lineEnd) break
+                val kind =
+                    PostHeaderMetadataMatcher.matchLine(
+                        content,
+                        firstNonWs,
+                        lineEnd,
+                        colonIndex,
+                        includeSummaryAliases = true,
+                    )
+                if (kind == PostHeaderMetadataMatcher.KIND_NONE) break
+            }
+            if (nextNl < 0) return len
+            cursor = nextNl + 1
+        }
+        return cursor
+    }
+
+    private fun extractLeadingSummaryBlock(
+        content: String,
+        bodyStart: Int,
+    ): String {
+        val len = content.length
+        if (bodyStart >= len) return ""
+        val firstNl = content.indexOf('\n', startIndex = bodyStart)
+        val firstLineEnd = if (firstNl < 0) len else firstNl
+        val firstNonWs = skipWhitespaceStart(content, bodyStart, firstLineEnd)
+        if (firstNonWs >= firstLineEnd || content[firstNonWs] != '>') return ""
+
+        val quoteBuilder = StringBuilder()
+        var cursor = bodyStart
+        while (cursor < len) {
+            val nextNl = content.indexOf('\n', startIndex = cursor)
+            val lineEnd = if (nextNl < 0) len else nextNl
+            val pos = skipWhitespaceStart(content, cursor, lineEnd)
+            if (pos >= lineEnd || content[pos] != '>') break
+            val contentStart = skipWhitespaceStart(content, pos + 1, lineEnd)
+            if (quoteBuilder.isNotEmpty()) quoteBuilder.append(' ')
+            quoteBuilder.append(content, contentStart, lineEnd)
+            if (nextNl < 0) break
+            cursor = nextNl + 1
         }
 
         val normalized =
-            quoteLines
-                .joinToString(" ")
+            quoteBuilder
+                .toString()
                 .replace("**", "")
                 .replace("__", "")
                 .trim()
@@ -172,111 +218,208 @@ object PostSummaryResolver {
 
     private fun extractFirstMeaningfulParagraph(
         title: String,
-        bodyLines: List<String>,
+        content: String,
+        bodyStart: Int,
     ): String {
-        val paragraphs = collectProseParagraphs(bodyLines)
-        val normalizedTitle = normalizeComparable(title)
-        for (paragraph in paragraphs) {
-            val cleaned = cleanInlineMarkdown(paragraph)
-            if (cleaned.isBlank()) continue
-            if (normalizeComparable(cleaned) == normalizedTitle) continue
-            if (greetingRegex.containsMatchIn(cleaned) && graphemeCount(cleaned) < 45) continue
-            if (graphemeCount(cleaned) < 12) continue
-            return takeCompleteSentences(cleaned)
-        }
-        return ""
-    }
+        val len = content.length
+        if (bodyStart >= len) return ""
 
-    private fun collectProseParagraphs(bodyLines: List<String>): List<String> {
-        val paragraphs = mutableListOf<String>()
-        val current = mutableListOf<String>()
-        var fenceChar: Char? = null
+        val normalizedTitle = normalizeComparable(title)
+        val paragraphBuf = StringBuilder()
+        var fenceChar = '\u0000'
         var fenceLength = 0
         var mathBlock = false
         var htmlBlock = false
 
-        fun flush() {
-            if (current.isNotEmpty()) {
-                paragraphs += current.joinToString(" ")
-                current.clear()
-            }
+        fun flushAndCheck(): String? {
+            if (paragraphBuf.isEmpty()) return null
+            val rawParagraph = paragraphBuf.toString()
+            paragraphBuf.setLength(0)
+            val cleaned = cleanInlineMarkdown(rawParagraph)
+            if (cleaned.isBlank()) return null
+            if (normalizeComparable(cleaned) == normalizedTitle) return null
+            if (greetingRegex.containsMatchIn(cleaned) && graphemeCount(cleaned) < 45) return null
+            if (graphemeCount(cleaned) < 12) return null
+            return takeCompleteSentences(cleaned)
         }
 
-        for (rawLine in bodyLines) {
-            val line = rawLine.trimEnd()
-            val trimmed = line.trimStart()
-            val fence =
-                if (trimmed.startsWith("```") || trimmed.startsWith("~~~")) {
-                    fenceRegex.matchEntire(line)
-                } else {
-                    null
+        var cursor = bodyStart
+        while (cursor < len) {
+            val nextNl = content.indexOf('\n', startIndex = cursor)
+            val lineEnd = if (nextNl < 0) len else nextNl
+            var trimmedEnd = lineEnd
+            while (trimmedEnd > cursor && content[trimmedEnd - 1].isWhitespace()) trimmedEnd--
+            val trimmedStart = skipWhitespaceStart(content, cursor, trimmedEnd)
+
+            var fenceCandidateChar = '\u0000'
+            var fenceCandidateLength = 0
+            if (trimmedStart < trimmedEnd &&
+                trimmedStart - cursor <= 3 &&
+                (content[trimmedStart] == '`' || content[trimmedStart] == '~')
+            ) {
+                val marker = content[trimmedStart]
+                var count = 0
+                while (trimmedStart + count < trimmedEnd && content[trimmedStart + count] == marker) {
+                    count++
                 }
-            if (fenceChar != null) {
-                if (fence != null) {
-                    val marker = fence.groupValues[1]
-                    if (marker.first() == fenceChar && marker.length >= fenceLength) {
-                        fenceChar = null
-                        fenceLength = 0
-                    }
+                if (count >= 3) {
+                    fenceCandidateChar = marker
+                    fenceCandidateLength = count
                 }
-                continue
             }
-            if (fence != null) {
-                flush()
-                val marker = fence.groupValues[1]
-                fenceChar = marker.first()
-                fenceLength = marker.length
-                continue
-            }
-            if (trimmed == "$$") {
-                flush()
+
+            if (fenceChar != '\u0000') {
+                if (fenceCandidateChar == fenceChar && fenceCandidateLength >= fenceLength) {
+                    fenceChar = '\u0000'
+                    fenceLength = 0
+                }
+            } else if (fenceCandidateLength >= 3) {
+                flushAndCheck()?.let { return it }
+                fenceChar = fenceCandidateChar
+                fenceLength = fenceCandidateLength
+            } else if (trimmedEnd - trimmedStart == 2 && content[trimmedStart] == '$' && content[trimmedStart + 1] == '$') {
+                flushAndCheck()?.let { return it }
                 mathBlock = !mathBlock
-                continue
+            } else if (!mathBlock) {
+                if (htmlBlock) {
+                    if (trimmedStart >= trimmedEnd || content.startsWith("</", startIndex = trimmedStart)) {
+                        htmlBlock = false
+                    }
+                } else if (trimmedStart < trimmedEnd &&
+                    content[trimmedStart] == '<' &&
+                    !content.startsWith("<!--", startIndex = trimmedStart)
+                ) {
+                    flushAndCheck()?.let { return it }
+                    if (!containsClosingHtmlTag(content, trimmedStart, trimmedEnd) &&
+                        !endsWithSelfClosingTag(content, trimmedStart, trimmedEnd)
+                    ) {
+                        htmlBlock = true
+                    }
+                } else if (trimmedStart >= trimmedEnd) {
+                    flushAndCheck()?.let { return it }
+                } else if (content[cursor] == '\t' || content.startsWith("    ", startIndex = cursor)) {
+                    flushAndCheck()?.let { return it }
+                } else if (content[trimmedStart] == '>' ||
+                    isHeadingLine(content, trimmedStart, trimmedEnd) ||
+                    isListMarkerLine(content, trimmedStart, trimmedEnd) ||
+                    isTableDelimiterLine(content, trimmedStart, trimmedEnd) ||
+                    looksLikeTableRow(content, trimmedStart, trimmedEnd) ||
+                    content.startsWith("![", startIndex = trimmedStart)
+                ) {
+                    flushAndCheck()?.let { return it }
+                } else {
+                    if (paragraphBuf.isNotEmpty()) paragraphBuf.append(' ')
+                    paragraphBuf.append(content, trimmedStart, trimmedEnd)
+                }
             }
-            if (mathBlock) continue
-            if (htmlBlock) {
-                if (trimmed.isBlank() || trimmed.startsWith("</")) htmlBlock = false
-                continue
-            }
-            if (trimmed.startsWith('<') && !trimmed.startsWith("<!--")) {
-                flush()
-                if (!trimmed.contains("</") && !trimmed.endsWith("/>")) htmlBlock = true
-                continue
-            }
-            if (line.startsWith("    ") || line.startsWith('\t')) {
-                flush()
-                continue
-            }
-            if (trimmed.isBlank()) {
-                flush()
-                continue
-            }
-            if (
-                trimmed.startsWith('>') ||
-                (trimmed.startsWith('#') && headingRegex.matches(trimmed)) ||
-                listMarkerRegex.containsMatchIn(trimmed)
-            ) {
-                flush()
-                continue
-            }
-            if (
-                (trimmed.contains('|') && trimmed.contains('-') && tableDelimiterRegex.matches(trimmed)) ||
-                looksLikeTableRow(trimmed)
-            ) {
-                flush()
-                continue
-            }
-            if (trimmed.startsWith("![")) {
-                flush()
-                continue
-            }
-            current += trimmed
+
+            if (nextNl < 0) break
+            cursor = nextNl + 1
         }
-        flush()
-        return paragraphs
+
+        return flushAndCheck() ?: ""
     }
 
-    private fun looksLikeTableRow(value: String): Boolean = value.count { it == '|' } >= 2 && (value.startsWith('|') || value.endsWith('|'))
+    private fun containsClosingHtmlTag(
+        text: String,
+        start: Int,
+        end: Int,
+    ): Boolean {
+        for (i in start until end - 1) {
+            if (text[i] == '<' && text[i + 1] == '/') return true
+        }
+        return false
+    }
+
+    private fun endsWithSelfClosingTag(
+        text: String,
+        start: Int,
+        end: Int,
+    ): Boolean = end - start >= 2 && text[end - 2] == '/' && text[end - 1] == '>'
+
+    private fun isHeadingLine(
+        text: String,
+        trimmedStart: Int,
+        trimmedEnd: Int,
+    ): Boolean {
+        if (text[trimmedStart] != '#') return false
+        var pos = trimmedStart
+        var hashes = 0
+        while (pos < trimmedEnd && text[pos] == '#' && hashes < 7) {
+            pos++
+            hashes++
+        }
+        return hashes in 1..6 && pos < trimmedEnd && text[pos].isWhitespace()
+    }
+
+    private fun isListMarkerLine(
+        text: String,
+        trimmedStart: Int,
+        trimmedEnd: Int,
+    ): Boolean {
+        val first = text[trimmedStart]
+        if (first == '-' || first == '+' || first == '*') {
+            return trimmedStart + 1 < trimmedEnd && text[trimmedStart + 1].isWhitespace()
+        }
+        if (first in '0'..'9') {
+            var pos = trimmedStart + 1
+            while (pos < trimmedEnd && text[pos] in '0'..'9') {
+                pos++
+            }
+            if (pos >= trimmedEnd) return false
+            val sep = text[pos]
+            if (sep != '.' && sep != ')') return false
+            return pos + 1 < trimmedEnd && text[pos + 1].isWhitespace()
+        }
+        return false
+    }
+
+    private fun isTableDelimiterLine(
+        text: String,
+        trimmedStart: Int,
+        trimmedEnd: Int,
+    ): Boolean {
+        var pos = trimmedStart
+        if (text[pos] == '|') {
+            pos++
+        }
+        var cells = 0
+        while (pos < trimmedEnd) {
+            while (pos < trimmedEnd && text[pos].isWhitespace()) pos++
+            if (pos >= trimmedEnd) break
+            if (text[pos] == ':') pos++
+            var dashes = 0
+            while (pos < trimmedEnd && text[pos] == '-') {
+                dashes++
+                pos++
+            }
+            if (dashes < 3) return false
+            if (pos < trimmedEnd && text[pos] == ':') pos++
+            while (pos < trimmedEnd && text[pos].isWhitespace()) pos++
+            cells++
+            if (pos < trimmedEnd) {
+                if (text[pos] != '|') return false
+                pos++
+            }
+        }
+        return cells >= 2
+    }
+
+    private fun looksLikeTableRow(
+        text: String,
+        trimmedStart: Int,
+        trimmedEnd: Int,
+    ): Boolean {
+        if (text[trimmedStart] != '|' && text[trimmedEnd - 1] != '|') return false
+        var pipes = 0
+        for (i in trimmedStart until trimmedEnd) {
+            if (text[i] == '|') {
+                pipes++
+                if (pipes >= 2) return true
+            }
+        }
+        return false
+    }
 
     private fun cleanInlineMarkdown(value: String): String {
         var current = value
@@ -324,16 +467,18 @@ object PostSummaryResolver {
         return count
     }
 
-    private fun takeGraphemes(
+    internal fun takeGraphemes(
         value: String,
         count: Int,
     ): String {
+        if (count <= 0 || value.isEmpty()) return ""
         val iterator = BreakIterator.getCharacterInstance(Locale.ROOT)
         iterator.setText(value)
-        iterator.first()
-        var boundary = 0
-        repeat(count) {
-            boundary = iterator.next()
+        var boundary = iterator.first()
+        for (i in 0 until count) {
+            val next = iterator.next()
+            if (next == BreakIterator.DONE) break
+            boundary = next
         }
         return value.substring(0, boundary)
     }

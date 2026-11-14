@@ -213,4 +213,60 @@ class PostDeletedQueryRepositoryTest : BaseRepositoryIntegrationTest() {
 
         assertThat(row.authorProfileImgUrl).isEqualTo(defaultProfileImageUrl())
     }
+
+    @Test
+    fun `가득 찬 1페이지와 LIKE 특수문자 키워드는 카운트 쿼리와 escapeLike를 정확히 실행하고 2페이지 부분 조회는 카운트를 추론한다`() {
+        val author =
+            memberRepository.saveAndFlush(Member(0, "paging-escape-author", "1234", "페이징작성자"))
+        memberAttrRepository.saveAndFlush(
+            MemberAttr(
+                0,
+                author,
+                "profileWorkspacePublished",
+                encodeMemberProfileWorkspaceContent(MemberProfileWorkspaceContent()),
+            ),
+        )
+        listOf("escape 100%_a\\one", "escape 100%_a\\two", "escape 100%_a\\three").forEachIndexed { idx, title ->
+            postRepository.saveAndFlush(
+                Post(
+                    id = 0,
+                    author = author,
+                    title = title,
+                    content = "본문 $idx",
+                    published = true,
+                    listed = true,
+                ).apply {
+                    createdAt = Instant.parse("2026-03-10T00:00:00Z").plusSeconds(idx.toLong())
+                    modifiedAt = createdAt
+                    deletedAt = Instant.parse("2026-03-20T00:00:00Z").plusSeconds(idx.toLong())
+                },
+            )
+        }
+        postRepository.saveAndFlush(
+            Post(
+                id = 0,
+                author = author,
+                title = "ordinary other deleted post",
+                content = "other",
+                published = true,
+                listed = true,
+            ).apply {
+                deletedAt = Instant.parse("2026-03-19T00:00:00Z")
+            },
+        )
+
+        val fullFirstPageNoKw = postDeletedQueryRepository.findDeletedPagedByKw("", PageRequest.of(0, 2))
+        assertThat(fullFirstPageNoKw.content).hasSize(2)
+        assertThat(fullFirstPageNoKw.totalElements).isGreaterThanOrEqualTo(4)
+
+        val fullFirstPageWithSpecialKw =
+            postDeletedQueryRepository.findDeletedPagedByKw("100%_a\\", PageRequest.of(0, 2))
+        assertThat(fullFirstPageWithSpecialKw.content).hasSize(2)
+        assertThat(fullFirstPageWithSpecialKw.totalElements).isEqualTo(3)
+
+        val partialSecondPage =
+            postDeletedQueryRepository.findDeletedPagedByKw("100%_a\\", PageRequest.of(1, 2))
+        assertThat(partialSecondPage.content).hasSize(1)
+        assertThat(partialSecondPage.totalElements).isEqualTo(3)
+    }
 }

@@ -246,4 +246,52 @@ class PostMetaExtractorTest {
         assertThat(nonMetaColonResult.tags).isEmpty()
         assertThat(nonMetaColonResult.categories).isEmpty()
     }
+
+    @Test
+    fun `제로 정규식 메타 매처가 대소문자·언더스코어·공백·빈 값 경계를 정확히 판별한다`() {
+        val mixedCaseHeader =
+            """
+              TAG  :  [mixed1]
+              Tags : [mixed2]
+              CATEGORY : dev
+              Categories : [platform]
+              THUMB : https://example.com/ignored.png
+              COVER : https://example.com/ignored2.png
+              Summary : 요약문
+              Thumbnail : https://example.com/ignored3.png
+              CoverImage : https://example.com/ignored4.png
+              Cover_Image : https://example.com/ignored5.png
+            tags:   
+            tag: stopped-after-blank
+            """.trimIndent()
+
+        val extracted = PostMetaExtractor.extract(mixedCaseHeader)
+        assertThat(extracted.tags).containsExactly("mixed1", "mixed2")
+        assertThat(extracted.categories).containsExactly("dev", "platform")
+
+        // PostHeaderMetadataMatcher 모든 길이/오매치 분기 검증
+        assertThat(PostHeaderMetadataMatcher.matchKeyKind("id", 0, 2)).isEqualTo(PostHeaderMetadataMatcher.KIND_NONE)
+        assertThat(PostHeaderMetadataMatcher.matchKeyKind("foo", 0, 3)).isEqualTo(PostHeaderMetadataMatcher.KIND_NONE)
+        assertThat(PostHeaderMetadataMatcher.matchKeyKind("slug", 0, 4)).isEqualTo(PostHeaderMetadataMatcher.KIND_NONE)
+        assertThat(PostHeaderMetadataMatcher.matchKeyKind("title", 0, 5)).isEqualTo(PostHeaderMetadataMatcher.KIND_NONE)
+        assertThat(PostHeaderMetadataMatcher.matchKeyKind("excerpt", 0, 7, includeSummaryAliases = false))
+            .isEqualTo(PostHeaderMetadataMatcher.KIND_NONE)
+        assertThat(PostHeaderMetadataMatcher.matchKeyKind("EXCERPT", 0, 7, includeSummaryAliases = true))
+            .isEqualTo(PostHeaderMetadataMatcher.KIND_SUMMARY)
+        assertThat(PostHeaderMetadataMatcher.matchKeyKind("unknown", 0, 7, includeSummaryAliases = true))
+            .isEqualTo(PostHeaderMetadataMatcher.KIND_NONE)
+        assertThat(PostHeaderMetadataMatcher.matchKeyKind("authored", 0, 8)).isEqualTo(PostHeaderMetadataMatcher.KIND_NONE)
+        assertThat(PostHeaderMetadataMatcher.matchKeyKind("published", 0, 9)).isEqualTo(PostHeaderMetadataMatcher.KIND_NONE)
+        assertThat(PostHeaderMetadataMatcher.matchKeyKind("coverimagx", 0, 10)).isEqualTo(PostHeaderMetadataMatcher.KIND_NONE)
+        assertThat(PostHeaderMetadataMatcher.matchKeyKind("cover-image", 0, 11)).isEqualTo(PostHeaderMetadataMatcher.KIND_NONE)
+        assertThat(PostHeaderMetadataMatcher.matchKeyKind("cover_imag\u007F", 0, 11)).isEqualTo(PostHeaderMetadataMatcher.KIND_NONE)
+        assertThat(PostHeaderMetadataMatcher.matchKeyKind("description", 0, 11, includeSummaryAliases = false))
+            .isEqualTo(PostHeaderMetadataMatcher.KIND_NONE)
+        assertThat(PostHeaderMetadataMatcher.matchKeyKind("DESCRIPTION", 0, 11, includeSummaryAliases = true))
+            .isEqualTo(PostHeaderMetadataMatcher.KIND_SUMMARY)
+        assertThat(PostHeaderMetadataMatcher.matchKeyKind("author_name", 0, 11, includeSummaryAliases = true))
+            .isEqualTo(PostHeaderMetadataMatcher.KIND_NONE)
+        assertThat(PostHeaderMetadataMatcher.unquoteTrimmed(" '\"only-outer\"' ", 0, 16)).isEqualTo("\"only-outer\"")
+        assertThat(PostHeaderMetadataMatcher.unquoteTrimmed("  \"   \"  ", 0, 9)).isNull()
+    }
 }

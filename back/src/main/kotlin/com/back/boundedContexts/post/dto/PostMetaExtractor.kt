@@ -27,12 +27,6 @@ object PostMetaExtractor {
 
     private val metaCache = StripedDigestLruCache<PostMeta>(MAX_CACHE_ENTRIES)
 
-    private val metadataLineRegex =
-        Regex(
-            "^\\s*(tag|tags|category|categories|summary|thumbnail|thumb|cover|coverimage|cover_image)\\s*:\\s*(.+)\\s*$",
-            RegexOption.IGNORE_CASE,
-        )
-
     fun extract(content: String): PostMeta {
         val metadataBlock = extractMetadataBlock(content) ?: return EMPTY_META
         val digestKey = Utf8ChunkDigest.sha256Digest128(metadataBlock)
@@ -75,7 +69,11 @@ object PostMetaExtractor {
             val lineEnd = if (newlineIndex == -1) content.length else newlineIndex
             val colonIndex = content.indexOf(':', startIndex = cursor)
             if (colonIndex !in cursor until lineEnd) break
-            if (!metadataLineRegex.matches(content.subSequence(cursor, lineEnd))) break
+            if (PostHeaderMetadataMatcher.matchLine(content, cursor, lineEnd, colonIndex) ==
+                PostHeaderMetadataMatcher.KIND_NONE
+            ) {
+                break
+            }
             if (blockStart == -1) {
                 blockStart = cursor
             }
@@ -113,17 +111,20 @@ object PostMetaExtractor {
         val tags = linkedSetOf<String>()
         val categories = linkedSetOf<String>()
 
-        metadataBlock.lineSequence().forEach { line ->
-            val colonIndex = line.indexOf(':')
-            if (colonIndex > 0) {
-                val key = line.substring(0, colonIndex).trim().lowercase()
-                val rawValue = line.substring(colonIndex + 1)
-                if (key == "tag" || key == "tags") {
-                    collectMetaItems(rawValue, tags)
-                } else if (key == "category" || key == "categories") {
-                    collectMetaItems(rawValue, categories)
+        var cursor = 0
+        while (cursor < metadataBlock.length) {
+            val newlineIndex = metadataBlock.indexOf('\n', startIndex = cursor)
+            val lineEnd = if (newlineIndex == -1) metadataBlock.length else newlineIndex
+            val colonIndex = metadataBlock.indexOf(':', startIndex = cursor)
+            if (colonIndex > cursor && colonIndex < lineEnd) {
+                when (PostHeaderMetadataMatcher.matchKeyKind(metadataBlock, cursor, colonIndex)) {
+                    PostHeaderMetadataMatcher.KIND_TAG ->
+                        collectMetaItems(metadataBlock, colonIndex + 1, lineEnd, tags)
+                    PostHeaderMetadataMatcher.KIND_CATEGORY ->
+                        collectMetaItems(metadataBlock, colonIndex + 1, lineEnd, categories)
                 }
             }
+            cursor = lineEnd + 1
         }
 
         return PostMeta(
@@ -133,30 +134,28 @@ object PostMetaExtractor {
     }
 
     private fun collectMetaItems(
-        rawValue: String,
+        text: String,
+        valueStart: Int,
+        valueEnd: Int,
         sink: MutableCollection<String>,
     ) {
-        val stripped =
-            rawValue
-                .trim()
-                .removePrefix("[")
-                .removeSuffix("]")
-        var start = 0
-        while (start <= stripped.length) {
-            val commaIndex = stripped.indexOf(',', startIndex = start)
-            val end = if (commaIndex == -1) stripped.length else commaIndex
-            val token =
-                stripped
-                    .substring(start, end)
-                    .trim()
-                    .removeSurrounding("\"")
-                    .removeSurrounding("'")
-                    .trim()
-            if (token.isNotEmpty()) {
+        var blockStart = valueStart
+        var blockEnd = valueEnd
+        while (blockStart < blockEnd && text[blockStart].isWhitespace()) blockStart++
+        while (blockEnd > blockStart && text[blockEnd - 1].isWhitespace()) blockEnd--
+        if (blockStart < blockEnd && text[blockStart] == '[') blockStart++
+        if (blockEnd > blockStart && text[blockEnd - 1] == ']') blockEnd--
+
+        var start = blockStart
+        while (start <= blockEnd) {
+            val rawComma = text.indexOf(',', startIndex = start)
+            val itemEnd = if (rawComma == -1 || rawComma >= blockEnd) blockEnd else rawComma
+            val token = PostHeaderMetadataMatcher.unquoteTrimmed(text, start, itemEnd)
+            if (token != null) {
                 sink.add(token)
             }
-            if (commaIndex == -1) break
-            start = commaIndex + 1
+            if (rawComma == -1 || rawComma >= blockEnd) break
+            start = rawComma + 1
         }
     }
 }

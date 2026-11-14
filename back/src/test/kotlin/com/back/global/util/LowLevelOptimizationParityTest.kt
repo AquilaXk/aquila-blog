@@ -350,7 +350,7 @@ class LowLevelOptimizationParityTest {
     }
 
     @Test
-    fun `WeakEtagDigestWriter handles negative longs, Long MIN_VALUE, and 256-byte chunk flush`() {
+    fun `WeakEtagDigestWriter handles negative longs, Long MIN_VALUE, and 512-byte chunk flush`() {
         val rawFirst =
             Long.MIN_VALUE.toString() +
                 (-42L).toString() +
@@ -366,15 +366,55 @@ class LowLevelOptimizationParityTest {
                 .finishWeakEtag()
         assertThat(etagFirst).isEqualTo("W/\"${Utf8ChunkDigest.sha256Hex(rawFirst).take(32)}\"")
 
-        val rawFlush = "a".repeat(254) + "truenull"
+        val rawFlush =
+            "a".repeat(510) +
+                "truenull" +
+                "b".repeat(512) +
+                "c" +
+                "d".repeat(500) +
+                Long.MIN_VALUE.toString() +
+                (-123L).toString() +
+                "한글😀".repeat(160)
         val etagFlush =
             Utf8ChunkDigest
                 .newWeakEtagWriter()
-                .appendAscii("a".repeat(254))
+                .appendAscii("a".repeat(510))
                 .appendBoolean(true)
                 .appendNullLiteral()
+                .appendAscii("b".repeat(512))
+                .appendChar('c')
+                .appendAscii("d".repeat(500))
+                .appendLong(Long.MIN_VALUE)
+                .appendLong(-123L)
+                .appendUtf8("한글😀".repeat(160))
                 .finishWeakEtag()
         assertThat(etagFlush).isEqualTo("W/\"${Utf8ChunkDigest.sha256Hex(rawFlush).take(32)}\"")
+
+        val d1 = Utf8ChunkDigest.sha256Digest128("flush-boundary-" + "x".repeat(600))
+        val d2 = Utf8ChunkDigest.sha256Digest128("flush-boundary-" + "x".repeat(600))
+        assertThat(d1).isEqualTo(d2)
+        assertThat(d1.hashCode()).isEqualTo(d2.hashCode())
+        assertThat(d1.stripeIndex(15)).isBetween(0, 15)
+
+        // Cover appendChar and non-MIN_VALUE appendLong flush() branches cleanly at the 512B boundary
+        val charBoundaryEtag =
+            Utf8ChunkDigest
+                .newWeakEtagWriter()
+                .appendAscii("k".repeat(512))
+                .appendChar('!')
+                .finishWeakEtag()
+        assertThat(charBoundaryEtag)
+            .isEqualTo("W/\"${Utf8ChunkDigest.sha256Hex("k".repeat(512) + "!").take(32)}\"")
+
+        val longBoundaryEtag =
+            Utf8ChunkDigest
+                .newWeakEtagWriter()
+                .appendAscii("m".repeat(500))
+                .appendLong(987654321L)
+                .appendLong(0L)
+                .finishWeakEtag()
+        assertThat(longBoundaryEtag)
+            .isEqualTo("W/\"${Utf8ChunkDigest.sha256Hex("m".repeat(500) + "9876543210").take(32)}\"")
     }
 
     @Test
@@ -435,6 +475,11 @@ class LowLevelOptimizationParityTest {
             .isEqualTo("203.0.113.10")
         assertThat(IpAddressNormalizer.normalize("[2001:db8::1]"))
             .isEqualTo("2001:db8:0:0:0:0:0:1")
+        assertThat(IpAddressNormalizer.normalizeRateLimitKeyOrNull(null)).isNull()
+        assertThat(IpAddressNormalizer.normalizeRateLimitKeyOrNull("  not-an-ip  ")).isNull()
+        assertThat(IpAddressNormalizer.normalizeRateLimitKeyOrNull("203.0.113.10")).isEqualTo("203.0.113.10")
+        assertThat(IpAddressNormalizer.normalizeRateLimitKeyOrNull("2001:db8:1:0::9")).isEqualTo("2001:db8:1::/64")
+        assertThat(IpAddressNormalizer.normalizeRateLimitKey("invalid-ip")).isEqualTo("unknown")
     }
 
     @Test

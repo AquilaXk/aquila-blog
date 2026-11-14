@@ -62,6 +62,12 @@ class PostApplicationService(
 ) : PostUseCase {
     private val logger = LoggerFactory.getLogger(PostApplicationService::class.java)
 
+    private data class WrittenPostResult(
+        val post: Post,
+        val createdTags: List<String>,
+        val currentAttachmentKeys: UploadedFileUrlCodec.PartitionedObjectKeys,
+    )
+
     override fun count(): Long = postRepository.count()
 
     override fun randomSecureTip(): String = secureTipPort.randomSecureTip()
@@ -83,7 +89,7 @@ class PostApplicationService(
         val normalizedIdempotencyKey = idempotencyKey?.trim()?.takeIf { it.isNotBlank() }
 
         if (normalizedIdempotencyKey == null) {
-            val (created, createdTags) =
+            val written =
                 writeNewPost(
                     author = author,
                     persistenceAuthor = persistenceAuthor,
@@ -95,7 +101,12 @@ class PostApplicationService(
                     summary = summary,
                     summaryMode = summaryMode,
                 )
-            return completePostWrite(created, author, createdTags)
+            return completePostWrite(
+                written.post,
+                author,
+                written.createdTags,
+                written.currentAttachmentKeys,
+            )
         }
 
         // 같은 작성자의 keyed 요청은 slot 조회 전에 작성자 행을 직렬화한다.
@@ -117,7 +128,7 @@ class PostApplicationService(
 
         val requestSlot = existingRequest ?: createIdempotencyRequestSlot(lockedAuthor, normalizedIdempotencyKey)
 
-        val (createdPost, createdTags) =
+        val written =
             writeNewPost(
                 author = lockedAuthor,
                 persistenceAuthor = lockedAuthor,
@@ -130,15 +141,22 @@ class PostApplicationService(
                 summaryMode = summaryMode,
             )
 
-        requestSlot.postId = createdPost.id
+        requestSlot.postId = written.post.id
         postWriteRequestIdempotencyRepository.save(requestSlot)
-        return completePostWrite(createdPost, author, createdTags, normalizedIdempotencyKey)
+        return completePostWrite(
+            written.post,
+            author,
+            written.createdTags,
+            written.currentAttachmentKeys,
+            normalizedIdempotencyKey,
+        )
     }
 
     private fun completePostWrite(
         post: Post,
         actor: Member,
         createdTags: List<String>,
+        currentAttachmentKeys: UploadedFileUrlCodec.PartitionedObjectKeys,
         idempotencyKey: String? = null,
     ): Post {
         val isPublic = isPubliclyListed(post)
@@ -158,6 +176,7 @@ class PostApplicationService(
                     ),
                 evictReason = if (idempotencyKey == null) "write" else "write-idempotent",
                 recommendationAction = recommendationActionFor(isPublic),
+                preExtractedCurrentKeys = currentAttachmentKeys,
             ),
             PostWrittenEvent(
                 UUID.randomUUID(),
@@ -229,6 +248,7 @@ class PostApplicationService(
         val previousTags = postTagIndexService.extractNormalizedTags(previousContent)
         val thumbnail = PostPreviewExtractor.extractThumbnail(content)
         val afterTags: List<String>
+        val currentAttachmentKeys: UploadedFileUrlCodec.PartitionedObjectKeys
         try {
             val contentHtmlTrust =
                 if (contentHtml == null) {
@@ -263,9 +283,10 @@ class PostApplicationService(
             )?.let { resolved -> post.applyResolvedSummary(resolved) }
             postRepository.flush()
             afterTags = postTagIndexService.syncPostTags(post)
+            currentAttachmentKeys = UploadedFileUrlCodec.extractPartitionedObjectKeysFromContent(post.content)
             postRepository.syncImageReferences(
                 post.id,
-                UploadedFileUrlCodec.extractObjectKeysFromContent(post.content),
+                currentAttachmentKeys.allKeys(),
             )
             if (wasTempDraft) {
                 post.isTempDraft = false
@@ -319,6 +340,7 @@ class PostApplicationService(
                     },
                 evictReason = "modify",
                 recommendationAction = recommendationActionFor(isPublic),
+                preExtractedCurrentKeys = currentAttachmentKeys,
             ),
             PostModifiedEvent(
                 UUID.randomUUID(),
@@ -342,7 +364,7 @@ class PostApplicationService(
         contentHtml: String?,
         summary: String?,
         summaryMode: PostSummaryMode,
-    ): Pair<Post, List<String>> {
+    ): WrittenPostResult {
         val resolvedSummary = resolveCreatedSummary(title, content, summary, summaryMode)
         val contentHtmlTrust = HtmlContentSanitizer.sanitizeForPersistence(contentHtml)
         val post =
@@ -361,12 +383,13 @@ class PostApplicationService(
         val savedPost = postRepository.saveAndFlush(post)
         postHydrationService.hydrateMembersPublishedProfileWorkspaces(listOf(persistenceAuthor))
         val createdTags = postTagIndexService.syncPostTags(savedPost)
+        val currentAttachmentKeys = UploadedFileUrlCodec.extractPartitionedObjectKeysFromContent(savedPost.content)
         postRepository.syncImageReferences(
             savedPost.id,
-            UploadedFileUrlCodec.extractObjectKeysFromContent(savedPost.content),
+            currentAttachmentKeys.allKeys(),
         )
         postCounterService.incrementMemberPostsCount(persistenceAuthor)
-        return savedPost to createdTags
+        return WrittenPostResult(savedPost, createdTags, currentAttachmentKeys)
     }
 
     private fun resolveCreatedSummary(
@@ -1007,7 +1030,13 @@ class PostApplicationService(
             aggregateType = domainEvent?.aggregateType ?: "Post",
             aggregateId = postId,
             postId = postId,
-            attachmentKeys = PostAttachmentObjectKeySnapshot.fromContents(previousContent, currentContent, deletedContent),
+            attachmentKeys =
+                PostAttachmentObjectKeySnapshot.fromContents(
+                    previousContent = previousContent,
+                    currentContent = currentContent,
+                    deletedContent = deletedContent,
+                    preExtractedCurrentKeys = preExtractedCurrentKeys,
+                ),
             beforeTags = beforeTags,
             afterTags = afterTags,
             cacheInvalidationTargets = cacheInvalidationScope.targets(),

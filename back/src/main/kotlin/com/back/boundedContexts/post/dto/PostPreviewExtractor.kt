@@ -19,13 +19,6 @@ object PostPreviewExtractor {
 
     private val thumbnailCache = StripedDigestLruCache<String>(MAX_CACHE_ENTRIES)
 
-    private val metadataLineRegex =
-        Regex(
-            "^\\s*(tag|tags|category|categories|summary|thumbnail|thumb|cover|coverimage|cover_image)\\s*:\\s*(.+)\\s*$",
-            RegexOption.IGNORE_CASE,
-        )
-    private val THUMBNAIL_KEYS = setOf("thumbnail", "thumb", "cover", "coverimage", "cover_image")
-
     private class HeaderScanResult(
         val explicitThumbnail: String?,
         val bodyStartOffset: Int,
@@ -165,15 +158,23 @@ object PostPreviewExtractor {
         if (frontmatterBodyStart != -1) {
             val closingIndex = content.indexOf("\n---", startIndex = frontmatterBodyStart)
             if (closingIndex > 0) {
-                content
-                    .substring(frontmatterBodyStart, closingIndex)
-                    .lineSequence()
-                    .forEach { line ->
-                        val parts = line.split(":", limit = 2)
-                        if (parts.size == 2) {
-                            extractThumbnailValue(parts[0], parts[1])?.let { thumbnail = it }
+                var lineStart = frontmatterBodyStart
+                while (lineStart < closingIndex) {
+                    val nextNewline = content.indexOf('\n', startIndex = lineStart)
+                    val lineEnd = if (nextNewline == -1 || nextNewline > closingIndex) closingIndex else nextNewline
+                    val colonIndex = content.indexOf(':', startIndex = lineStart)
+                    if (
+                        colonIndex > lineStart &&
+                        colonIndex < lineEnd &&
+                        PostHeaderMetadataMatcher.matchKeyKind(content, lineStart, colonIndex) ==
+                        PostHeaderMetadataMatcher.KIND_THUMBNAIL
+                    ) {
+                        PostHeaderMetadataMatcher.unquoteTrimmed(content, colonIndex + 1, lineEnd)?.let {
+                            thumbnail = it
                         }
                     }
+                    lineStart = lineEnd + 1
+                }
                 cursor = skipLeadingWhitespace(content, closingIndex + 4)
             }
         }
@@ -190,8 +191,13 @@ object PostPreviewExtractor {
             val lineEnd = if (nextNewline == -1) content.length else nextNewline
             val colonIndex = content.indexOf(':', startIndex = cursor)
             if (colonIndex !in cursor until lineEnd) break
-            val match = metadataLineRegex.matchEntire(content.subSequence(cursor, lineEnd)) ?: break
-            extractThumbnailValue(match.groupValues[1], match.groupValues[2])?.let { thumbnail = it }
+            val kind = PostHeaderMetadataMatcher.matchLine(content, cursor, lineEnd, colonIndex)
+            if (kind == PostHeaderMetadataMatcher.KIND_NONE) break
+            if (kind == PostHeaderMetadataMatcher.KIND_THUMBNAIL) {
+                PostHeaderMetadataMatcher.unquoteTrimmed(content, colonIndex + 1, lineEnd)?.let {
+                    thumbnail = it
+                }
+            }
             cursor = if (nextNewline == -1) content.length else nextNewline + 1
         }
 
@@ -220,20 +226,5 @@ object PostPreviewExtractor {
             index += 1
         }
         return index
-    }
-
-    private fun extractThumbnailValue(
-        rawKey: String,
-        rawValue: String,
-    ): String? {
-        val key = rawKey.trim().lowercase()
-        if (key !in THUMBNAIL_KEYS) return null
-        val value =
-            rawValue
-                .trim()
-                .removeSurrounding("\"")
-                .removeSurrounding("'")
-                .trim()
-        return value.ifBlank { null }
     }
 }

@@ -358,6 +358,60 @@ class UploadedFileRetentionServiceConflictRecoveryTest {
         verifyNoInteractions(postImageStoragePort)
     }
 
+    @Test
+    fun `cleanup diagnostics는 상태별 단건 count 대신 countGroupedByStatus를 1회만 호출한다`() {
+        `when`(postImageStoragePort.listObjects(POSTS_PREFIX, 1000))
+            .thenReturn(PostImageStoragePort.StoredObjectListing(objects = emptyList(), isTruncated = false))
+        val repository =
+            GroupedCountRecordingRepository(
+                mapOf(
+                    UploadedFileStatus.TEMP to 2L,
+                    UploadedFileStatus.ACTIVE to 5L,
+                    UploadedFileStatus.PENDING_DELETE to 1L,
+                    UploadedFileStatus.DELETED to 9L,
+                ),
+            )
+        val service = newService(repository)
+
+        val fullDiagnostics = service.diagnoseCleanup()
+        assertThat(fullDiagnostics.tempCount).isEqualTo(2L)
+        assertThat(fullDiagnostics.activeCount).isEqualTo(5L)
+        assertThat(fullDiagnostics.pendingDeleteCount).isEqualTo(1L)
+        assertThat(fullDiagnostics.deletedCount).isEqualTo(9L)
+        assertThat(repository.groupedCalls).isEqualTo(1)
+        assertThat(repository.singleStatusCalls).isZero()
+
+        repository.setNextGroupedCounts(emptyMap())
+        val emptyDiagnostics = service.diagnoseCleanup()
+        assertThat(emptyDiagnostics.tempCount).isZero()
+        assertThat(emptyDiagnostics.activeCount).isZero()
+        assertThat(emptyDiagnostics.pendingDeleteCount).isZero()
+        assertThat(emptyDiagnostics.deletedCount).isZero()
+        assertThat(repository.groupedCalls).isEqualTo(2)
+        assertThat(repository.singleStatusCalls).isZero()
+    }
+
+    private class GroupedCountRecordingRepository(
+        private var nextGroupedCounts: Map<UploadedFileStatus, Long>,
+    ) : EmptyUploadedFileRepository() {
+        var groupedCalls: Int = 0
+        var singleStatusCalls: Int = 0
+
+        fun setNextGroupedCounts(next: Map<UploadedFileStatus, Long>) {
+            nextGroupedCounts = next
+        }
+
+        override fun countGroupedByStatus(): Map<UploadedFileStatus, Long> {
+            groupedCalls += 1
+            return nextGroupedCounts
+        }
+
+        override fun countByStatus(status: UploadedFileStatus): Long {
+            singleStatusCalls += 1
+            return super.countByStatus(status)
+        }
+    }
+
     private fun newService(
         repository: UploadedFileRepositoryPort,
         storageProperties: StoragePropertiesPort = CloudStorageProperties(),
@@ -419,6 +473,8 @@ class UploadedFileRetentionServiceConflictRecoveryTest {
         override fun findByObjectKeyIn(objectKeys: Collection<String>): List<UploadedFile> = objectKeys.mapNotNull(::findByObjectKey)
 
         override fun countByStatus(status: UploadedFileStatus): Long = 0
+
+        override fun countGroupedByStatus(): Map<UploadedFileStatus, Long> = UploadedFileStatus.entries.associateWith(::countByStatus)
 
         override fun findByPurposeAndOwnerTypeAndOwnerIdAndStatusNotOrderByCreatedAtDescIdDesc(
             purpose: com.back.global.storage.domain.UploadedFilePurpose,

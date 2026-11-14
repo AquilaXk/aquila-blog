@@ -308,6 +308,73 @@ summary: "이전 frontmatter 요약"
             .isEqualTo(PostSummarySource.NONE)
     }
 
+    @Test
+    fun `takeGraphemes clamps safely when count exceeds length and early-exit parser handles blocks identically`() {
+        assertThat(PostSummaryResolver.takeGraphemes("", 5)).isEmpty()
+        assertThat(PostSummaryResolver.takeGraphemes("abc", 0)).isEmpty()
+        assertThat(PostSummaryResolver.takeGraphemes("abc", 10)).isEqualTo("abc")
+        assertThat(PostSummaryResolver.takeGraphemes("가나다😀라", 4)).isEqualTo("가나다😀")
+        assertThat(PostSummaryResolver.takeGraphemes("가나다😀라", 20)).isEqualTo("가나다😀라")
+
+        val leadingMetaAndNonSummaryQuote =
+            """
+            excerpt: 발췌 메타
+            description: 설명 메타
+
+            > 일반 인용문만 먼저 나오는 문서입니다.
+
+            #### 네 번째 헤딩
+            + 플러스 목록 항목
+            * 별표 목록 항목
+            12) 괄호 번호 목록 항목
+            | :--- | ---: |
+            --- | ---
+            | col1 | col2 |
+            ![standalone-image](https://example.com/only.png)
+
+            $$
+            E = mc^2
+            $$
+
+               ```kotlin
+            println("three-space fence")
+            ````
+
+            <div>
+            html block
+            </div>
+
+            첫 번째 의미 있는 본문 문장입니다. 여기서 바로 조기 종료되어야 합니다.
+            """.trimIndent() + "\n\n" + "후속 아주 긴 문단입니다. ".repeat(1000)
+
+        val resolved = PostSummaryResolver.resolveAutomatic("제목", leadingMetaAndNonSummaryQuote, fixedNow)
+        assertThat(resolved.source).isEqualTo(PostSummarySource.EXTRACTED)
+        assertThat(resolved.text).isEqualTo("첫 번째 의미 있는 본문 문장입니다. 여기서 바로 조기 종료되어야 합니다.")
+
+        // 7개 샵, 공백 없는 번호목록, 4스페이스+백틱 인덴트 코드 등 경계 분기 검증
+        assertThat(PostSummaryResolver.resolveAutomatic("제목", "####### 일곱 개 샵은 헤딩이 아닌 본문 문장입니다.", fixedNow).text)
+            .isEqualTo("####### 일곱 개 샵은 헤딩이 아닌 본문 문장입니다.")
+        assertThat(PostSummaryResolver.resolveAutomatic("제목", "1.공백없는문장도 충분히 길면 본문으로 추출됩니다.", fixedNow).text)
+            .isEqualTo("1.공백없는문장도 충분히 길면 본문으로 추출됩니다.")
+        assertThat(PostSummaryResolver.resolveAutomatic("제목", "1234", fixedNow).source)
+            .isEqualTo(PostSummarySource.NONE)
+        assertThat(PostSummaryResolver.resolveAutomatic("제목", "# 제목\n    ```not-fence\n본문 핵심 문장이 정상 추출되는지 확인합니다.", fixedNow).text)
+            .isEqualTo("본문 핵심 문장이 정상 추출되는지 확인합니다.")
+        assertThat(PostSummaryResolver.resolveAutomatic("제목", "--- | --\n--- | bad\n충분히 긴 일반 본문 문장이 여기에 이어집니다.", fixedNow).text)
+            .contains("충분히 긴 일반 본문 문장이 여기에 이어집니다.")
+        assertThat(PostSummaryResolver.resolveAutomatic("제목", "| 단일 파이프 문장은 표 행이 아닌 일반 문장으로 추출됩니다.", fixedNow).text)
+            .isEqualTo("| 단일 파이프 문장은 표 행이 아닌 일반 문장으로 추출됩니다.")
+
+        val placeholderQuote =
+            """
+            > **요약:** 요약을 생성할 수 없습니다.
+
+            뒤에 긴 본문이 있어도 placeholder 선행 요약은 NONE으로 멈춰야 합니다.
+            """.trimIndent()
+        assertThat(PostSummaryResolver.resolveAutomatic("제목", placeholderQuote, fixedNow).source)
+            .isEqualTo(PostSummarySource.NONE)
+    }
+
     private fun graphemeCount(value: String): Int {
         val iterator = BreakIterator.getCharacterInstance(Locale.ROOT)
         iterator.setText(value)

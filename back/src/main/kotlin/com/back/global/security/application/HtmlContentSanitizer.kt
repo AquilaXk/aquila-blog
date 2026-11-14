@@ -2,8 +2,12 @@ package com.back.global.security.application
 
 import com.back.global.util.Utf8ChunkDigest
 import org.jsoup.Jsoup
+import org.jsoup.nodes.Element
+import org.jsoup.nodes.Node
 import org.jsoup.safety.Cleaner
 import org.jsoup.safety.Safelist
+import org.jsoup.select.NodeFilter
+import org.jsoup.select.NodeTraversor
 
 enum class ContentHtmlTrustState {
     TRUSTED_CURRENT,
@@ -119,31 +123,117 @@ object HtmlContentSanitizer {
         val document = Jsoup.parseBodyFragment(rawHtml, SANITIZER_BASE_URI)
         val body = cleaner.clean(document).body()
 
-        body.select("input").forEach { element ->
-            if (!element.attr("type").equals("checkbox", ignoreCase = true)) {
-                element.remove()
-            } else {
-                element.attr("type", "checkbox")
-                element.attr("disabled", "")
-            }
-        }
-
-        body.select("a[target=_blank]").forEach { element ->
-            val mergedRel =
-                element
-                    .attr("rel")
-                    .split(' ')
-                    .map(String::trim)
-                    .filter(String::isNotBlank)
-                    .plus(listOf("noopener", "noreferrer"))
-                    .distinct()
-                    .joinToString(" ")
-            element.attr("rel", mergedRel)
-        }
+        NodeTraversor.filter(
+            object : NodeFilter {
+                override fun head(
+                    node: Node,
+                    depth: Int,
+                ): NodeFilter.FilterResult {
+                    if (node is Element) {
+                        when (node.normalName()) {
+                            "input" -> {
+                                if (!node.attr("type").equals("checkbox", ignoreCase = true)) {
+                                    return NodeFilter.FilterResult.REMOVE
+                                }
+                                node.attr("type", "checkbox")
+                                node.attr("disabled", "")
+                            }
+                            "a" -> {
+                                if (node.attr("target").trim().equals("_blank", ignoreCase = true)) {
+                                    node.attr("rel", mergeBlankTargetRel(node.attr("rel")))
+                                }
+                            }
+                        }
+                    }
+                    return NodeFilter.FilterResult.CONTINUE
+                }
+            },
+            body,
+        )
 
         val sanitized = body.html().trim()
         if (sanitized.isBlank() || sanitized.length > MAX_RAW_HTML_LENGTH) return null
         return sanitized
+    }
+
+    private const val REL_NOOPENER_FLAG = 1
+    private const val REL_NOREFERRER_FLAG = 2
+
+    private fun mergeBlankTargetRel(existingRel: String): String {
+        if (existingRel.isBlank()) return "noopener noreferrer"
+
+        var flags = 0
+        val sb = StringBuilder(existingRel.length + 21)
+        var cursor = 0
+        val len = existingRel.length
+        while (cursor < len) {
+            val spaceIndex = existingRel.indexOf(' ', cursor)
+            val rawEnd = if (spaceIndex == -1) len else spaceIndex
+            var tokStart = cursor
+            var tokEnd = rawEnd
+            while (tokStart < tokEnd && existingRel[tokStart].isWhitespace()) tokStart++
+            while (tokEnd > tokStart && existingRel[tokEnd - 1].isWhitespace()) tokEnd--
+            if (tokStart < tokEnd) {
+                val tokLen = tokEnd - tokStart
+                val appendToken =
+                    if (tokLen == 8 && existingRel.regionMatches(tokStart, "noopener", 0, 8)) {
+                        val first = (flags and REL_NOOPENER_FLAG) == 0
+                        flags = flags or REL_NOOPENER_FLAG
+                        first
+                    } else if (tokLen == 10 && existingRel.regionMatches(tokStart, "noreferrer", 0, 10)) {
+                        val first = (flags and REL_NOREFERRER_FLAG) == 0
+                        flags = flags or REL_NOREFERRER_FLAG
+                        first
+                    } else {
+                        !containsSpaceDelimitedToken(sb, existingRel, tokStart, tokEnd)
+                    }
+                if (appendToken) {
+                    if (sb.isNotEmpty()) sb.append(' ')
+                    sb.append(existingRel, tokStart, tokEnd)
+                }
+            }
+            cursor = if (spaceIndex == -1) len else spaceIndex + 1
+        }
+        if ((flags and REL_NOOPENER_FLAG) == 0) {
+            sb.append(' ').append("noopener")
+        }
+        if ((flags and REL_NOREFERRER_FLAG) == 0) {
+            sb.append(' ').append("noreferrer")
+        }
+        return sb.toString()
+    }
+
+    private fun containsSpaceDelimitedToken(
+        sb: StringBuilder,
+        text: String,
+        tokStart: Int,
+        tokEnd: Int,
+    ): Boolean {
+        val tokLen = tokEnd - tokStart
+        val sbLen = sb.length
+        var pos = 0
+        while (pos < sbLen) {
+            val nextSpace = sb.indexOf(" ", pos)
+            val end = if (nextSpace == -1) sbLen else nextSpace
+            if (end - pos == tokLen && matchesRange(sb, pos, text, tokStart, tokLen)) {
+                return true
+            }
+            pos = if (nextSpace == -1) sbLen else nextSpace + 1
+        }
+        return false
+    }
+
+    private fun matchesRange(
+        sb: StringBuilder,
+        sbOffset: Int,
+        text: String,
+        textOffset: Int,
+        len: Int,
+    ): Boolean {
+        for (i in 0 until len) {
+            if (sb[sbOffset + i] != text[textOffset + i]) return false
+        }
+        return true
     }
 
     fun sanitizeForPersistence(rawHtml: String?): ContentHtmlTrustResult {

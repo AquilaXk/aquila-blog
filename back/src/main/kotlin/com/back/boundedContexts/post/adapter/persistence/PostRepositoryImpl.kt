@@ -193,10 +193,12 @@ class PostRepositoryImpl(
         if (shouldSkipCountQuery(publicOnly)) {
             return PageImpl(posts, pageable, estimateTotalElements(pageable, posts.size))
         }
+        if (pageable.offset == 0L && posts.size < pageable.pageSize) {
+            return PageImpl(posts, pageable, posts.size.toLong())
+        }
 
-        // count는 join/fetchJoin 없이 별도 쿼리로 계산해 페이지네이션 비용을 낮춘다.
-        val countQuery = createCountQuery(builder)
-        return PageableExecutionUtils.getPage(posts, pageable) { countQuery.fetchOne() ?: 0L }
+        // count는 join/fetchJoin 없이 별도 쿼리로 계산하고 마지막 페이지는 COUNT 쿼리를 생략한다.
+        return PageableExecutionUtils.getPage(posts, pageable) { createCountQuery(builder).fetchOne() ?: 0L }
     }
 
     private fun findPublicPostsByCursor(
@@ -277,12 +279,31 @@ class PostRepositoryImpl(
     }
 
     private fun sanitizePGroongaQueryToken(raw: String): String? {
-        val sanitized =
-            raw
-                .replace(PGROONGA_SPECIAL_CHARS_REGEX, " ")
-                .trim()
-                .replace(WHITESPACE_REGEX, " ")
-        return sanitized.takeIf { it.isNotBlank() }
+        if (raw.isEmpty()) return null
+        val sb = StringBuilder(raw.length)
+        var pendingSpace = false
+        for (i in 0 until raw.length) {
+            val ch = raw[i]
+            val code = ch.code
+            val isSeparator =
+                if (code < 128) {
+                    (ASCII_SEARCH_CHAR_FLAGS[code].toInt() and (FLAG_PGROONGA_SPECIAL or FLAG_WHITESPACE)) != 0
+                } else {
+                    ch.isWhitespace()
+                }
+            if (isSeparator) {
+                if (sb.isNotEmpty()) {
+                    pendingSpace = true
+                }
+            } else {
+                if (pendingSpace) {
+                    sb.append(' ')
+                    pendingSpace = false
+                }
+                sb.append(ch)
+            }
+        }
+        return if (sb.isEmpty()) null else sb.toString()
     }
 
     private fun buildPostTagIndexPredicate(normalizedTag: String): BooleanExpression =
@@ -524,20 +545,33 @@ class PostRepositoryImpl(
 
     private fun buildKeywordTerms(keyword: String): List<String> {
         val normalizedKeyword = keyword.trim().lowercase()
-        if (normalizedKeyword.isBlank()) return emptyList()
+        if (normalizedKeyword.isEmpty()) return emptyList()
 
-        val splitTokens =
-            normalizedKeyword
-                .split(WHITESPACE_REGEX)
-                .map(String::trim)
-                .filter { it.length >= 2 }
-                .distinct()
-                .take(4)
+        val result = ArrayList<String>(5)
+        result.add(normalizedKeyword)
 
-        return buildList(splitTokens.size + 1) {
-            add(normalizedKeyword)
-            addAll(splitTokens.filterNot { it == normalizedKeyword })
+        var tokenCount = 0
+        var i = 0
+        val len = normalizedKeyword.length
+        while (i < len && tokenCount < 4) {
+            while (i < len && isSearchWhitespace(normalizedKeyword[i])) i++
+            if (i >= len) break
+            val start = i
+            while (i < len && !isSearchWhitespace(normalizedKeyword[i])) i++
+            if (i - start >= 2) {
+                val token = normalizedKeyword.substring(start, i)
+                if (!result.contains(token)) {
+                    result.add(token)
+                    tokenCount++
+                }
+            }
         }
+        return result
+    }
+
+    private fun isSearchWhitespace(ch: Char): Boolean {
+        val code = ch.code
+        return if (code < 128) (ASCII_SEARCH_CHAR_FLAGS[code].toInt() and FLAG_WHITESPACE) != 0 else ch.isWhitespace()
     }
 
     private fun buildLikeScore(
@@ -573,13 +607,27 @@ class PostRepositoryImpl(
     private fun zeroScore(): NumberExpression<Int> = Expressions.numberTemplate(Int::class.java, "0")
 
     private fun buildEscapedLikePattern(raw: String): String {
-        val normalized = raw.trim().lowercase()
-        val escaped =
-            normalized
-                .replace("\\", "\\\\")
-                .replace("%", "\\%")
-                .replace("_", "\\_")
-        return "%$escaped%"
+        var start = 0
+        var end = raw.length
+        while (start < end && raw[start].isWhitespace()) start++
+        while (end > start && raw[end - 1].isWhitespace()) end--
+        val sb = StringBuilder(end - start + 8).append('%')
+        var i = start
+        while (i < end) {
+            val ch = raw[i]
+            val code = ch.code
+            if (ch == '\\' || ch == '%' || ch == '_') {
+                sb.append('\\').append(ch)
+            } else if (code in 'A'.code..'Z'.code) {
+                sb.append((code or 0x20).toChar())
+            } else if (code < 128) {
+                sb.append(ch)
+            } else {
+                sb.append(ch.lowercase())
+            }
+            i++
+        }
+        return sb.append('%').toString()
     }
 
     private fun estimateTotalElements(
@@ -687,7 +735,16 @@ class PostRepositoryImpl(
     }
 
     companion object {
-        private val WHITESPACE_REGEX = Regex("\\s+")
-        private val PGROONGA_SPECIAL_CHARS_REGEX = Regex("""["'()\\+\-*~<>:@^$?\[\]{}|]+""")
+        private const val FLAG_PGROONGA_SPECIAL = 1
+        private const val FLAG_WHITESPACE = 2
+        private val ASCII_SEARCH_CHAR_FLAGS =
+            ByteArray(128).apply {
+                for (c in "\"'()\\+-*~<>:@^$?[]{}|") {
+                    this[c.code] = (this[c.code].toInt() or FLAG_PGROONGA_SPECIAL).toByte()
+                }
+                for (c in charArrayOf(' ', '\t', '\n', '\r', '\u000B', '\u000C', '\u001C', '\u001D', '\u001E', '\u001F')) {
+                    this[c.code] = (this[c.code].toInt() or FLAG_WHITESPACE).toByte()
+                }
+            }
     }
 }

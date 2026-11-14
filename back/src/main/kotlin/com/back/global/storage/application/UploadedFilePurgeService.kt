@@ -89,12 +89,13 @@ class UploadedFilePurgeService(
         val cleanupSummary = diagnoseCleanupSummary(sampleSize)
         val safeSampleSize = sampleSize.coerceIn(1, 20)
         val reconcileDiagnostics = diagnoseReconcile(now, safeSampleSize)
+        val statusCounts = uploadedFileRepository.countGroupedByStatus()
 
         return UploadedFileCleanupDiagnostics(
-            tempCount = uploadedFileRepository.countByStatus(UploadedFileStatus.TEMP),
-            activeCount = uploadedFileRepository.countByStatus(UploadedFileStatus.ACTIVE),
-            pendingDeleteCount = uploadedFileRepository.countByStatus(UploadedFileStatus.PENDING_DELETE),
-            deletedCount = uploadedFileRepository.countByStatus(UploadedFileStatus.DELETED),
+            tempCount = statusCounts[UploadedFileStatus.TEMP] ?: 0L,
+            activeCount = statusCounts[UploadedFileStatus.ACTIVE] ?: 0L,
+            pendingDeleteCount = statusCounts[UploadedFileStatus.PENDING_DELETE] ?: 0L,
+            deletedCount = statusCounts[UploadedFileStatus.DELETED] ?: 0L,
             eligibleForPurgeCount = cleanupSummary.eligibleForPurgeCount,
             cleanupSafetyThreshold = retentionProperties.cleanupSafetyThreshold,
             blockedBySafetyThreshold = cleanupSummary.blockedBySafetyThreshold,

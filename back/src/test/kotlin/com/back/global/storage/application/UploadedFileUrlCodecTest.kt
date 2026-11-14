@@ -82,4 +82,102 @@ class UploadedFileUrlCodecTest {
             ),
         ).isEmpty()
     }
+
+    @Test
+    fun `128 ASCII 및 유니코드 라운드트립과 경계 구분자, PartitionedObjectKeys 병합을 검증한다`() {
+        val allAscii = (0..127).joinToString("") { it.toChar().toString() }
+        val expectedEncodedAllAscii =
+            java.net.URLEncoder
+                .encode(allAscii, java.nio.charset.StandardCharsets.UTF_8)
+                .replace("+", "%20")
+                .replace("%2F", "/")
+        assertThat(UploadedFileUrlCodec.buildRelativeImagePath(allAscii))
+            .isEqualTo("/post/api/v1/images/$expectedEncodedAllAscii")
+
+        val unicodeKey = "폴더/caf\u00E9 한글 파일 명+특수#1?a=\uD83D\uDE80_고립_\uD83D_\uDC00.png"
+        val relative = UploadedFileUrlCodec.buildRelativeFilePath(unicodeKey)
+        assertThat(relative).startsWith("/post/api/v1/files/")
+        val safeRoundTripKey = "폴더/caf\u00E9 한글 파일 명+100%_€_😀.pdf"
+        assertThat(UploadedFileUrlCodec.extractObjectKeyFromFileUrl(UploadedFileUrlCodec.buildFileUrl(safeRoundTripKey)))
+            .isEqualTo(safeRoundTripKey)
+
+        val contentWithBoundaries =
+            """
+            /post/api/v1/images/start-of-doc.png
+            [a](/post/api/v1/images/parens.png)
+            [[/post/api/v1/images/bracket.png]
+            "/post/api/v1/files/dquote.pdf"
+            '/post/api/v1/files/squote.pdf'
+            <span>/post/api/v1/files/gt.pdf</span>
+            ${AppConfig.siteBackUrl}/post/api/v1/images/plus+name.png?x=1
+            prefix/post/api/v1/images/attached-prefix-ignored.png
+            한글/post/api/v1/images/non-ascii-prefix-ignored.png
+            /post/api/v1/other/ignored.txt
+            /post/api/v1/images/%20%20
+            """.trimIndent()
+        val partitioned = UploadedFileUrlCodec.extractPartitionedObjectKeysFromContent(contentWithBoundaries)
+        assertThat(partitioned.imageKeys).containsExactlyInAnyOrder(
+            "start-of-doc.png",
+            "parens.png",
+            "bracket.png]",
+            "plus name.png",
+        )
+        assertThat(partitioned.fileKeys).containsExactlyInAnyOrder(
+            "dquote.pdf",
+            "squote.pdf",
+            "gt.pdf</span",
+        )
+        assertThat(partitioned.allKeys()).containsExactlyInAnyOrder(
+            "start-of-doc.png",
+            "parens.png",
+            "bracket.png]",
+            "plus name.png",
+            "dquote.pdf",
+            "squote.pdf",
+            "gt.pdf</span",
+        )
+
+        val emptyPartitioned = UploadedFileUrlCodec.extractPartitionedObjectKeysFromContent("no urls")
+        assertThat(emptyPartitioned.allKeys()).isEmpty()
+    }
+
+    @Test
+    fun `PostAttachmentObjectKeySnapshot은 사전 추출된 키 재사용과 미제공 폴백을 모두 지원한다`() {
+        val current = "![a](/post/api/v1/images/a.png) [f](/post/api/v1/files/f.pdf)"
+        val preExtracted = UploadedFileUrlCodec.extractPartitionedObjectKeysFromContent(current)
+
+        val reusedSnapshot =
+            com.back.boundedContexts.post.application.service.PostAttachmentObjectKeySnapshot.fromContents(
+                previousContent = null,
+                currentContent = current,
+                deletedContent = null,
+                preExtractedCurrentKeys = preExtracted,
+            )
+        val fallbackSnapshot =
+            com.back.boundedContexts.post.application.service.PostAttachmentObjectKeySnapshot.fromContents(
+                previousContent = "![prev](/post/api/v1/images/p.png)",
+                currentContent = current,
+                deletedContent = null,
+            )
+        val deletedSnapshot =
+            com.back.boundedContexts.post.application.service.PostAttachmentObjectKeySnapshot.fromContents(
+                previousContent = null,
+                currentContent = null,
+                deletedContent = "![del](/post/api/v1/images/d.png) [df](/post/api/v1/files/df.pdf)",
+            )
+        val noopSnapshot =
+            com.back.boundedContexts.post.application.service.PostAttachmentObjectKeySnapshot.fromContents(
+                previousContent = null,
+                currentContent = null,
+                deletedContent = null,
+            )
+
+        assertThat(reusedSnapshot.currentImageObjectKeys).containsExactly("a.png")
+        assertThat(reusedSnapshot.currentFileObjectKeys).containsExactly("f.pdf")
+        assertThat(fallbackSnapshot.previousImageObjectKeys).containsExactly("p.png")
+        assertThat(deletedSnapshot.deletedImageObjectKeys).containsExactly("d.png")
+        assertThat(deletedSnapshot.deletedFileObjectKeys).containsExactly("df.pdf")
+        assertThat(noopSnapshot.action)
+            .isEqualTo(com.back.boundedContexts.post.application.service.PostAttachmentTaskAction.NONE)
+    }
 }

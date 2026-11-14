@@ -27,28 +27,34 @@ class AuthIpSecurityService(
         )
 
     fun fingerprint(clientIp: String): String? {
-        val normalizedIp = normalizeIp(clientIp) ?: return null
-        val mac = Mac.getInstance(HMAC_ALGORITHM)
-        mac.init(hmacKeySpec)
-        val digest = mac.doFinal(normalizedIp.toByteArray(UTF_8))
-        return Base64.getUrlEncoder().withoutPadding().encodeToString(digest)
+        val normalizedIp = IpAddressNormalizer.normalize(clientIp) ?: return null
+        return BASE64_URL_NO_PAD.encodeToString(hmacSha256(normalizedIp))
     }
 
     fun matches(
         expectedFingerprint: String?,
         clientIp: String,
     ): Boolean {
-        if (expectedFingerprint.isNullOrBlank()) return false
-        val actualFingerprint = fingerprint(clientIp) ?: return false
+        if (expectedFingerprint.isNullOrBlank() || expectedFingerprint.length != FINGERPRINT_BASE64_LENGTH) {
+            return false
+        }
+        val normalizedIp = IpAddressNormalizer.normalize(clientIp) ?: return false
+        val actualEncodedBytes = BASE64_URL_NO_PAD.encode(hmacSha256(normalizedIp))
         return MessageDigest.isEqual(
             expectedFingerprint.toByteArray(UTF_8),
-            actualFingerprint.toByteArray(UTF_8),
+            actualEncodedBytes,
         )
     }
 
-    private fun normalizeIp(clientIp: String): String? = IpAddressNormalizer.normalize(clientIp)
+    private fun hmacSha256(normalizedIp: String): ByteArray {
+        val mac = Mac.getInstance(HMAC_ALGORITHM)
+        mac.init(hmacKeySpec)
+        return mac.doFinal(normalizedIp.toByteArray(UTF_8))
+    }
 
     companion object {
         private const val HMAC_ALGORITHM = "HmacSHA256"
+        private const val FINGERPRINT_BASE64_LENGTH = 43
+        private val BASE64_URL_NO_PAD = Base64.getUrlEncoder().withoutPadding()
     }
 }

@@ -142,4 +142,34 @@ class PostPreviewExtractorTest {
             .isEqualTo("https://example.com/large.png")
         assertThat(PostPreviewExtractor.cachedEntryCount()).isZero()
     }
+
+    @Test
+    fun `frontmatter와 상단 메타 라인에서 대소문자 무관 썸네일 키와 빈 값 경계를 일관되게 처리한다`() {
+        val frontmatterMixed =
+            "---\r\n" +
+                "title: 테스트\r\n" +
+                "Cover_Image: \"https://example.com/first.png\"\r\n" +
+                "THUMBNAIL: 'https://example.com/override.png'\r\n" +
+                "---\r\n\r\n" +
+                "본문"
+        assertThat(PostPreviewExtractor.extractThumbnail(frontmatterMixed))
+            .isEqualTo("https://example.com/override.png")
+
+        val headerWithMixedAndBlankStop =
+            """
+            TAGS: [kotlin]
+            CoverImage: https://example.com/header-cover.png
+            SUMMARY:   
+            Cover_Image: https://example.com/ignored-after-blank.png
+            """.trimIndent()
+        assertThat(PostPreviewExtractor.extractThumbnail(headerWithMixedAndBlankStop))
+            .isEqualTo("https://example.com/header-cover.png")
+
+        val blankAfterSummary =
+            """
+            Summary:   
+            Thumbnail: https://example.com/stopped.png
+            """.trimIndent()
+        assertThat(PostPreviewExtractor.extractThumbnail(blankAfterSummary)).isNull()
+    }
 }

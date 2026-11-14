@@ -95,6 +95,35 @@ class PostOperationalIndexContractTest {
     }
 
     @Test
+    fun `admin and reader composite partial indexes are declared in non-transactional V20261115_01 migration`() {
+        val v3Sql =
+            Files.readString(
+                Path.of(
+                    "src/main/resources/db/migration/V20261115_01__add_admin_and_reader_composite_indexes_concurrently.sql",
+                ),
+            )
+        val v3Conf =
+            Files.readString(
+                Path.of(
+                    "src/main/resources/db/migration/V20261115_01__add_admin_and_reader_composite_indexes_concurrently.sql.conf",
+                ),
+            )
+        assertThat(v3Conf).contains("executeInTransaction=false")
+        assertThat(v3Sql).contains("CREATE INDEX CONCURRENTLY")
+        assertThat(v3Sql).doesNotContainIgnoringCase("BEGIN;")
+        assertThat(v3Sql).doesNotContainIgnoringCase("COMMIT;")
+        listOf(
+            "post_idx_active_status_modified_at_id_desc",
+            "post_idx_active_created_at_id_desc",
+            "post_idx_public_listed_active_modified_at_id_desc",
+            "post_idx_public_listed_author_created_at_id_desc",
+            "uploaded_file_idx_object_key_pattern_id_asc",
+        ).forEach { expectedIndex ->
+            assertThat(v3Sql).contains(expectedIndex)
+        }
+    }
+
+    @Test
     fun `application and prod flyway configs disable postgresql transactional advisory lock`() {
         listOf(
             Path.of("src/main/resources/application.yaml"),

@@ -5,27 +5,18 @@ import com.back.global.task.application.port.output.TaskQueueInsertResult
 import com.back.global.task.application.port.output.TaskQueueRepositoryPort
 import com.back.global.task.domain.Task
 import com.back.global.task.domain.TaskStatus
-import com.back.support.BaseTransactionalIntegrationTest
+import com.back.support.BaseTransactionalPerformanceIntegrationTest
 import jakarta.persistence.EntityManager
 import jakarta.persistence.EntityManagerFactory
 import org.assertj.core.api.Assertions.assertThat
 import org.hibernate.SessionFactory
 import org.junit.jupiter.api.Test
 import org.springframework.beans.factory.annotation.Autowired
-import org.springframework.test.context.TestPropertySource
 import java.sql.Timestamp
 import java.time.Instant
 import java.util.UUID
 
-@TestPropertySource(
-    properties = [
-        "spring.jpa.properties.hibernate.generate_statistics=true",
-        "spring.task.scheduling.enabled=false",
-        "custom.task.processor.enabled=false",
-        "custom.runtime.worker-enabled=false",
-    ],
-)
-class TaskQueueDiagnosticsIntegrationTest : BaseTransactionalIntegrationTest() {
+class TaskQueueDiagnosticsIntegrationTest : BaseTransactionalPerformanceIntegrationTest() {
     @Autowired
     private lateinit var taskQueueRepositoryPort: TaskQueueRepositoryPort
 

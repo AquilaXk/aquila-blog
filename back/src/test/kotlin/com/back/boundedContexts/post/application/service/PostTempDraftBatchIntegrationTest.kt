@@ -3,24 +3,15 @@ package com.back.boundedContexts.post.application.service
 import com.back.boundedContexts.member.application.service.MemberApplicationService
 import com.back.boundedContexts.post.application.port.input.PostUseCase
 import com.back.boundedContexts.post.model.PostSummaryMode
-import com.back.support.BaseTransactionalIntegrationTest
+import com.back.support.BaseTransactionalPerformanceIntegrationTest
 import jakarta.persistence.EntityManager
 import jakarta.persistence.EntityManagerFactory
 import org.assertj.core.api.Assertions.assertThat
 import org.hibernate.SessionFactory
 import org.junit.jupiter.api.Test
 import org.springframework.beans.factory.annotation.Autowired
-import org.springframework.test.context.TestPropertySource
 
-@TestPropertySource(
-    properties = [
-        "spring.jpa.properties.hibernate.generate_statistics=true",
-        "spring.task.scheduling.enabled=false",
-        "custom.task.processor.enabled=false",
-        "custom.runtime.worker-enabled=false",
-    ],
-)
-class PostTempDraftBatchIntegrationTest : BaseTransactionalIntegrationTest() {
+class PostTempDraftBatchIntegrationTest : BaseTransactionalPerformanceIntegrationTest() {
     @Autowired
     private lateinit var postUseCase: PostUseCase
 

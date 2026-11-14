@@ -7,20 +7,22 @@ import org.springframework.stereotype.Component
 internal val PUBLIC_TAG_COUNTS_SQL =
     """
     SELECT
-        pti.tag AS tag,
-        COUNT(*)::int AS count
+        MIN(pti.tag) AS tag,
+        COUNT(DISTINCT pti.post_id)::int AS count
     FROM post_tag_index pti
     JOIN post p
         ON p.id = pti.post_id
     WHERE p.deleted_at IS NULL
       AND p.published IS TRUE
       AND p.listed IS TRUE
-    GROUP BY pti.tag
-    ORDER BY COUNT(*) DESC, LOWER(pti.tag) ASC
+    GROUP BY LOWER(pti.tag)
+    ORDER BY COUNT(DISTINCT pti.post_id) DESC, LOWER(MIN(pti.tag)) ASC
     """.trimIndent()
 
 /**
  * PostTagIndexJdbcRepository는 post_tag_index 테이블 기반 태그 저장/집계를 담당합니다.
+ *
+ * 참조 구현: apache/answer (Apache-2.0) 태그 정규화 및 대소문자 비구분 유니크 집계 패턴.
  * 본문/속성 문자열 파싱 집계를 피하고 SQL group by 집계로 태그 카운트를 계산합니다.
  */
 @Component

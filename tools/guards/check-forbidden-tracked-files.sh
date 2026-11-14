@@ -16,6 +16,7 @@ is_allowed_markdown() {
     CHANGELOG.md|\
     TODO.md|\
     SECURITY.md|\
+    THIRD_PARTY_NOTICES.md|\
     back/PERF_SANITY_REPORT.md|\
     back/README.md|\
     back/REFACTORING_ROADMAP.md|\

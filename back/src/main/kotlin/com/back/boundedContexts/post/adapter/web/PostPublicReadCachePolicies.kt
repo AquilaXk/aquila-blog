@@ -88,4 +88,11 @@ object PostPublicReadCachePolicies {
             sharedMaxAgeSeconds = 45,
             staleWhileRevalidateSeconds = 45,
         )
+    val ADJACENT =
+        PublicReadCachePolicy(
+            name = "adjacent-max15-smax45-swr45",
+            maxAgeSeconds = 15,
+            sharedMaxAgeSeconds = 45,
+            staleWhileRevalidateSeconds = 45,
+        )
 }

@@ -201,8 +201,14 @@ class ApiV1AdmMemberController(
         return currentMemberProfileQueryUseCase.getWorkspaceById(memberId)
     }
 
+    /**
+     * 참조 구현: TryGhost/Ghost 트랜잭션 외부 스토리지 업로드 패턴.
+     * 외부 스토리지 업로드(postImageStorageService.uploadPostImage) 네트워크 I/O가
+     * DB 트랜잭션 커넥션을 점유하지 않도록 메서드 레벨 @Transactional을 제거한다.
+     * DB 메타데이터 등록은 uploadedFileRetentionService.registerTempUploadWithCompensation의
+     * REQUIRES_NEW 독립 트랜잭션 및 보상 삭제 메커니즘으로 원자성을 보장한다.
+     */
     @PostMapping("/{id}/profileImageFile", consumes = [MediaType.MULTIPART_FORM_DATA_VALUE])
-    @Transactional
     fun uploadProfileImageFile(
         @PathVariable
         @Positive

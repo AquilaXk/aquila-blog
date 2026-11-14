@@ -1,5 +1,6 @@
 package com.back.boundedContexts.post.adapter.web
 
+import com.back.boundedContexts.post.dto.AdjacentPostsDto
 import com.back.boundedContexts.post.dto.CursorFeedPageDto
 import com.back.boundedContexts.post.dto.FeedPostDto
 import com.back.boundedContexts.post.dto.PublicPostsBootstrapDto
@@ -57,6 +58,19 @@ class PostPublicReadEtagSeedBuilder {
         writer.appendAscii("|limit=").appendInt(limit)
         writer.appendAscii("|items=")
         writeFeedItemsToken(writer, posts)
+        return writer.finishWeakEtag()
+    }
+
+    fun buildAdjacentWeakEtag(
+        id: Long,
+        data: AdjacentPostsDto,
+    ): String {
+        val writer = Utf8ChunkDigest.newWeakEtagWriter()
+        writer.appendAscii("adjacent|id=").appendLong(id)
+        writer.appendAscii("|prev=")
+        writeFeedItemsToken(writer, listOfNotNull(data.previousPost))
+        writer.appendAscii("|next=")
+        writeFeedItemsToken(writer, listOfNotNull(data.nextPost))
         return writer.finishWeakEtag()
     }
 
@@ -160,6 +174,15 @@ class PostPublicReadEtagSeedBuilder {
             append("|items=")
             append(itemsToken)
         }
+    }
+
+    fun buildAdjacentEtagSeed(
+        id: Long,
+        data: AdjacentPostsDto,
+    ): String {
+        val prevToken = buildFeedItemsToken(listOfNotNull(data.previousPost))
+        val nextToken = buildFeedItemsToken(listOfNotNull(data.nextPost))
+        return "adjacent|id=$id|prev=$prevToken|next=$nextToken"
     }
 
     fun buildBootstrapEtagSeed(

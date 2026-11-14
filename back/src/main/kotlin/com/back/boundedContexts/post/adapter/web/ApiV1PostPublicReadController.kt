@@ -3,6 +3,7 @@ package com.back.boundedContexts.post.adapter.web
 import com.back.boundedContexts.post.application.port.input.PostPublicReadQueryUseCase
 import com.back.boundedContexts.post.application.port.input.PostUseCase
 import com.back.boundedContexts.post.application.support.PostCacheTags
+import com.back.boundedContexts.post.dto.AdjacentPostsDto
 import com.back.boundedContexts.post.dto.CursorFeedPageDto
 import com.back.boundedContexts.post.dto.FeedPostDto
 import com.back.boundedContexts.post.dto.PostDto
@@ -350,6 +351,26 @@ class ApiV1PostPublicReadController(
             post.checkActorCanRead(rq.actor)
         }
         return ResponseEntity.ok(postWebDtoAssembler.makePostWithContentDto(post))
+    }
+
+    @GetMapping("/{id}/adjacent")
+    fun getAdjacent(
+        request: HttpServletRequest,
+        response: HttpServletResponse,
+        @PathVariable @Positive id: Long,
+    ): ResponseEntity<AdjacentPostsDto> {
+        val startedAtNanos = System.nanoTime()
+        val data = postPublicReadQueryUseCase.getAdjacentPosts(id)
+        val weakEtag = postPublicReadResponseFactory.buildAdjacentWeakEtag(id, data)
+        return postPublicReadResponseFactory.respondWithWeakEtag(
+            request = request,
+            response = response,
+            cachePolicy = PostPublicReadCachePolicies.ADJACENT,
+            surrogateKeys = setOf(PostCacheTags.LIST, PostCacheTags.DETAIL),
+            weakEtag = weakEtag,
+            startedAtNanos = startedAtNanos,
+            body = data,
+        )
     }
 
     private fun normalizePublicPage(page: Int): Int = page.coerceIn(1, MAX_PUBLIC_PAGE)

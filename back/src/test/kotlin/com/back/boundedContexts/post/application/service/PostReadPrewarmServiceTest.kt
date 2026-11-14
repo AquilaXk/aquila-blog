@@ -1,6 +1,7 @@
 package com.back.boundedContexts.post.application.service
 
 import com.back.boundedContexts.post.application.port.input.PostPublicReadQueryUseCase
+import com.back.boundedContexts.post.dto.AdjacentPostsDto
 import com.back.boundedContexts.post.dto.CursorFeedPageDto
 import com.back.boundedContexts.post.dto.FeedPostDto
 import com.back.boundedContexts.post.dto.PostWithContentDto
@@ -151,5 +152,7 @@ class PostReadPrewarmServiceTest {
                 tags = emptyList(),
             )
         }
+
+        override fun getAdjacentPosts(id: Long): AdjacentPostsDto = AdjacentPostsDto()
     }
 }

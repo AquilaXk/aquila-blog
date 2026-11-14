@@ -392,4 +392,22 @@ summary: "이전 frontmatter 요약"
             assertThat(it.resolve).isEqualTo(resolve)
             assertThat(it.outcome).isEqualTo("RESOLVED")
         }
+
+    @Test
+    fun `isSimpleAscii, graphemeCount and takeGraphemes fast path and threadlocal coverage`() {
+        assertThat(PostSummaryResolver.isSimpleAscii("Hello World 123!")).isTrue()
+        assertThat(PostSummaryResolver.isSimpleAscii("Hello\nWorld")).isFalse()
+        assertThat(PostSummaryResolver.isSimpleAscii("Hello\rWorld")).isFalse()
+        assertThat(PostSummaryResolver.isSimpleAscii("한글")).isFalse()
+
+        assertThat(PostSummaryResolver.graphemeCount("")).isEqualTo(0)
+        assertThat(PostSummaryResolver.graphemeCount("Hello")).isEqualTo(5)
+        assertThat(PostSummaryResolver.graphemeCount("안녕하세요")).isEqualTo(5)
+
+        assertThat(PostSummaryResolver.takeGraphemes("", 5)).isEqualTo("")
+        assertThat(PostSummaryResolver.takeGraphemes("Hello", 0)).isEqualTo("")
+        assertThat(PostSummaryResolver.takeGraphemes("Hello World", 5)).isEqualTo("Hello")
+        assertThat(PostSummaryResolver.takeGraphemes("Hello", 10)).isEqualTo("Hello")
+        assertThat(PostSummaryResolver.takeGraphemes("안녕하세요 반갑습니다", 5)).isEqualTo("안녕하세요")
+    }
 }

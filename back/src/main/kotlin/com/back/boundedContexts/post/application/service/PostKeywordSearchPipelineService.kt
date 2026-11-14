@@ -237,18 +237,34 @@ class PostKeywordSearchPipelineService(
         return if (bucket < variantTrafficPercent) SearchProfile.VARIANT else SearchProfile.CONTROL
     }
 
-    private fun buildKeywordTokens(normalizedKeyword: String): List<String> {
-        val splitTokens =
-            normalizedKeyword
-                .split(WHITESPACE_REGEX)
-                .map(String::trim)
-                .filter { it.length >= 2 }
-                .distinct()
-                .take(4)
-        return buildList(splitTokens.size + 1) {
-            add(normalizedKeyword)
-            addAll(splitTokens.filterNot { it == normalizedKeyword })
-        }.filter { it.isNotBlank() }
+    internal fun buildKeywordTokens(normalizedKeyword: String): List<String> {
+        val trimmed = normalizedKeyword.trim()
+        if (trimmed.isEmpty()) return emptyList()
+
+        val tokens = LinkedHashSet<String>(5)
+        tokens.add(trimmed)
+
+        val len = normalizedKeyword.length
+        var i = 0
+        var addedCount = 0
+        while (i < len && addedCount < 4) {
+            while (i < len && normalizedKeyword[i].isWhitespace()) {
+                i++
+            }
+            if (i >= len) break
+            val start = i
+            while (i < len && !normalizedKeyword[i].isWhitespace()) {
+                i++
+            }
+            val tokenLen = i - start
+            if (tokenLen >= 2) {
+                val token = normalizedKeyword.substring(start, i)
+                if (token != trimmed && tokens.add(token)) {
+                    addedCount++
+                }
+            }
+        }
+        return tokens.toList()
     }
 
     private fun buildCandidateSignals(

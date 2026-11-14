@@ -8,6 +8,7 @@ import com.back.boundedContexts.post.dto.PublicPostDetailContentCacheDto
 import com.back.standard.dto.post.type1.PostSearchSortType1
 import org.springframework.data.domain.Page
 import org.springframework.data.domain.Pageable
+import java.time.Instant
 
 interface PostRepositoryCustom {
     fun findQPagedByKw(
@@ -53,6 +54,16 @@ interface PostRepositoryCustom {
         excludePostId: Long?,
         limit: Int,
     ): List<Post>
+
+    fun findPreviousPublicPost(
+        createdAt: Instant,
+        id: Long,
+    ): Post?
+
+    fun findNextPublicPost(
+        createdAt: Instant,
+        id: Long,
+    ): Post?
 
     fun findPublicDetailById(id: Long): Post?
 

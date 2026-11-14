@@ -12,6 +12,10 @@
   ],
   "tags": [
     {
+      "name": "ApiV1PostDraftController",
+      "description": "글 임시초안 API"
+    },
+    {
       "name": "ApiV1AdmPostController",
       "description": "관리자용 API 글 컨트롤러"
     },
@@ -235,6 +239,49 @@
               "*/*": {
                 "schema": {
                   "$ref": "#/components/schemas/RsDataPostLikeToggleResBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/post/api/v1/posts/temp/{id}": {
+      "put": {
+        "tags": [
+          "ApiV1PostDraftController"
+        ],
+        "summary": "임시저장 글 비승격 자동저장",
+        "operationId": "saveTempDraft",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64",
+              "exclusiveMinimum": 0
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PostTempDraftSaveRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/RsDataPostWriteResultDto"
                 }
               }
             }
@@ -715,10 +762,30 @@
       }
     },
     "/post/api/v1/posts/temp": {
+      "get": {
+        "tags": [
+          "ApiV1PostDraftController"
+        ],
+        "summary": "임시저장 글 단건 조회 (생성 없음)",
+        "operationId": "getTemp",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/RsDataPostWithContentDto"
+                }
+              }
+            }
+          }
+        }
+      },
       "post": {
         "tags": [
-          "api-v-1-post-draft-controller"
+          "ApiV1PostDraftController"
         ],
+        "summary": "임시저장 글 조회 또는 생성",
         "operationId": "getOrCreateTemp",
         "responses": {
           "200": {
@@ -798,6 +865,42 @@
               "*/*": {
                 "schema": {
                   "$ref": "#/components/schemas/RsDataPostDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ]
+      }
+    },
+    "/post/api/v1/adm/posts/bulk": {
+      "post": {
+        "tags": [
+          "ApiV1AdmPostController"
+        ],
+        "summary": "관리자용 글 일괄 처리",
+        "operationId": "bulkAction",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AdmPostBulkActionRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/RsDataAdmPostBulkActionResBody"
                 }
               }
             }
@@ -1522,6 +1625,38 @@
                 "schema": {
                   "type": "object",
                   "additionalProperties": {}
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/post/api/v1/posts/{id}/adjacent": {
+      "get": {
+        "tags": [
+          "api-v-1-post-public-read-controller"
+        ],
+        "operationId": "getAdjacent",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64",
+              "exclusiveMinimum": 0
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdjacentPostsDto"
                 }
               }
             }
@@ -2843,6 +2978,67 @@
           }
         }
       },
+      "PostTempDraftSaveRequest": {
+        "type": "object",
+        "description": "임시초안 자동저장 요청",
+        "properties": {
+          "title": {
+            "type": "string",
+            "description": "글 제목",
+            "example": "임시 제목",
+            "maxLength": 100,
+            "minLength": 0
+          },
+          "content": {
+            "type": "string",
+            "description": "글 본문 (최대 500,000자)",
+            "example": "임시 본문",
+            "maxLength": 500000,
+            "minLength": 0
+          },
+          "version": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64",
+            "description": "낙관적 락 버전",
+            "example": 1
+          },
+          "summary": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "요약문",
+            "example": "요약",
+            "maxLength": 300,
+            "minLength": 0
+          },
+          "summaryMode": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "요약 모드",
+            "enum": [
+              "AUTO",
+              "MANUAL",
+              null
+            ]
+          },
+          "thumbnail": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "대표 썸네일 URL",
+            "example": "https://example.com/thumb.jpg",
+            "maxLength": 2048,
+            "minLength": 0
+          }
+        }
+      },
       "ProfileCardLinkItemRequest": {
         "type": "object",
         "properties": {
@@ -3848,6 +4044,81 @@
           }
         }
       },
+      "AdmPostBulkActionRequest": {
+        "type": "object",
+        "description": "관리자 글 일괄 처리 요청",
+        "properties": {
+          "ids": {
+            "type": "array",
+            "description": "대상 글 ID 목록 (1~50개)",
+            "example": [
+              1,
+              2,
+              3
+            ],
+            "items": {
+              "type": "integer",
+              "format": "int64"
+            },
+            "maxItems": 50,
+            "minItems": 1
+          },
+          "action": {
+            "type": "string",
+            "description": "일괄 수행할 액션",
+            "enum": [
+              "DELETE",
+              "RESTORE",
+              "HARD_DELETE",
+              "PUBLISH_LISTED",
+              "PUBLISH_UNLISTED",
+              "UNPUBLISH_PRIVATE"
+            ]
+          }
+        },
+        "required": [
+          "ids"
+        ]
+      },
+      "AdmPostBulkActionResBody": {
+        "type": "object",
+        "description": "관리자 글 일괄 처리 결과",
+        "properties": {
+          "processedCount": {
+            "type": "integer",
+            "format": "int32",
+            "description": "처리 완료된 글 수",
+            "example": 3
+          },
+          "ids": {
+            "type": "array",
+            "description": "처리 완료된 고유 글 ID 목록",
+            "example": [
+              1,
+              2,
+              3
+            ],
+            "items": {
+              "type": "integer",
+              "format": "int64"
+            }
+          }
+        }
+      },
+      "RsDataAdmPostBulkActionResBody": {
+        "type": "object",
+        "properties": {
+          "resultCode": {
+            "type": "string"
+          },
+          "msg": {
+            "type": "string"
+          },
+          "data": {
+            "$ref": "#/components/schemas/AdmPostBulkActionResBody"
+          }
+        }
+      },
       "AdminEmailCodeVerifyRequest": {
         "type": "object",
         "properties": {
@@ -4751,15 +5022,28 @@
           }
         }
       },
-      "TagCountDto": {
+      "AdjacentPostsDto": {
         "type": "object",
         "properties": {
-          "tag": {
-            "type": "string"
+          "previousPost": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/FeedPostDto"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
-          "count": {
-            "type": "integer",
-            "format": "int32"
+          "nextPost": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/FeedPostDto"
+              },
+              {
+                "type": "null"
+              }
+            ]
           }
         }
       },
@@ -4844,6 +5128,18 @@
           "summary",
           "summarySource"
         ]
+      },
+      "TagCountDto": {
+        "type": "object",
+        "properties": {
+          "tag": {
+            "type": "string"
+          },
+          "count": {
+            "type": "integer",
+            "format": "int32"
+          }
+        }
       },
       "PageDtoFeedPostDto": {
         "type": "object",

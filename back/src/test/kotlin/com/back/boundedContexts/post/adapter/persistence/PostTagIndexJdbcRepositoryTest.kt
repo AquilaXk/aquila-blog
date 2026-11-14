@@ -84,4 +84,32 @@ class PostTagIndexJdbcRepositoryTest {
             eq(11L),
         )
     }
+
+    @Test
+    @DisplayName("findAllPublicTagCounts는 PUBLIC_TAG_COUNTS_SQL 쿼리를 실행해 결과를 매핑한다")
+    fun queriesPublicTagCountsWithJdbcTemplate() {
+        val jdbcTemplate = mock(JdbcTemplate::class.java)
+        val expectedRows =
+            listOf(
+                PostTagIndexRepositoryPort.TagCountRow("kotlin", 5),
+                PostTagIndexRepositoryPort.TagCountRow("spring", 3),
+            )
+        `when`(
+            jdbcTemplate.query(
+                eq(PUBLIC_TAG_COUNTS_SQL),
+                any<RowMapper<PostTagIndexRepositoryPort.TagCountRow>>(),
+            ),
+        ).thenReturn(expectedRows)
+
+        val repository = PostTagIndexJdbcRepository(jdbcTemplate)
+        val results = repository.findAllPublicTagCounts()
+
+        org.assertj.core.api.Assertions
+            .assertThat(results)
+            .isEqualTo(expectedRows)
+        verify(jdbcTemplate, times(1)).query(
+            eq(PUBLIC_TAG_COUNTS_SQL),
+            any<RowMapper<PostTagIndexRepositoryPort.TagCountRow>>(),
+        )
+    }
 }

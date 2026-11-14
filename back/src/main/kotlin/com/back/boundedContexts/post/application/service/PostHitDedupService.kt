@@ -10,7 +10,6 @@ import org.springframework.stereotype.Service
 import java.nio.charset.StandardCharsets
 import java.security.MessageDigest
 import java.time.Duration
-import java.util.HexFormat
 
 @Service
 class PostHitDedupService(
@@ -60,7 +59,7 @@ class PostHitDedupService(
         val safeViewerKey = viewerKey.trim()
         if (safeViewerKey.isBlank()) return onBlank
 
-        val normalizedKey = "$postId:${sha256(safeViewerKey)}"
+        val normalizedKey = "$postId:${sha256Hex(safeViewerKey)}"
         val redisTemplate = redisTemplateProvider.getIfAvailable() ?: throw serviceUnavailable()
 
         return try {
@@ -80,10 +79,26 @@ class PostHitDedupService(
             cause = cause,
         )
 
-    private fun sha256(value: String): String =
-        HexFormat.of().formatHex(
-            MessageDigest
-                .getInstance("SHA-256")
-                .digest(value.toByteArray(StandardCharsets.UTF_8)),
-        )
+    companion object {
+        private val SHA_256_DIGEST =
+            ThreadLocal.withInitial {
+                MessageDigest.getInstance("SHA-256")
+            }
+
+        private val HEX_CHARS = "0123456789abcdef".toCharArray()
+
+        internal fun sha256Hex(value: String): String {
+            val md = SHA_256_DIGEST.get()
+            md.reset()
+            val bytes = value.toByteArray(StandardCharsets.UTF_8)
+            val digest = md.digest(bytes)
+            val hex = CharArray(64)
+            for (i in 0 until 32) {
+                val b = digest[i].toInt() and 0xFF
+                hex[i * 2] = HEX_CHARS[b ushr 4]
+                hex[i * 2 + 1] = HEX_CHARS[b and 0x0F]
+            }
+            return String(hex)
+        }
+    }
 }

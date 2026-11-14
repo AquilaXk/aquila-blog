@@ -12,6 +12,7 @@ import com.back.boundedContexts.post.dto.PublicPostDetailContentCacheDto
 import org.springframework.data.domain.PageRequest
 import org.springframework.data.domain.Sort
 import org.springframework.stereotype.Component
+import java.time.Instant
 import java.util.Optional
 
 @Component
@@ -31,6 +32,8 @@ class PostRepositoryAdapter(
     override fun flush() = postRepository.flush()
 
     override fun findById(id: Long): Optional<Post> = postRepository.findById(id)
+
+    override fun findAllByIds(ids: Collection<Long>): List<Post> = postRepository.findAllById(ids)
 
     override fun existsById(id: Long): Boolean = postRepository.existsById(id)
 
@@ -105,6 +108,16 @@ class PostRepositoryAdapter(
             query.excludePostId,
             query.limit,
         )
+
+    override fun findPreviousPublicPost(
+        createdAt: Instant,
+        id: Long,
+    ): Post? = postRepository.findPreviousPublicPost(createdAt, id)
+
+    override fun findNextPublicPost(
+        createdAt: Instant,
+        id: Long,
+    ): Post? = postRepository.findNextPublicPost(createdAt, id)
 
     override fun findPublicDetailById(id: Long): Post? = postRepository.findPublicDetailById(id)
 

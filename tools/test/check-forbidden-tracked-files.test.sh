@@ -91,6 +91,16 @@ if ! run_with_temp_index "git update-index --add --cacheinfo 100644 '${readme_bl
   exit 1
 fi
 
+if ! run_with_temp_index "git update-index --add --cacheinfo 100644 '${readme_blob}' THIRD_PARTY_NOTICES.md && bash '${guard}' >'${guard_output}' 2>&1"; then
+  echo "[test] expected tracked THIRD_PARTY_NOTICES.md to be allowed" >&2
+  exit 1
+fi
+
+if ! run_with_temp_index "git update-index --add --cacheinfo 100644 '${readme_blob}' THIRD_PARTY_NOTICES.md && bash '${guard}' --staged >'${guard_output}' 2>&1"; then
+  echo "[test] expected staged THIRD_PARTY_NOTICES.md to be allowed" >&2
+  exit 1
+fi
+
 for forbidden_path in \
   ".agents/rules/domain.md" \
   ".agents/hooks.json" \

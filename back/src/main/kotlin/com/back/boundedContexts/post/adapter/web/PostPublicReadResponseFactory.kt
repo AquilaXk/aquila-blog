@@ -1,5 +1,6 @@
 package com.back.boundedContexts.post.adapter.web
 
+import com.back.boundedContexts.post.dto.AdjacentPostsDto
 import com.back.boundedContexts.post.dto.CursorFeedPageDto
 import com.back.boundedContexts.post.dto.FeedPostDto
 import com.back.boundedContexts.post.dto.PublicPostsBootstrapDto
@@ -216,6 +217,16 @@ class PostPublicReadResponseFactory(
             limit = limit,
             posts = posts,
         )
+
+    fun buildAdjacentWeakEtag(
+        id: Long,
+        data: AdjacentPostsDto,
+    ): String = etagSeedBuilder.buildAdjacentWeakEtag(id, data)
+
+    fun buildAdjacentEtagSeed(
+        id: Long,
+        data: AdjacentPostsDto,
+    ): String = etagSeedBuilder.buildAdjacentEtagSeed(id, data)
 
     fun buildBootstrapWeakEtag(
         pageSize: Int,

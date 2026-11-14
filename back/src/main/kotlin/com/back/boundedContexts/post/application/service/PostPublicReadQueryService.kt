@@ -3,6 +3,7 @@ package com.back.boundedContexts.post.application.service
 import com.back.boundedContexts.post.application.port.input.PostPublicReadQueryUseCase
 import com.back.boundedContexts.post.application.port.input.PostUseCase
 import com.back.boundedContexts.post.domain.Post
+import com.back.boundedContexts.post.dto.AdjacentPostsDto
 import com.back.boundedContexts.post.dto.CursorFeedPageDto
 import com.back.boundedContexts.post.dto.FeedPostDto
 import com.back.boundedContexts.post.dto.FeedPostDtoMappingFailureType
@@ -373,6 +374,31 @@ class PostPublicReadQueryService(
                     postUseCase.getPublicTagCounts()
                 }
             PublicPostsBootstrapDto(feed = feed, tags = tags)
+        }
+
+    @Transactional(readOnly = true)
+    override fun getAdjacentPosts(id: Long): AdjacentPostsDto =
+        runReadQuery("adjacent", "id=$id") {
+            postReadBulkheadService.withExplorePermit {
+                if (isDetailNegativeCached(id)) {
+                    throw AppException(ErrorCode.NOT_FOUND, "존재하지 않는 글입니다.")
+                }
+                if (!postUseCase.isPublicDetailReadable(id)) {
+                    markDetailNegativeCache(id)
+                    throw AppException(ErrorCode.NOT_FOUND, "존재하지 않는 글입니다.")
+                }
+
+                val (meta, _) = getOrLoadPublicPostDetailMeta(id)
+                if (!meta.listed) {
+                    return@withExplorePermit AdjacentPostsDto(null, null)
+                }
+
+                val (prevPost, nextPost) = postUseCase.findAdjacentPublicPosts(meta.createdAt, meta.id)
+                AdjacentPostsDto(
+                    previousPost = prevPost?.let(::toFeedPostDto),
+                    nextPost = nextPost?.let(::toFeedPostDto),
+                )
+            }
         }
 
     private fun <T> runReadQuery(

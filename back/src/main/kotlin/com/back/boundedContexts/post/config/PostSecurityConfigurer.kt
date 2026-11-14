@@ -24,6 +24,7 @@ class PostSecurityConfigurer : PublicApiRouteContributor {
             PublicApiRouteSpec("/post/api/*/posts/search", HttpMethod.GET),
             PublicApiRouteSpec("/post/api/*/posts/tags", HttpMethod.GET),
             PublicApiRouteSpec("/post/api/*/posts/{id:\\d+}", HttpMethod.GET),
+            PublicApiRouteSpec("/post/api/*/posts/{id:\\d+}/adjacent", HttpMethod.GET),
             PublicApiRouteSpec("/post/api/*/posts/{id:\\d+}/meta", HttpMethod.GET),
             PublicApiRouteSpec("/post/api/*/posts/{id:\\d+}/content", HttpMethod.GET),
             PublicApiRouteSpec("/post/api/*/images/**", HttpMethod.GET),
@@ -41,7 +42,9 @@ class PostSecurityConfigurer : PublicApiRouteContributor {
             authorize(HttpMethod.PUT, "/post/api/*/posts/{id:\\d+}", hasRole("ADMIN"))
             authorize(HttpMethod.DELETE, "/post/api/*/posts/{id:\\d+}", hasRole("ADMIN"))
             authorize(HttpMethod.GET, "/post/api/*/posts/mine", hasRole("ADMIN"))
+            authorize(HttpMethod.GET, "/post/api/*/posts/temp", hasRole("ADMIN"))
             authorize(HttpMethod.POST, "/post/api/*/posts/temp", hasRole("ADMIN"))
+            authorize(HttpMethod.PUT, "/post/api/*/posts/temp/{id:\\d+}", hasRole("ADMIN"))
         }
     }
 }

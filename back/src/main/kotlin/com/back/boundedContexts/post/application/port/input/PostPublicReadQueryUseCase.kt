@@ -1,5 +1,6 @@
 package com.back.boundedContexts.post.application.port.input
 
+import com.back.boundedContexts.post.dto.AdjacentPostsDto
 import com.back.boundedContexts.post.dto.CursorFeedPageDto
 import com.back.boundedContexts.post.dto.FeedPostDto
 import com.back.boundedContexts.post.dto.PostWithContentDto
@@ -58,4 +59,6 @@ interface PostPublicReadQueryUseCase {
         pageSize: Int,
         sort: PostSearchSortType1,
     ): PublicPostsBootstrapDto
+
+    fun getAdjacentPosts(id: Long): AdjacentPostsDto
 }

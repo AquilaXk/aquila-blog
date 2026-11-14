@@ -377,4 +377,23 @@ class PostKeywordSearchPipelineServiceTest {
         searchRuntimeControlQueryService = queryService,
         meterRegistry = meterRegistry,
     )
+
+    @Test
+    fun `buildKeywordTokens parses keyword tokens single pass with LinkedHashSet deduplication and limit`() {
+        val service = pipeline(mock(SearchRuntimeControlQueryService::class.java))
+        assertThat(service.buildKeywordTokens("")).isEmpty()
+        assertThat(service.buildKeywordTokens("   ")).isEmpty()
+
+        val tokens1 = service.buildKeywordTokens("kotlin")
+        assertThat(tokens1).containsExactly("kotlin")
+
+        val tokens2 = service.buildKeywordTokens("  kotlin   spring   boot  a   kotlin   react  nextjs  vue  ")
+        assertThat(tokens2).containsExactly(
+            "kotlin   spring   boot  a   kotlin   react  nextjs  vue",
+            "kotlin",
+            "spring",
+            "boot",
+            "react",
+        )
+    }
 }

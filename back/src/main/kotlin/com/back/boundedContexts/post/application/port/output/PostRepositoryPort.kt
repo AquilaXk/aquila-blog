@@ -8,6 +8,7 @@ import com.back.boundedContexts.post.dto.AdmDeletedPostSnapshotDto
 import com.back.boundedContexts.post.dto.PostInteractionReadStateDto
 import com.back.boundedContexts.post.dto.PublicPostDetailContentCacheDto
 import com.back.standard.dto.post.type1.PostSearchSortType1
+import java.time.Instant
 import java.util.Optional
 
 interface PostRepositoryPort {
@@ -73,6 +74,8 @@ interface PostRepositoryPort {
 
     fun findById(id: Long): Optional<Post>
 
+    fun findAllByIds(ids: Collection<Long>): List<Post>
+
     fun existsById(id: Long): Boolean
 
     fun findFirstByOrderByIdDesc(): Post?
@@ -108,6 +111,16 @@ interface PostRepositoryPort {
     fun findPublicByTagCursor(query: TaggedCursorQuery): List<Post>
 
     fun findPublicByAuthorExceptPost(query: RelatedAuthorQuery): List<Post>
+
+    fun findPreviousPublicPost(
+        createdAt: Instant,
+        id: Long,
+    ): Post?
+
+    fun findNextPublicPost(
+        createdAt: Instant,
+        id: Long,
+    ): Post?
 
     fun findPublicDetailById(id: Long): Post?
 

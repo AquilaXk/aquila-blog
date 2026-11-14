@@ -116,6 +116,12 @@ class PostHitDedupServiceTest {
         assertThat(service.unmarkLikedIfPresent(postId = 1L, viewerKey = "   ")).isFalse()
     }
 
+    @Test
+    fun `sha256Hex produces identical sha256 lowercase hex string without memory allocation`() {
+        val hex = PostHitDedupService.sha256Hex("viewer")
+        assertThat(hex).isEqualTo("d35ca5051b82ffc326a3b0b6574a9a3161dee16b9478a199ee39cd803ce5b799")
+    }
+
     private fun service(redisTemplate: StringRedisTemplate?): PostHitDedupService =
         PostHitDedupService(
             viewerWindowSeconds = 60,

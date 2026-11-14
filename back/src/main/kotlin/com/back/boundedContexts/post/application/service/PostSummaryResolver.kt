@@ -458,8 +458,22 @@ object PostSummaryResolver {
         return takeGraphemes(normalized, contentLimit).trimEnd() + ELLIPSIS
     }
 
-    private fun graphemeCount(value: String): Int {
-        val iterator = BreakIterator.getCharacterInstance(Locale.ROOT)
+    private val CHARACTER_BREAK_ITERATOR =
+        ThreadLocal.withInitial { BreakIterator.getCharacterInstance(Locale.ROOT) }
+
+    internal fun isSimpleAscii(value: String): Boolean {
+        for (i in 0 until value.length) {
+            val c = value[i]
+            if (c.code >= 0x80 || c == '\r' || c == '\n') return false
+        }
+        return true
+    }
+
+    internal fun graphemeCount(value: String): Int {
+        if (value.isEmpty()) return 0
+        if (isSimpleAscii(value)) return value.length
+
+        val iterator = CHARACTER_BREAK_ITERATOR.get()
         iterator.setText(value)
         var count = 0
         iterator.first()
@@ -472,7 +486,11 @@ object PostSummaryResolver {
         count: Int,
     ): String {
         if (count <= 0 || value.isEmpty()) return ""
-        val iterator = BreakIterator.getCharacterInstance(Locale.ROOT)
+        if (isSimpleAscii(value)) {
+            return if (count >= value.length) value else value.substring(0, count)
+        }
+
+        val iterator = CHARACTER_BREAK_ITERATOR.get()
         iterator.setText(value)
         var boundary = iterator.first()
         for (i in 0 until count) {

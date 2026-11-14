@@ -9,6 +9,7 @@ import com.back.boundedContexts.post.dto.TagCountDto
 import com.back.boundedContexts.post.model.PostSummaryMode
 import com.back.standard.dto.page.PagedResult
 import com.back.standard.dto.post.type1.PostSearchSortType1
+import java.time.Instant
 
 interface PostUseCase {
     fun count(): Long
@@ -130,13 +131,30 @@ interface PostUseCase {
         limit: Int,
     ): List<Post>
 
+    fun findAdjacentPublicPosts(
+        createdAt: Instant,
+        id: Long,
+    ): Pair<Post?, Post?>
+
     fun getPublicTagCounts(): List<TagCountDto>
 
     fun findTemp(author: Member): Post?
 
     fun getOrCreateTemp(author: Member): Pair<Post, Boolean>
 
+    fun saveTempDraft(
+        actor: Member,
+        postId: Long,
+        request: com.back.boundedContexts.post.dto.PostTempDraftSaveRequest,
+    ): Post
+
     fun isTempDraft(post: Post): Boolean
 
     fun resolveTempDraftPostIds(posts: List<Post>): Set<Long>
+
+    fun bulkActionForAdmin(
+        actor: Member,
+        ids: List<Long>,
+        action: com.back.boundedContexts.post.dto.AdmPostBulkActionType,
+    ): com.back.boundedContexts.post.dto.AdmPostBulkActionResBody
 }

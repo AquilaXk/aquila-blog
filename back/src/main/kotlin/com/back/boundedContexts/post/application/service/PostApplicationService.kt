@@ -897,7 +897,100 @@ class PostApplicationService(
 
     override fun getPublicTagCounts(): List<TagCountDto> = postTagIndexService.getPublicTagCounts()
 
+    override fun findAdjacentPublicPosts(
+        createdAt: Instant,
+        id: Long,
+    ): Pair<Post?, Post?> {
+        val prevPost = postRepository.findPreviousPublicPost(createdAt, id)
+        val nextPost = postRepository.findNextPublicPost(createdAt, id)
+        findAndHydratePublicCursorPosts { listOfNotNull(prevPost, nextPost) }
+        return prevPost to nextPost
+    }
+
     override fun findTemp(author: Member): Post? = postTempDraftService.findTemp(author)
+
+    @Transactional
+    override fun saveTempDraft(
+        actor: Member,
+        postId: Long,
+        request: com.back.boundedContexts.post.dto.PostTempDraftSaveRequest,
+    ): Post {
+        val post =
+            postRepository.findById(postId).orElse(null)
+                ?: throw AppException(ErrorCode.NOT_FOUND, "존재하지 않는 글입니다.")
+        if (post.deletedAt != null) {
+            throw AppException(ErrorCode.NOT_FOUND, "존재하지 않는 글입니다.")
+        }
+        post.checkActorCanModify(actor)
+        if (!postTempDraftService.isTempDraft(post)) {
+            throw AppException(ErrorCode.BAD_REQUEST, "임시저장 상태의 글만 임시초안 자동저장을 수행할 수 있습니다.")
+        }
+        postHydrationService.hydratePostAttrs(post)
+
+        val currentVersion = post.version ?: 0L
+        if (request.version != null && request.version != currentVersion) {
+            throw AppException(
+                ErrorCode.POST_CONCURRENT_EDIT,
+                "다른 세션에서 이미 수정되었습니다. 최신 글을 다시 불러온 뒤 수정해주세요.",
+            )
+        }
+
+        val previousTitle = post.title
+        val previousContent = post.content
+        val previousSummaryText = post.summaryText
+        val previousSummarySource = post.summarySource
+        val previousTags = postTagIndexService.extractNormalizedTags(previousContent)
+
+        val thumbnail =
+            request.thumbnail?.trim()?.takeIf(String::isNotBlank)
+                ?: PostPreviewExtractor.extractThumbnail(request.content)
+
+        post.modify(
+            title = request.title,
+            content = request.content,
+            published = false,
+            listed = false,
+            thumbnail = thumbnail,
+        )
+        post.isTempDraft = true
+        post.published = false
+        post.listed = false
+        postTempDraftService.updateTempDraftMarker(post.author, post.id)
+
+        resolveModifiedSummary(
+            title = request.title,
+            content = request.content,
+            previousTitle = previousTitle,
+            previousContent = previousContent,
+            previousSummaryText = previousSummaryText,
+            previousSummarySource = previousSummarySource,
+            submittedSummary = request.summary,
+            requestedMode = request.summaryMode,
+        )?.let { resolved -> post.applyResolvedSummary(resolved) }
+
+        val afterTags = postTagIndexService.syncPostTags(post)
+        val currentAttachmentKeys = UploadedFileUrlCodec.extractPartitionedObjectKeysFromContent(post.content)
+        postRepository.syncImageReferences(
+            post.id,
+            currentAttachmentKeys.allKeys(),
+        )
+        postRepository.flush()
+        enqueuePostWriteSideEffect(
+            PostWriteSideEffectCommand(
+                postId = post.id,
+                previousContent = previousContent,
+                currentContent = post.content,
+                deletedContent = null,
+                beforeTags = previousTags,
+                afterTags = afterTags,
+                cacheInvalidationScope = PostReadCacheInvalidationScope.AdminPostListAndDetail,
+                evictReason = "temp-draft-save",
+                recommendationAction = PostRecommendationSideEffect.NONE,
+                preExtractedCurrentKeys = currentAttachmentKeys,
+            ),
+        )
+        return post
+    }
 
     @Transactional
     override fun getOrCreateTemp(author: Member): Pair<Post, Boolean> =
@@ -921,6 +1014,114 @@ class PostApplicationService(
     override fun isTempDraft(post: Post): Boolean = postTempDraftService.isTempDraft(post)
 
     override fun resolveTempDraftPostIds(posts: List<Post>): Set<Long> = postTempDraftService.resolveTempDraftPostIds(posts)
+
+    /**
+     * 참조 구현: apache/answer (Apache-2.0), TryGhost/Ghost (MIT)
+     * 관리자 글 일괄 처리(벌크 액션). 중복 ID를 순서대로 distinct 처리하고 커밋 후 캐시 무효화 수행.
+     */
+    @Transactional
+    override fun bulkActionForAdmin(
+        actor: Member,
+        ids: List<Long>,
+        action: com.back.boundedContexts.post.dto.AdmPostBulkActionType,
+    ): com.back.boundedContexts.post.dto.AdmPostBulkActionResBody {
+        val distinctIds = ids.distinct()
+        val processedIds = mutableListOf<Long>()
+        val activePostsById =
+            when (action) {
+                com.back.boundedContexts.post.dto.AdmPostBulkActionType.DELETE,
+                com.back.boundedContexts.post.dto.AdmPostBulkActionType.PUBLISH_LISTED,
+                com.back.boundedContexts.post.dto.AdmPostBulkActionType.PUBLISH_UNLISTED,
+                com.back.boundedContexts.post.dto.AdmPostBulkActionType.UNPUBLISH_PRIVATE,
+                -> postRepository.findAllByIds(distinctIds).associateBy { it.id }
+                com.back.boundedContexts.post.dto.AdmPostBulkActionType.RESTORE,
+                com.back.boundedContexts.post.dto.AdmPostBulkActionType.HARD_DELETE,
+                -> emptyMap()
+            }
+
+        for (id in distinctIds) {
+            when (action) {
+                com.back.boundedContexts.post.dto.AdmPostBulkActionType.DELETE -> {
+                    val post = activePostsById[id]
+                    if (post != null && post.deletedAt == null) {
+                        delete(post, actor)
+                        processedIds.add(id)
+                    }
+                }
+                com.back.boundedContexts.post.dto.AdmPostBulkActionType.RESTORE -> {
+                    if (postRepository.findDeletedSnapshotById(id) != null) {
+                        restoreDeletedByIdForAdmin(id)
+                        processedIds.add(id)
+                    }
+                }
+                com.back.boundedContexts.post.dto.AdmPostBulkActionType.HARD_DELETE -> {
+                    if (postRepository.findDeletedSnapshotById(id) != null) {
+                        hardDeleteDeletedByIdForAdmin(id)
+                        processedIds.add(id)
+                    }
+                }
+                com.back.boundedContexts.post.dto.AdmPostBulkActionType.PUBLISH_LISTED -> {
+                    val post = activePostsById[id]
+                    if (post != null && post.deletedAt == null) {
+                        modify(
+                            actor = actor,
+                            post = post,
+                            title = post.title,
+                            content = post.content,
+                            published = true,
+                            listed = true,
+                            expectedVersion = post.version ?: 0L,
+                            contentHtml = null,
+                            summary = null,
+                            summaryMode = null,
+                        )
+                        processedIds.add(id)
+                    }
+                }
+                com.back.boundedContexts.post.dto.AdmPostBulkActionType.PUBLISH_UNLISTED -> {
+                    val post = activePostsById[id]
+                    if (post != null && post.deletedAt == null) {
+                        modify(
+                            actor = actor,
+                            post = post,
+                            title = post.title,
+                            content = post.content,
+                            published = true,
+                            listed = false,
+                            expectedVersion = post.version ?: 0L,
+                            contentHtml = null,
+                            summary = null,
+                            summaryMode = null,
+                        )
+                        processedIds.add(id)
+                    }
+                }
+                com.back.boundedContexts.post.dto.AdmPostBulkActionType.UNPUBLISH_PRIVATE -> {
+                    val post = activePostsById[id]
+                    if (post != null && post.deletedAt == null) {
+                        modify(
+                            actor = actor,
+                            post = post,
+                            title = post.title,
+                            content = post.content,
+                            published = false,
+                            listed = false,
+                            expectedVersion = post.version ?: 0L,
+                            contentHtml = null,
+                            summary = null,
+                            summaryMode = null,
+                        )
+                        processedIds.add(id)
+                    }
+                }
+            }
+        }
+
+        return com.back.boundedContexts.post.dto.AdmPostBulkActionResBody(
+            processedCount = processedIds.size,
+            ids = processedIds,
+        )
+    }
 
     private fun resolveLifecycleCacheInvalidationScope(
         published: Boolean,

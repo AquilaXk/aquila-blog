@@ -409,6 +409,17 @@ class ApiV1AdmPostControllerTest : BaseAdmPostControllerWebMvcTest() {
         }
     }
 
+    @Suppress("UNCHECKED_CAST")
+    private fun <T> anyNonNull(): T {
+        org.mockito.ArgumentMatchers.any<T>()
+        return null as T
+    }
+
+    private fun <T> eqNonNull(value: T): T {
+        org.mockito.ArgumentMatchers.eq(value)
+        return value
+    }
+
     private fun samplePost(
         id: Long,
         title: String,
@@ -450,5 +461,177 @@ class ApiV1AdmPostControllerTest : BaseAdmPostControllerWebMvcTest() {
         post.createdAt = Instant.parse("2026-03-13T00:00:00Z")
         post.modifiedAt = Instant.parse("2026-03-13T00:01:00Z")
         return post
+    }
+
+    @Test
+    fun `관리자는 글 일괄 처리를 수행할 수 있다`() {
+        val securityUser =
+            SecurityUser(
+                id = 1L,
+                username = "admin@example.com",
+                password = "",
+                nickname = "관리자",
+                authorities = listOf(SimpleGrantedAuthority("ROLE_ADMIN")),
+            )
+        val resBody =
+            com.back.boundedContexts.post.dto.AdmPostBulkActionResBody(
+                processedCount = 2,
+                ids = listOf(1L, 2L),
+            )
+        given(
+            postUseCase.bulkActionForAdmin(
+                anyNonNull(),
+                eqNonNull(listOf(1L, 2L)),
+                eqNonNull(com.back.boundedContexts.post.dto.AdmPostBulkActionType.PUBLISH_LISTED),
+            ),
+        ).willReturn(resBody)
+
+        mvc
+            .post("/post/api/v1/adm/posts/bulk") {
+                with(user(securityUser))
+                contentType = org.springframework.http.MediaType.APPLICATION_JSON
+                content =
+                    """
+                    {
+                        "ids": [1, 2],
+                        "action": "PUBLISH_LISTED"
+                    }
+                    """.trimIndent()
+            }.andExpect {
+                status { isOk() }
+                jsonPath("$.resultCode") { value("200-1") }
+                jsonPath("$.data.processedCount") { value(2) }
+                jsonPath("$.data.ids[0]") { value(1) }
+                jsonPath("$.data.ids[1]") { value(2) }
+            }
+    }
+
+    @Test
+    fun `관리자 글 일괄 처리 시 빈 목록은 400 거부된다`() {
+        val securityUser =
+            SecurityUser(
+                id = 1L,
+                username = "admin@example.com",
+                password = "",
+                nickname = "관리자",
+                authorities = listOf(SimpleGrantedAuthority("ROLE_ADMIN")),
+            )
+
+        mvc
+            .post("/post/api/v1/adm/posts/bulk") {
+                with(user(securityUser))
+                contentType = org.springframework.http.MediaType.APPLICATION_JSON
+                content =
+                    """
+                    {
+                        "ids": [],
+                        "action": "DELETE"
+                    }
+                    """.trimIndent()
+            }.andExpect {
+                status { isBadRequest() }
+            }
+    }
+
+    @Test
+    fun `관리자 글 일괄 처리 시 50개 초과 목록은 400 거부된다`() {
+        val securityUser =
+            SecurityUser(
+                id = 1L,
+                username = "admin@example.com",
+                password = "",
+                nickname = "관리자",
+                authorities = listOf(SimpleGrantedAuthority("ROLE_ADMIN")),
+            )
+        val oversizedIds = (1..51).joinToString(",")
+
+        mvc
+            .post("/post/api/v1/adm/posts/bulk") {
+                with(user(securityUser))
+                contentType = org.springframework.http.MediaType.APPLICATION_JSON
+                content =
+                    """
+                    {
+                        "ids": [$oversizedIds],
+                        "action": "DELETE"
+                    }
+                    """.trimIndent()
+            }.andExpect {
+                status { isBadRequest() }
+            }
+    }
+
+    @Test
+    fun `관리자 글 일괄 처리 시 0 이하 ID 포함은 400 거부된다`() {
+        val securityUser =
+            SecurityUser(
+                id = 1L,
+                username = "admin@example.com",
+                password = "",
+                nickname = "관리자",
+                authorities = listOf(SimpleGrantedAuthority("ROLE_ADMIN")),
+            )
+
+        mvc
+            .post("/post/api/v1/adm/posts/bulk") {
+                with(user(securityUser))
+                contentType = org.springframework.http.MediaType.APPLICATION_JSON
+                content =
+                    """
+                    {
+                        "ids": [0, 1],
+                        "action": "DELETE"
+                    }
+                    """.trimIndent()
+            }.andExpect {
+                status { isBadRequest() }
+            }
+    }
+
+    @Test
+    fun `AdmPostBulkActionRequest 및 AdmPostBulkActionType DTO 커버리지 검증`() {
+        val reqValid =
+            com.back.boundedContexts.post.dto.AdmPostBulkActionRequest(
+                ids = listOf(1L, 2L),
+                action = com.back.boundedContexts.post.dto.AdmPostBulkActionType.PUBLISH_LISTED,
+            )
+        org.assertj.core.api.Assertions
+            .assertThat(reqValid.hasValidPositiveIds)
+            .isTrue()
+        org.assertj.core.api.Assertions
+            .assertThat(reqValid.ids)
+            .containsExactly(1L, 2L)
+        org.assertj.core.api.Assertions
+            .assertThat(reqValid.action)
+            .isEqualTo(com.back.boundedContexts.post.dto.AdmPostBulkActionType.PUBLISH_LISTED)
+
+        val reqInvalid =
+            com.back.boundedContexts.post.dto.AdmPostBulkActionRequest(
+                ids = listOf(-1L),
+                action = com.back.boundedContexts.post.dto.AdmPostBulkActionType.DELETE,
+            )
+        org.assertj.core.api.Assertions
+            .assertThat(reqInvalid.hasValidPositiveIds)
+            .isFalse()
+
+        val resBody =
+            com.back.boundedContexts.post.dto
+                .AdmPostBulkActionResBody(1, listOf(10L))
+        org.assertj.core.api.Assertions
+            .assertThat(resBody.processedCount)
+            .isEqualTo(1)
+        org.assertj.core.api.Assertions
+            .assertThat(resBody.ids)
+            .containsExactly(10L)
+
+        // Enum values and valueOf coverage
+        for (action in com.back.boundedContexts.post.dto.AdmPostBulkActionType
+            .values()) {
+            org.assertj.core.api.Assertions
+                .assertThat(
+                    com.back.boundedContexts.post.dto.AdmPostBulkActionType
+                        .valueOf(action.name),
+                ).isEqualTo(action)
+        }
     }
 }

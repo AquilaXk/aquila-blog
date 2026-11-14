@@ -124,6 +124,32 @@ class PostOperationalIndexContractTest {
     }
 
     @Test
+    fun `public readable and deleted post partial indexes are declared in non-transactional V20261115_02 migration`() {
+        val v4Sql =
+            Files.readString(
+                Path.of(
+                    "src/main/resources/db/migration/V20261115_02__add_adjacent_deleted_and_readable_indexes_concurrently.sql",
+                ),
+            )
+        val v4Conf =
+            Files.readString(
+                Path.of(
+                    "src/main/resources/db/migration/V20261115_02__add_adjacent_deleted_and_readable_indexes_concurrently.sql.conf",
+                ),
+            )
+        assertThat(v4Conf).contains("executeInTransaction=false")
+        assertThat(v4Sql).contains("CREATE INDEX CONCURRENTLY")
+        assertThat(v4Sql).doesNotContainIgnoringCase("BEGIN;")
+        assertThat(v4Sql).doesNotContainIgnoringCase("COMMIT;")
+        listOf(
+            "post_idx_public_detail_readable_id",
+            "post_idx_deleted_at_desc",
+        ).forEach { expectedIndex ->
+            assertThat(v4Sql).contains(expectedIndex)
+        }
+    }
+
+    @Test
     fun `application and prod flyway configs disable postgresql transactional advisory lock`() {
         listOf(
             Path.of("src/main/resources/application.yaml"),

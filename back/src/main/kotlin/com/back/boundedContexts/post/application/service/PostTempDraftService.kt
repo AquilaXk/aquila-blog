@@ -25,7 +25,10 @@ class PostTempDraftService(
 
     fun findTemp(author: Member): Post? {
         val persistenceAuthor = author
-        return resolveTrackedTempPost(persistenceAuthor)
+        return resolveTrackedTempPost(persistenceAuthor)?.also { post ->
+            postHydrationService.hydratePostAttrs(post)
+            postHydrationService.hydrateMembersPublishedProfileWorkspaces(listOf(post.author))
+        }
     }
 
     @Transactional

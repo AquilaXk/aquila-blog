@@ -100,6 +100,46 @@ class PostRepositoryImpl(
             .map(::toSummaryPost)
     }
 
+    override fun findPreviousPublicPost(
+        createdAt: Instant,
+        id: Long,
+    ): Post? {
+        val condition =
+            (post.createdAt.lt(createdAt))
+                .or(post.createdAt.eq(createdAt).and(post.id.lt(id)))
+
+        return selectSummaryPostQuery()
+            .where(
+                post.published.isTrue,
+                post.listed.isTrue,
+                condition,
+            ).orderBy(post.createdAt.desc(), post.id.desc())
+            .limit(1)
+            .fetch()
+            .map(::toSummaryPost)
+            .firstOrNull()
+    }
+
+    override fun findNextPublicPost(
+        createdAt: Instant,
+        id: Long,
+    ): Post? {
+        val condition =
+            (post.createdAt.gt(createdAt))
+                .or(post.createdAt.eq(createdAt).and(post.id.gt(id)))
+
+        return selectSummaryPostQuery()
+            .where(
+                post.published.isTrue,
+                post.listed.isTrue,
+                condition,
+            ).orderBy(post.createdAt.asc(), post.id.asc())
+            .limit(1)
+            .fetch()
+            .map(::toSummaryPost)
+            .firstOrNull()
+    }
+
     override fun findPublicDetailById(id: Long): Post? =
         queryFactory
             .selectFrom(post)

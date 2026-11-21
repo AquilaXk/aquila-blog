@@ -1,0 +1,274 @@
+import assert from "node:assert/strict"
+import { spawnSync } from "node:child_process"
+import http from "node:http"
+import { mkdtempSync, rmSync, symlinkSync } from "node:fs"
+import { tmpdir } from "node:os"
+import path from "node:path"
+import test from "node:test"
+
+import {
+  CACHE_STATE_ABSENT,
+  CACHE_STATE_HEADER,
+  createRefreshFailureState,
+  createHealthPayload,
+  readCacheState,
+  runProbe,
+} from "../../deploy/homeserver/monitoring/public-edge-probe.mjs"
+
+const withServer = async (handler, callback) => {
+  const server = http.createServer(handler)
+  await new Promise((resolve, reject) => {
+    server.once("error", reject)
+    server.listen(0, "127.0.0.1", resolve)
+  })
+
+  try {
+    const address = server.address()
+    assert.equal(typeof address, "object")
+    const baseUrl = `http://127.0.0.1:${address.port}`
+    return await callback(baseUrl)
+  } finally {
+    await new Promise((resolve) => server.close(resolve))
+  }
+}
+
+const runProbeFixture = async (baseUrl, route, options = {}) => {
+  const stateDir = mkdtempSync(path.join(tmpdir(), "public-edge-probe-test-"))
+  try {
+    return await runProbe({
+      baseUrl,
+      routes: [route],
+      latestPosts: 0,
+      requestsPerRoute: options.requests || 1,
+      timeoutMs: options.timeoutMs || 1000,
+      statePath: path.join(stateDir, "state.json"),
+      outputJson: "",
+      outputMd: "",
+      prometheusOut: "",
+      refreshMs: 5000,
+      servePort: 0,
+      help: false,
+    })
+  } finally {
+    rmSync(stateDir, { recursive: true, force: true })
+  }
+}
+
+test("public edge probe marks 200 route healthy", async () => {
+  await withServer((request, response) => {
+    response.writeHead(200, { "content-type": "text/html", [CACHE_STATE_HEADER]: "HIT" })
+    response.end("<html><head></head><body>ok</body></html>")
+  }, async (baseUrl) => {
+    const result = await runProbeFixture(baseUrl, "/", { requests: 2 })
+
+    assert.equal(result.report.overall.ok, true)
+    assert.match(result.prometheus, /aquila_public_edge_probe_route_up\{route="\/"\} 1/)
+    assert.match(result.prometheus, /aquila_public_edge_probe_status_code\{route="\/",request_index="1"\} 200/)
+    assert.match(result.prometheus, /aquila_public_edge_probe_up 1/)
+    assert.match(result.prometheus, /aquila_public_edge_probe_last_success_timestamp_seconds [1-9][0-9]+/)
+    assert.equal(result.report.routes[0].samples[0].cacheState, "HIT")
+    assert.equal(result.report.routes[0].samples[0].cacheStateObserved, true)
+    assert.match(result.prometheus, /cache_state="HIT"/)
+    assert.match(
+      result.prometheus,
+      /aquila_public_edge_probe_cache_state_observed\{route="\/",request_index="1"\} 1/,
+    )
+    assert.match(
+      result.prometheus,
+      /aquila_public_edge_probe_cache_state_match\{route_class="home",expected_state="HIT",observed_state="HIT"\} 1/,
+    )
+  })
+})
+
+test("public edge probe clears route evidence after a global refresh failure", async () => {
+  await withServer((request, response) => {
+    response.writeHead(200, { "content-type": "text/html", [CACHE_STATE_HEADER]: "HIT" })
+    response.end("<html><head></head><body>ok</body></html>")
+  }, async (baseUrl) => {
+    const healthy = await runProbeFixture(baseUrl, "/", { requests: 2 })
+    const failed = createRefreshFailureState(
+      {
+        report: healthy.report,
+        markdown: healthy.markdown,
+        prometheus: healthy.prometheus,
+        lastError: "",
+        lastSuccessAt: healthy.report.probedAt,
+      },
+      new Error("global refresh failed"),
+      baseUrl,
+    )
+
+    assert.equal(failed.report.baseUrl, baseUrl)
+    assert.equal(failed.report.overall.ok, false)
+    assert.equal(failed.report.overall.failureReason, "global refresh failed")
+    assert.deepEqual(failed.report.routes, [])
+    assert.equal(failed.lastSuccessAt, healthy.report.probedAt)
+    assert.doesNotMatch(failed.markdown, new RegExp(`## ${healthy.report.routes[0].route}`))
+    assert.doesNotMatch(failed.prometheus, /^aquila_public_edge_probe_route_up\{/m)
+    assert.doesNotMatch(failed.prometheus, /^aquila_public_edge_probe_request_ttfb_seconds\{/m)
+    assert.doesNotMatch(failed.prometheus, /^aquila_public_edge_probe_status_code\{/m)
+    assert.doesNotMatch(failed.prometheus, /^aquila_public_edge_probe_cache_state_observed\{/m)
+    assert.doesNotMatch(failed.prometheus, /^aquila_public_edge_probe_cache_state_match\{/m)
+    assert.match(failed.prometheus, /^aquila_public_edge_probe_up 0$/m)
+    assert.match(failed.prometheus, /^aquila_public_edge_probe_last_refresh_error 1$/m)
+    assert.match(
+      failed.prometheus,
+      new RegExp(
+        `^aquila_public_edge_probe_last_success_timestamp_seconds ${Math.floor(Date.parse(healthy.report.probedAt) / 1000)}$`,
+        "m",
+      ),
+    )
+  })
+})
+
+test("public edge probe reads the cache state from the Next.js header", async () => {
+  let requestCount = 0
+  await withServer((request, response) => {
+    requestCount += 1
+    response.writeHead(200, {
+      "content-type": "text/html",
+      [CACHE_STATE_HEADER]: requestCount === 1 ? "HIT" : "MISS",
+    })
+    response.end(`<html><head><link rel="canonical" href="http://${request.headers.host}/" /></head><body>ok</body></html>`)
+  }, async (baseUrl) => {
+    const result = await runProbeFixture(baseUrl, "/posts/cache", { requests: 2 })
+
+    assert.equal(result.report.routes[0].route, "/")
+    assert.equal(result.report.routes[0].samples[1].cacheState, "MISS")
+    assert.equal(result.report.routes[0].samples[1].cacheStateObserved, true)
+    assert.deepEqual(result.report.overall.firstRequestCache.counts, { HIT: 1 })
+    assert.match(
+      result.prometheus,
+      /aquila_public_edge_probe_cache_state_match\{route_class="post",expected_state="HIT",observed_state="MISS"\} 0/,
+    )
+  })
+})
+
+// RED guard for the failure this issue exists to prevent: dropping the Vercel header without a
+// replacement turns cache observability into a constant. If someone reintroduces `x-vercel-cache`
+// as the source, this fixture (Vercel header present, Next.js header absent) starts reporting HIT.
+test("public edge probe ignores the Vercel cache header and flags the missing state", async () => {
+  await withServer((request, response) => {
+    response.writeHead(200, { "content-type": "text/html", "x-vercel-cache": "HIT" })
+    response.end("<html><head></head><body>ok</body></html>")
+  }, async (baseUrl) => {
+    const result = await runProbeFixture(baseUrl, "/", { requests: 2 })
+
+    assert.equal(result.report.routes[0].samples[0].cacheState, CACHE_STATE_ABSENT)
+    assert.equal(result.report.routes[0].samples[0].cacheStateObserved, false)
+    assert.doesNotMatch(result.prometheus, /cache_state="HIT"/)
+    assert.doesNotMatch(result.prometheus, /cache_state="UNKNOWN"/)
+    assert.match(
+      result.prometheus,
+      /aquila_public_edge_probe_cache_state_observed\{route="\/",request_index="1"\} 0/,
+    )
+    // 집계 경로에서도 부재가 사라지지 않아야 한다. 여기서 빈 counts가 나오면 대시보드는
+    // "관측 대상이 없다"와 "헤더가 사라졌다"를 구분하지 못한다.
+    assert.deepEqual(result.report.overall.firstRequestCache.counts, { [CACHE_STATE_ABSENT]: 1 })
+    assert.match(
+      result.prometheus,
+      /aquila_public_edge_probe_cache_state_match\{route_class="home",expected_state="HIT",observed_state="NO_CACHE_HEADER"\} 0/,
+    )
+  })
+})
+
+// task-alerts.yml 계약은 tools/test/monitoring-alerts.test.mjs가 소유한다. 여기에 있던 부분
+// 문자열 단언은 활성화 게이트가 깨진 두 형태(괄호 누락, and -> or)를 모두 통과시켰다.
+
+test("readCacheState normalizes the header and never reports UNKNOWN", () => {
+  assert.equal(readCacheState("hit"), "HIT")
+  assert.equal(readCacheState("  REVALIDATED "), "REVALIDATED")
+  assert.equal(readCacheState(""), CACHE_STATE_ABSENT)
+  assert.equal(readCacheState(null), CACHE_STATE_ABSENT)
+  assert.equal(readCacheState(undefined), CACHE_STATE_ABSENT)
+  assert.notEqual(CACHE_STATE_ABSENT, "UNKNOWN")
+})
+
+test("public edge probe allows the explicit 404 route policy", async () => {
+  await withServer((request, response) => {
+    response.writeHead(404, { "content-type": "text/html", [CACHE_STATE_HEADER]: "MISS" })
+    response.end("<html><head><link rel=\"canonical\" href=\"http://example.test/404\" /></head><body>not found</body></html>")
+  }, async (baseUrl) => {
+    const result = await runProbeFixture(baseUrl, "/404")
+
+    assert.equal(result.report.overall.ok, true)
+    assert.match(result.prometheus, /aquila_public_edge_probe_route_up\{route="\/404"\} 1/)
+    assert.match(result.prometheus, /aquila_public_edge_probe_status_code\{route="\/404",request_index="1"\} 404/)
+    assert.doesNotMatch(result.prometheus, /^aquila_public_edge_probe_cache_state_match\{/m)
+  })
+})
+
+test("public edge probe checks status policy against the requested route", async () => {
+  await withServer((request, response) => {
+    response.writeHead(200, { "content-type": "text/html", [CACHE_STATE_HEADER]: "HIT" })
+    response.end("<html><head><link rel=\"canonical\" href=\"http://example.test/\" /></head><body>ok</body></html>")
+  }, async (baseUrl) => {
+    const result = await runProbeFixture(baseUrl, "/404")
+
+    assert.equal(result.report.overall.ok, false)
+    assert.match(result.prometheus, /aquila_public_edge_probe_route_up\{route="\/"\} 0/)
+    assert.match(result.report.routes[0].failureReason, /unexpected status 200/)
+    assert.match(result.report.routes[0].failureReason, /allowed=404/)
+  })
+})
+
+test("public edge probe exposes 5xx as route and overall failure", async () => {
+  await withServer((request, response) => {
+    response.writeHead(500, { "content-type": "text/html", [CACHE_STATE_HEADER]: "MISS" })
+    response.end("<html><head></head><body>error</body></html>")
+  }, async (baseUrl) => {
+    const result = await runProbeFixture(baseUrl, "/")
+
+    assert.equal(result.report.overall.ok, false)
+    assert.match(result.prometheus, /aquila_public_edge_probe_route_up\{route="\/"\} 0/)
+    assert.match(result.prometheus, /aquila_public_edge_probe_status_code\{route="\/",request_index="1"\} 500/)
+    assert.match(result.prometheus, /aquila_public_edge_probe_up 0/)
+  })
+})
+
+test("public edge probe exposes timeout as route and overall failure", async () => {
+  await withServer(() => {}, async (baseUrl) => {
+    const result = await runProbeFixture(baseUrl, "/", { timeoutMs: 1000, requests: 2 })
+
+    assert.equal(result.report.overall.ok, false)
+    assert.match(result.prometheus, /aquila_public_edge_probe_route_up\{route="\/"\} 0/)
+    assert.match(result.prometheus, /aquila_public_edge_probe_status_code\{route="\/",request_index="1"\} 0/)
+    assert.match(result.report.routes[0].failureReason, /timeout/i)
+    assert.match(
+      result.prometheus,
+      /aquila_public_edge_probe_cache_state_match\{route_class="home",expected_state="HIT",observed_state="ERROR"\} 0/,
+    )
+  })
+})
+
+test("public edge probe CLI runs when invoked through a symlinked script path", () => {
+  const stateDir = mkdtempSync(path.join(tmpdir(), "public-edge-probe-cli-test-"))
+  try {
+    const linkPath = path.join(stateDir, "public-edge-probe.mjs")
+    symlinkSync(path.resolve("deploy/homeserver/monitoring/public-edge-probe.mjs"), linkPath)
+
+    const result = spawnSync(process.execPath, [linkPath, "--help"], { encoding: "utf8" })
+
+    assert.equal(result.status, 0, result.stderr)
+    assert.match(result.stdout, /public-edge-probe\.mjs/)
+    assert.match(result.stdout, /--serve-port/)
+  } finally {
+    rmSync(stateDir, { recursive: true, force: true })
+  }
+})
+
+test("public edge probe healthz is stale after two refresh intervals", () => {
+  const now = Date.parse("2026-06-21T00:00:00.000Z")
+  const fresh = createHealthPayload({ lastError: "", lastSuccessAt: "2026-06-20T23:59:55.000Z" }, 5000, now)
+  const boundary = createHealthPayload({ lastError: "", lastSuccessAt: "2026-06-20T23:59:50.000Z" }, 5000, now)
+  const stale = createHealthPayload({ lastError: "", lastSuccessAt: "2026-06-20T23:59:40.000Z" }, 5000, now)
+
+  assert.equal(fresh.statusCode, 200)
+  assert.equal(fresh.body.ok, true)
+  assert.equal(boundary.statusCode, 200)
+  assert.equal(boundary.body.ok, true)
+  assert.equal(boundary.body.stale, false)
+  assert.equal(stale.statusCode, 503)
+  assert.equal(stale.body.ok, false)
+  assert.equal(stale.body.stale, true)
+})

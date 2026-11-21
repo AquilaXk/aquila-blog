@@ -1,0 +1,292 @@
+import org.gradle.api.artifacts.component.ModuleComponentIdentifier
+import org.gradle.api.tasks.compile.JavaCompile
+import org.jetbrains.kotlin.gradle.dsl.JvmTarget
+
+plugins {
+    kotlin("jvm") version "2.4.10"
+    kotlin("plugin.spring") version "2.4.10"
+    jacoco
+    id("org.springframework.boot") version "4.1.1"
+    id("io.spring.dependency-management") version "1.1.7"
+    kotlin("plugin.jpa") version "2.4.10"
+    kotlin("kapt") version "2.4.10"
+    id("org.jlleitschuh.gradle.ktlint") version "14.2.0"
+    id("org.owasp.dependencycheck") version "13.0.0"
+}
+
+apply(from = "gradle/backend-test-infra.gradle.kts")
+apply(from = "gradle/backend-jacoco.gradle.kts")
+apply(from = "gradle/backend-ktlint.gradle.kts")
+
+group = "com"
+version = "0.0.1-SNAPSHOT"
+description = "back"
+
+// Pin above Spring Boot 4.1.0 BOM for NVD High CVEs blocking Deploy (#1387).
+extra["tomcat.version"] = "11.0.25"
+extra["netty.version"] = "4.2.20.Final"
+extra["postgresql.version"] = "42.7.13"
+extra["jackson-2-bom.version"] = "2.21.7"
+extra["jackson-bom.version"] = "3.1.7"
+
+val nettyVersion = extra["netty.version"] as String
+val jackson2Version = extra["jackson-2-bom.version"] as String
+val jackson3Version = extra["jackson-bom.version"] as String
+val awsSdkVersion = "2.54.11"
+val testcontainersVersion = "1.21.4"
+
+java {
+    toolchain {
+        languageVersion = JavaLanguageVersion.of(25)
+    }
+}
+
+tasks.withType<JavaCompile>().configureEach {
+    options.release.set(24)
+}
+
+repositories {
+    mavenCentral()
+}
+
+dependencies {
+    // Spring
+    implementation("org.springframework.boot:spring-boot-starter-data-jpa")
+    implementation("org.springframework.boot:spring-boot-starter-data-redis")
+    implementation("org.springframework.boot:spring-boot-starter-security")
+    implementation("org.springframework.boot:spring-boot-starter-validation")
+    implementation("org.springframework.boot:spring-boot-starter-webmvc")
+    implementation("org.springframework.boot:spring-boot-starter-cache")
+    implementation("org.springframework.boot:spring-boot-starter-actuator")
+    implementation("org.springframework.boot:spring-boot-starter-flyway")
+    implementation("org.springframework.boot:spring-boot-starter-mail")
+    implementation("io.micrometer:micrometer-registry-prometheus")
+    implementation("org.flywaydb:flyway-database-postgresql")
+    developmentOnly("org.springframework.boot:spring-boot-devtools")
+
+    // Kotlin
+    implementation("org.jetbrains.kotlin:kotlin-reflect")
+    implementation("tools.jackson.module:jackson-module-kotlin")
+
+    // Auth
+    implementation("io.jsonwebtoken:jjwt-api:0.13.0")
+    runtimeOnly("io.jsonwebtoken:jjwt-impl:0.13.0")
+    runtimeOnly("io.jsonwebtoken:jjwt-jackson:0.13.0")
+
+    // QueryDSL
+    implementation("io.github.openfeign.querydsl:querydsl-jpa:7.6") {
+        exclude("jakarta.persistence", "jakarta.persistence-api")
+    }
+    implementation("io.github.openfeign.querydsl:querydsl-kotlin:7.6")
+    kapt("io.github.openfeign.querydsl:querydsl-apt:7.6:jpa")
+
+    // SpringDoc
+    implementation("org.springdoc:springdoc-openapi-starter-webmvc-ui:3.1.1")
+    implementation("org.webjars:swagger-ui:5.34.1")
+    implementation("net.logstash.logback:logstash-logback-encoder:9.0")
+
+    // ShedLock
+    implementation("net.javacrumbs.shedlock:shedlock-spring:7.10.1")
+    implementation("net.javacrumbs.shedlock:shedlock-provider-redis-spring:7.10.1")
+
+    // Database
+    runtimeOnly("org.postgresql:postgresql")
+    // Sync S3Client uses UrlConnection only (#1387/#1388/#1391). Drop unused AWS HTTP clients.
+    implementation("software.amazon.awssdk:s3:$awsSdkVersion") {
+        exclude(group = "software.amazon.awssdk", module = "apache-client")
+        exclude(group = "software.amazon.awssdk", module = "apache5-client")
+        exclude(group = "software.amazon.awssdk", module = "netty-nio-client")
+    }
+    implementation("software.amazon.awssdk:url-connection-client:$awsSdkVersion")
+    implementation("org.jsoup:jsoup:1.23.2")
+    implementation("com.twelvemonkeys.imageio:imageio-webp:3.15.0")
+
+    // Test
+    testImplementation("org.springframework.boot:spring-boot-starter-data-jpa-test")
+    testImplementation("org.springframework.boot:spring-boot-starter-data-redis-test")
+    testImplementation("org.springframework.boot:spring-boot-starter-security-test")
+    testImplementation("org.springframework.boot:spring-boot-starter-validation-test")
+    testImplementation("org.springframework.boot:spring-boot-starter-webmvc-test")
+    testImplementation("com.tngtech.archunit:archunit:1.5.0")
+    testImplementation("org.jetbrains.kotlin:kotlin-test-junit5")
+    testImplementation("org.testcontainers:junit-jupiter:$testcontainersVersion")
+    testImplementation("org.testcontainers:postgresql:$testcontainersVersion")
+    testImplementation("org.testcontainers:testcontainers:$testcontainersVersion")
+    testRuntimeOnly("org.junit.platform:junit-platform-launcher")
+}
+
+tasks.register("verifyTestcontainersVersionAlignment") {
+    description = "Verifies the resolved Testcontainers modules use the approved version."
+    group = "verification"
+
+    doLast {
+        val testRuntimeClasspath = configurations.getByName("testRuntimeClasspath")
+        testRuntimeClasspath.resolve()
+        val testcontainersComponents =
+            testRuntimeClasspath
+                .incoming
+                .resolutionResult
+                .allComponents
+                .mapNotNull { component -> component.id as? ModuleComponentIdentifier }
+                .filter { component -> component.group == "org.testcontainers" }
+
+        if (testcontainersComponents.isEmpty()) {
+            throw GradleException("No org.testcontainers modules resolved in testRuntimeClasspath.")
+        }
+
+        val misalignedComponents =
+            testcontainersComponents.filter { component -> component.version != testcontainersVersion }
+        if (misalignedComponents.isNotEmpty()) {
+            val resolvedModules =
+                testcontainersComponents
+                    .map { component -> "${component.module}:${component.version}" }
+                    .sorted()
+                    .joinToString(separator = ", ")
+            throw GradleException(
+                "Testcontainers version alignment failed: expected $testcontainersVersion, resolved $resolvedModules",
+            )
+        }
+    }
+}
+
+tasks.register("verifyNettyVersionAlignment") {
+    description = "Verifies the resolved Netty modules use the approved version."
+    group = "verification"
+
+    doLast {
+        val nettyComponents =
+            configurations
+                .getByName("runtimeClasspath")
+                .incoming
+                .resolutionResult
+                .allComponents
+                .mapNotNull { component -> component.id as? ModuleComponentIdentifier }
+                .filter { component -> component.group == "io.netty" }
+
+        if (nettyComponents.isEmpty()) {
+            throw GradleException("No io.netty modules resolved in runtimeClasspath.")
+        }
+
+        val misalignedComponents = nettyComponents.filter { component -> component.version != nettyVersion }
+        if (misalignedComponents.isNotEmpty()) {
+            val resolvedModules =
+                nettyComponents
+                    .map { component -> "${component.module}:${component.version}" }
+                    .sorted()
+                    .joinToString(separator = ", ")
+            throw GradleException(
+                "Netty version alignment failed: expected $nettyVersion, resolved $resolvedModules",
+            )
+        }
+    }
+}
+
+tasks.register("verifyJacksonVersionAlignment") {
+    description = "Verifies the resolved Jackson 2 and Jackson 3 modules use the approved versions."
+    group = "verification"
+
+    doLast {
+        val runtimeComponents =
+            configurations
+                .getByName("runtimeClasspath")
+                .incoming
+                .resolutionResult
+                .allComponents
+                .mapNotNull { component -> component.id as? ModuleComponentIdentifier }
+
+        val jackson2Components =
+            runtimeComponents.filter { component ->
+                component.group.startsWith("com.fasterxml.jackson") && component.module != "jackson-annotations"
+            }
+        val jackson3Components =
+            runtimeComponents.filter { component ->
+                component.group.startsWith("tools.jackson")
+            }
+
+        if (jackson2Components.isEmpty() || jackson3Components.isEmpty()) {
+            throw GradleException("No Jackson 2 or Jackson 3 modules resolved in runtimeClasspath.")
+        }
+
+        val misalignedJackson2 = jackson2Components.filter { component -> component.version != jackson2Version }
+        val misalignedJackson3 = jackson3Components.filter { component -> component.version != jackson3Version }
+        if (misalignedJackson2.isNotEmpty() || misalignedJackson3.isNotEmpty()) {
+            val resolvedModules =
+                (jackson2Components + jackson3Components)
+                    .map { component -> "${component.group}:${component.module}:${component.version}" }
+                    .sorted()
+                    .joinToString(separator = ", ")
+            throw GradleException(
+                "Jackson version alignment failed: expected Jackson2=$jackson2Version, Jackson3=$jackson3Version, " +
+                    "resolved $resolvedModules",
+            )
+        }
+    }
+}
+
+tasks.register("verifyAwsSdkHttpClientBoundary") {
+    description = "Verifies the runtime uses only the explicitly configured AWS URLConnection HTTP client."
+    group = "verification"
+
+    doLast {
+        val knownHttpClientModules =
+            setOf("apache-client", "apache5-client", "aws-crt-client", "netty-nio-client", "url-connection-client")
+        val resolvedHttpClients =
+            configurations
+                .getByName("runtimeClasspath")
+                .incoming
+                .resolutionResult
+                .allComponents
+                .mapNotNull { component -> component.id as? ModuleComponentIdentifier }
+                .filter { component ->
+                    component.group == "software.amazon.awssdk" && component.module in knownHttpClientModules
+                }
+
+        val resolvedHttpClientDescriptions =
+            resolvedHttpClients
+                .map { component -> "${component.module}:${component.version}" }
+                .sorted()
+        val expectedHttpClients = listOf("url-connection-client:$awsSdkVersion")
+
+        if (resolvedHttpClientDescriptions != expectedHttpClients) {
+            throw GradleException(
+                "AWS SDK HTTP client boundary failed: expected ${expectedHttpClients.joinToString()}, " +
+                    "resolved ${resolvedHttpClientDescriptions.joinToString()}",
+            )
+        }
+    }
+}
+
+kotlin {
+    compilerOptions {
+        jvmTarget.set(JvmTarget.JVM_24)
+        freeCompilerArgs.addAll(
+            "-Xjsr305=strict",
+            "-Xannotation-default-target=param-property",
+        )
+    }
+}
+
+allOpen {
+    annotation("jakarta.persistence.Entity")
+    annotation("jakarta.persistence.MappedSuperclass")
+    annotation("jakarta.persistence.Embeddable")
+}
+
+dependencyCheck {
+    formats = listOf("HTML", "JSON", "SARIF")
+    failBuildOnCVSS = 7.0f
+    // Keep fail-closed on update/analysis errors (#1383).
+    failOnError = true
+    // Prefer ODC Builder datafeed over NVD REST crawl — API full updates hang CI for hours (#1389).
+    // See https://github.com/dependency-check/DependencyCheck/issues/8618
+    nvd.datafeedUrl =
+        "https://dependency-check.github.io/DependencyCheck_Builder/nvd_cache/nvdcve-{0}.json.gz"
+    // Retained for any residual API paths / local tooling; datafeed is primary update source.
+    nvd.maxRetryCount = 20
+    nvd.delay = 4000
+    // OWASP-only suppressions (YAML vulnerability-exceptions.yml does not apply here) (#1387).
+    suppressionFiles.add("config/dependency-check-suppressions.xml")
+    providers.environmentVariable("NVD_API_KEY").orNull?.takeIf(String::isNotBlank)?.let { apiKey ->
+        nvd.apiKey = apiKey
+    }
+}

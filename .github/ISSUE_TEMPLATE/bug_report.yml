@@ -1,0 +1,69 @@
+name: 버그 신고 / Bug report
+description: 플랫폼 백엔드·계약·배포 경로에서 생긴 문제를 알려 주세요. (기능 요청과 PR은 받지 않습니다) / Report a bug in the platform backend, contracts, or deployment.
+title: "[Bug] "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        기능 요청과 PR은 받지 않습니다. 버그 신고만 받습니다. 보안 문제는 이슈로 올리지 말고 [SECURITY.md](https://github.com/AquilaXk/aquila-blog/blob/main/SECURITY.md)의 비공개 신고를 이용해 주세요.
+
+        Feature requests and pull requests are not accepted. Only bug reports are. Do not file security problems here; use the private report described in [SECURITY.md](https://github.com/AquilaXk/aquila-blog/blob/main/SECURITY.md).
+
+  - type: dropdown
+    id: area
+    attributes:
+      label: 발생 영역 / Area
+      options:
+        - 백엔드 API (Spring Boot / Kotlin)
+        - 데이터베이스 / 마이그레이션 (PostgreSQL / Flyway)
+        - 공개 API 계약 (OpenAPI / ErrorCode)
+        - 홈서버 배포 / 인프라 (Docker Compose / Caddy / 모니터링)
+        - 검증 / 보안 가드 (CI / Tools)
+        - 기타 / Other
+    validations:
+      required: true
+
+  - type: input
+    id: environment
+    attributes:
+      label: 실행 환경 / Environment
+      placeholder: "예: macOS 15.4 / JDK 25 / Node.js 20 / prod (https://blog.aquilaxk.site)"
+    validations:
+      required: true
+
+  - type: textarea
+    id: steps
+    attributes:
+      label: 재현 절차 / Steps to reproduce
+      value: |
+        1.
+        2.
+        3.
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: 기대한 결과 / Expected result
+    validations:
+      required: true
+
+  - type: textarea
+    id: actual
+    attributes:
+      label: 실제 결과 / Actual result
+      description: 오류 로그나 응답을 붙여 주세요. 토큰·쿠키·개인정보·내부 URL은 제거하거나 가려 주세요. / Add error logs or responses with tokens, cookies, personal data, and internal URLs redacted.
+    validations:
+      required: true
+
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: 확인 / Checklist
+      options:
+        - label: 첨부한 내용에 토큰·쿠키·개인정보·기밀이 없습니다. / The report contains no tokens, cookies, personal data, or secrets.
+          required: true
+        - label: 최신 `main` 기준으로 다시 확인했습니다. / I confirmed the bug on the latest `main`.
+          required: true

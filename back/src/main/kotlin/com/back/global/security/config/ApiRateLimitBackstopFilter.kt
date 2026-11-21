@@ -1,0 +1,201 @@
+package com.back.global.security.config
+
+import com.back.global.cache.application.port.output.RedisKeyValuePort
+import com.back.global.exception.application.ErrorCode
+import com.back.global.web.ErrorResponseSource
+import com.back.global.web.ErrorResponseWriter
+import com.back.global.web.application.ClientIpResolver
+import com.back.global.web.application.IpAddressNormalizer
+import io.micrometer.core.instrument.MeterRegistry
+import jakarta.servlet.FilterChain
+import jakarta.servlet.http.HttpServletRequest
+import jakarta.servlet.http.HttpServletResponse
+import org.springframework.beans.factory.ObjectProvider
+import org.springframework.beans.factory.annotation.Value
+import org.springframework.core.Ordered
+import org.springframework.core.annotation.Order
+import org.springframework.core.env.Environment
+import org.springframework.stereotype.Component
+import org.springframework.web.filter.OncePerRequestFilter
+import java.time.Duration
+import java.time.Instant
+
+@Component
+@Order(Ordered.HIGHEST_PRECEDENCE + 20)
+class ApiRateLimitBackstopFilter(
+    private val redisKeyValuePortProvider: ObjectProvider<RedisKeyValuePort>,
+    private val clientIpResolverProvider: ObjectProvider<ClientIpResolver>,
+    private val meterRegistryProvider: ObjectProvider<MeterRegistry>,
+    private val errorResponseWriter: ErrorResponseWriter,
+    private val environment: Environment,
+    private val publicApiRequestMatcher: PublicApiRequestMatcher,
+    @param:Value("\${custom.security.apiRateLimit.enabled:true}")
+    private val enabled: Boolean = true,
+    @param:Value("\${custom.security.apiRateLimit.requireRedisInProd:true}")
+    private val requireRedisInProd: Boolean = true,
+    @param:Value("\${custom.security.apiRateLimit.publicReadLimitPerMinute:120}")
+    private val publicReadLimitPerMinute: Int = 120,
+    @param:Value("\${custom.security.apiRateLimit.privateReadLimitPerMinute:120}")
+    private val privateReadLimitPerMinute: Int = 120,
+    @param:Value("\${custom.security.apiRateLimit.mutationLimitPerMinute:60}")
+    private val mutationLimitPerMinute: Int = 60,
+    @param:Value("\${custom.security.apiRateLimit.authLimitPerMinute:20}")
+    private val authLimitPerMinute: Int = 20,
+) : OncePerRequestFilter() {
+    init {
+        require(publicReadLimitPerMinute > 0) { "publicReadLimitPerMinute must be > 0" }
+        require(privateReadLimitPerMinute > 0) { "privateReadLimitPerMinute must be > 0" }
+        require(mutationLimitPerMinute > 0) { "mutationLimitPerMinute must be > 0" }
+        require(authLimitPerMinute > 0) { "authLimitPerMinute must be > 0" }
+    }
+
+    override fun shouldNotFilter(request: HttpServletRequest): Boolean {
+        request.removeAttribute(RESOLVED_BUCKET_ATTRIBUTE)
+        if (!enabled) return true
+        val path = requestPath(request)
+        if (path == "/actuator" || path.startsWith("/actuator/")) return true
+        val bucket = bucketFor(request.method, path) ?: return true
+        request.setAttribute(RESOLVED_BUCKET_ATTRIBUTE, bucket)
+        return false
+    }
+
+    override fun doFilterInternal(
+        request: HttpServletRequest,
+        response: HttpServletResponse,
+        filterChain: FilterChain,
+    ) {
+        val bucket = resolveRequestBucket(request)
+
+        val redisKeyValuePort = redisKeyValuePortProvider.getIfAvailable()
+        if (redisKeyValuePort == null || !redisKeyValuePort.isAvailable()) {
+            if (shouldFailClosedWithoutRedis()) {
+                writeUnavailable(request, response)
+                record(bucket.name, "redis-unavailable")
+                return
+            }
+            filterChain.doFilter(request, response)
+            return
+        }
+
+        val rawClientIp = (clientIpResolverProvider.getIfAvailable() ?: ClientIpResolver()).resolve(request)
+        val clientIpKey = IpAddressNormalizer.normalizeRateLimitKey(rawClientIp)
+        val key = redisKey(bucket.name, clientIpKey)
+        val count = redisKeyValuePort.incrementAndExpire(key, WINDOW)
+        if (count == null) {
+            if (shouldFailClosedWithoutRedis()) {
+                writeUnavailable(request, response)
+                record(bucket.name, "redis-unavailable")
+                return
+            }
+            filterChain.doFilter(request, response)
+            return
+        }
+
+        if (count > bucket.limit.toLong()) {
+            writeTooManyRequests(request, response)
+            record(bucket.name, "rejected")
+            meterRegistryProvider.getIfAvailable()?.counter("api_rate_limit_rejected_total", "bucket", bucket.name)?.increment()
+            return
+        }
+
+        record(bucket.name, "accepted")
+        filterChain.doFilter(request, response)
+    }
+
+    private fun bucketFor(
+        rawMethod: String,
+        path: String,
+    ): Bucket? {
+        val method = rawMethod.uppercase()
+        if (method == "OPTIONS") return null
+        if (isAuthPath(path)) {
+            return Bucket("auth", authLimitPerMinute)
+        }
+        if (method in SAFE_METHODS && publicApiRequestMatcher.isPublicReadSafe(method, path)) {
+            return Bucket("public-read", publicReadLimitPerMinute)
+        }
+        if (method in SAFE_METHODS && API_PATH_REGEX.matches(path)) {
+            return Bucket("private-read", privateReadLimitPerMinute)
+        }
+        if (method !in SAFE_METHODS && API_PATH_REGEX.matches(path)) {
+            return Bucket("mutation", mutationLimitPerMinute)
+        }
+        return null
+    }
+
+    private fun isAuthPath(path: String): Boolean = AUTH_PATHS.any { it.matches(path) }
+
+    private fun shouldFailClosedWithoutRedis(): Boolean = environment.matchesProfiles("prod") && requireRedisInProd
+
+    private fun requestPath(request: HttpServletRequest): String = RequestPathNormalizer.normalize(request)
+
+    private fun redisKey(
+        bucket: String,
+        clientIp: String,
+    ): String {
+        val minuteBucket = Instant.now().epochSecond / WINDOW.seconds
+        return "security:api-rate-limit:$bucket:${sanitizeKeyToken(clientIp)}:$minuteBucket"
+    }
+
+    private fun sanitizeKeyToken(raw: String): String = raw.replace(KEY_TOKEN_SANITIZE_REGEX, "_").take(96)
+
+    private fun writeTooManyRequests(
+        request: HttpServletRequest,
+        response: HttpServletResponse,
+    ) {
+        errorResponseWriter.write(
+            request = request,
+            response = response,
+            errorCode = ErrorCode.API_RATE_LIMITED,
+            source = ErrorResponseSource.FILTER,
+            retryAfterSeconds = WINDOW.seconds,
+        )
+    }
+
+    private fun writeUnavailable(
+        request: HttpServletRequest,
+        response: HttpServletResponse,
+    ) {
+        errorResponseWriter.write(
+            request = request,
+            response = response,
+            errorCode = ErrorCode.API_PROTECTION_NOT_READY,
+            source = ErrorResponseSource.FILTER,
+            retryAfterSeconds = 5,
+        )
+    }
+
+    private fun record(
+        bucket: String,
+        result: String,
+    ) {
+        meterRegistryProvider.getIfAvailable()?.counter("api_rate_limit_result_total", "bucket", bucket, "result", result)?.increment()
+    }
+
+    internal fun resolveRequestBucket(request: HttpServletRequest): Bucket {
+        val cached = request.getAttribute(RESOLVED_BUCKET_ATTRIBUTE) as? Bucket
+        if (cached != null) {
+            request.removeAttribute(RESOLVED_BUCKET_ATTRIBUTE)
+            return cached
+        }
+        return bucketFor(request.method, requestPath(request))
+            ?: error("ApiRateLimitBackstopFilter invoked without a rate-limit bucket.")
+    }
+
+    internal data class Bucket(
+        val name: String,
+        val limit: Int,
+    )
+
+    companion object {
+        private const val RESOLVED_BUCKET_ATTRIBUTE = "com.back.security.rateLimit.resolvedBucket"
+        private val WINDOW = Duration.ofMinutes(1)
+        private val SAFE_METHODS = setOf("GET", "HEAD")
+        private val API_PATH_REGEX = Regex("^/[^/]+/api/.*")
+        private val KEY_TOKEN_SANITIZE_REGEX = Regex("[^A-Za-z0-9:._-]")
+        private val AUTH_PATHS =
+            listOf(
+                Regex("^/member/api/v\\d+/auth/admin-email/(request|verify)/?$"),
+            )
+    }
+}

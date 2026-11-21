@@ -1,0 +1,49 @@
+name: Actions Storage Cleanup
+
+on:
+  pull_request:
+    types:
+      - closed
+  schedule:
+    - cron: "17 3 * * 0"
+  workflow_dispatch:
+
+permissions:
+  actions: write
+  contents: read
+
+jobs:
+  cleanup-pr-caches:
+    name: Delete closed PR caches
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Delete non-NVD caches for closed pull request
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          BRANCH: refs/pull/${{ github.event.pull_request.number }}/merge
+        run: |
+          set -euo pipefail
+          cache_ids="$(gh cache list --ref "$BRANCH" --limit 1000 --json id,key --jq '.[] | select(((.key // "") | startswith("owasp-nvd-")) | not) | .id')"
+          while IFS= read -r cache_id; do
+            [[ -n "${cache_id}" ]] || continue
+            gh cache delete "${cache_id}"
+          done <<< "${cache_ids}"
+
+  cleanup-weekly-caches:
+    name: Delete weekly repository caches
+    if: github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Delete non-NVD GitHub Actions caches
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          cache_ids="$(gh api --paginate "repos/${GH_REPO}/actions/caches?per_page=100" --jq '.actions_caches[]? | select(((.key // "") | startswith("owasp-nvd-")) | not) | .id')"
+          while IFS= read -r cache_id; do
+            [[ -n "${cache_id}" ]] || continue
+            gh cache delete "${cache_id}"
+          done <<< "${cache_ids}"

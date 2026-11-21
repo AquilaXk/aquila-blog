@@ -1,0 +1,240 @@
+#!/usr/bin/env bash
+
+# Materialize per-service env files from the host compose env (.env.prod).
+# Host .env.prod remains the single source for `docker compose --env-file` interpolation.
+# Containers must not mount the full .env.prod (blast-radius / HR-56).
+
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+SOURCE_ENV="${1:-${SCRIPT_DIR}/.env.prod}"
+BACK_OUT="${SCRIPT_DIR}/.env.back.prod"
+CADDY_OUT="${SCRIPT_DIR}/.env.caddy.prod"
+FRONT_OUT="${SCRIPT_DIR}/.env.front.prod"
+FRONT_METRICS_OUT="${SCRIPT_DIR}/.env.front.metrics.prod"
+WEB_METRICS_CREDENTIAL_ROOT="${SCRIPT_DIR}/.web-metrics-credentials"
+WEB_METRICS_CREDENTIAL_DIR="${WEB_METRICS_CREDENTIAL_ROOT}/runtime"
+WEB_METRICS_TOKEN_OUT="${WEB_METRICS_CREDENTIAL_DIR}/web-metrics-token"
+LEGACY_WEB_METRICS_TOKEN_OUT="${SCRIPT_DIR}/.web-metrics-token"
+WEB_METRICS_TOKEN_VALUE=""
+
+if [[ ! -f "${SOURCE_ENV}" ]]; then
+  echo "materialize_service_env: missing source env file=${SOURCE_ENV}" >&2
+  exit 1
+fi
+
+require_docker_compose_version() {
+  local version major minor patch
+
+  if ! version="$(docker compose version --short 2>/dev/null)" ||
+    ! [[ "${version}" =~ ^v?([0-9]+)\.([0-9]+)\.([0-9]+)([-+][0-9A-Za-z._-]+)?$ ]]; then
+    echo "materialize_service_env: Docker Compose 2.30.0 or newer is required" >&2
+    exit 1
+  fi
+
+  major="${BASH_REMATCH[1]}"
+  minor="${BASH_REMATCH[2]}"
+  patch="${BASH_REMATCH[3]}"
+  if (( 10#${major} < 2 || (10#${major} == 2 && 10#${minor} < 30) )); then
+    echo "materialize_service_env: Docker Compose 2.30.0 or newer is required" >&2
+    exit 1
+  fi
+}
+
+require_docker_compose_version
+
+is_caddy_key() {
+  case "$1" in
+    WEB_DOMAIN|COMPANY_DOMAIN|PRODUCT_DOMAIN|APEX_DOMAIN|\
+    MONITOR_DOMAIN|GRAFANA_DOMAIN|PROMETHEUS_DOMAIN|CADDY_EMAIL|\
+    PROMETHEUS_BASIC_AUTH_USER|PROMETHEUS_BASIC_AUTH_HASH|\
+    ADMIN_EMBED_ORIGINS|ADMIN_API_UPSTREAM|READ_API_UPSTREAM|WEB_UPSTREAM)
+      return 0
+      ;;
+    *)
+      return 1
+      ;;
+  esac
+}
+
+# Next.js server-side keys. These are read through process.env at request time
+# (front/src/libs/server/backend.ts, front/src/pages/api/**), so they are NOT inlined by the
+# build the way NEXT_PUBLIC_* is — without this file the front container starts, serves
+# public/robots.txt, reports healthy, and returns 500 on every SSR route.
+# NEXT_PUBLIC_* deliberately stays out: it is baked at image build time (#1540 owns the
+# build args), so shipping it here would be an env key that silently does nothing.
+# TOKEN_FOR_REVALIDATE is not listed here on purpose: it is derived below from the one
+# Platform-owned key that holds the same shared secret, so there is a single source of truth.
+is_front_key() {
+  case "$1" in
+    BACKEND_INTERNAL_URL|BACKEND_PROXY_*)
+      return 0
+      ;;
+    *)
+      return 1
+      ;;
+  esac
+}
+
+normalize_web_metrics_token() {
+  local line key value quote
+  while IFS= read -r line || [[ -n "${line}" ]]; do
+    line="${line%$'\r'}"
+    [[ -z "${line//[[:space:]]/}" || "${line}" =~ ^[[:space:]]*# ]] && continue
+    if [[ "${line}" =~ ^[[:space:]]*(export[[:space:]]+)?([A-Za-z_][A-Za-z0-9_]*)[[:space:]]*=[[:space:]]*(.*)$ ]]; then
+      key="${BASH_REMATCH[2]}"
+      [[ "${key}" == "WEB_METRICS_TOKEN" ]] || continue
+      value="${BASH_REMATCH[3]}"
+      value="${value#"${value%%[![:space:]]*}"}"
+      value="${value%"${value##*[![:space:]]}"}"
+      quote="${value:0:1}"
+      if [[ ( "${quote}" == '"' || "${quote}" == "'" ) && "${value: -1}" == "${quote}" ]]; then
+        if (( ${#value} <= 2 )); then
+          value=""
+        else
+          value="${value:1:${#value}-2}"
+        fi
+      fi
+      value="${value#"${value%%[![:space:]]*}"}"
+      value="${value%"${value##*[![:space:]]}"}"
+      WEB_METRICS_TOKEN_VALUE="${value}"
+    fi
+  done < "${SOURCE_ENV}"
+}
+
+write_web_metrics_output() {
+  local dest="$1"
+  local content="$2"
+  local mode="$3"
+  local tmp
+
+  tmp="$(mktemp "${dest}.XXXXXX")"
+  if ! printf '%s\n' "${content}" > "${tmp}" || ! chmod "${mode}" "${tmp}"; then
+    rm -f "${tmp}"
+    return 1
+  fi
+  if ! mv -f "${tmp}" "${dest}"; then
+    rm -f "${tmp}"
+    return 1
+  fi
+}
+
+remove_web_metrics_outputs() {
+  rm -f "${WEB_METRICS_TOKEN_OUT}" "${FRONT_METRICS_OUT}" "${LEGACY_WEB_METRICS_TOKEN_OUT}"
+}
+
+materialize_web_metrics_token() {
+  local value
+  normalize_web_metrics_token
+  value="${WEB_METRICS_TOKEN_VALUE}"
+  if [[ -z "${value}" || ${#value} -lt 32 ]]; then
+    remove_web_metrics_outputs
+    echo "materialize_service_env: WEB_METRICS_TOKEN is required and must be at least 32 characters" >&2
+    exit 1
+  fi
+
+  umask 077
+  if ! mkdir -p "${WEB_METRICS_CREDENTIAL_DIR}" ||
+    ! chmod 700 "${WEB_METRICS_CREDENTIAL_ROOT}" ||
+    ! chmod 755 "${WEB_METRICS_CREDENTIAL_DIR}" ||
+    ! write_web_metrics_output "${WEB_METRICS_TOKEN_OUT}" "${value}" 0444 ||
+    ! write_web_metrics_output "${FRONT_METRICS_OUT}" "WEB_METRICS_TOKEN=${value}" 0600; then
+    remove_web_metrics_outputs
+    echo "materialize_service_env: failed to write Web metrics credentials" >&2
+    exit 1
+  fi
+  if ! rm -f "${LEGACY_WEB_METRICS_TOKEN_OUT}"; then
+    remove_web_metrics_outputs
+    echo "materialize_service_env: failed to remove retired Web metrics credential" >&2
+    exit 1
+  fi
+}
+
+materialize_web_metrics_token
+
+is_back_key() {
+  local key="$1"
+  case "${key}" in
+    PROD___POSTGRES__PASSWORD|PROD___POSTGRES_EXPORTER__USERNAME|PROD___POSTGRES_EXPORTER__PASSWORD|\
+    CUSTOM_STORAGE_PREVIOUS_ACCESSKEY|CUSTOM_STORAGE_PREVIOUS_CREDENTIAL_VERSION|\
+    CUSTOM_STORAGE_ROTATION_STARTED_AT_EPOCH_SECONDS)
+      return 1
+      ;;
+    # BACKEND_PROXY_* is front-only (front/src/pages/api/backend/[...path].ts); `git grep
+    # BACKEND_PROXY -- back/` is empty. It used to land here, where nothing reads it.
+    PROD___SPRING__*|PROD___CUSTOM__*|CUSTOM__*|CUSTOM_*|SPRING__*|MANAGEMENT_*)
+      return 0
+      ;;
+    *)
+      return 1
+      ;;
+  esac
+}
+
+write_filtered_env() {
+  local dest="$1"
+  local mode="$2"
+  local tmp key
+  tmp="$(mktemp "${dest}.XXXXXX")"
+
+  {
+    printf '# Generated by materialize_service_env.sh from %s\n' "$(basename "${SOURCE_ENV}")"
+    printf '# Do not edit by hand; regenerate before compose up.\n'
+    while IFS= read -r line || [[ -n "${line}" ]]; do
+      if [[ -z "${line}" || "${line}" =~ ^[[:space:]]*# ]]; then
+        continue
+      fi
+      if [[ "${line}" != *=* ]]; then
+        continue
+      fi
+      key="${line%%=*}"
+      if [[ "${mode}" == "caddy" ]]; then
+        # Caddy's `{$VAR:default}` falls back to the default only when the variable is *unset*.
+        # A key that is present but empty renders an empty site address (`http://`), which caddy
+        # adapt turns into a route with no host matcher — a port-80 catch-all that answers every
+        # hostname the other vhosts do not claim. Emptying a line instead of deleting it would
+        # therefore silently redirect edge traffic, so empty values never reach the caddy env.
+        if is_caddy_key "${key}" && [[ -n "${line#*=}" ]]; then
+          printf '%s\n' "${line}"
+        fi
+      elif [[ "${mode}" == "back" ]]; then
+        if is_back_key "${key}"; then
+          printf '%s\n' "${line}"
+        fi
+      elif [[ "${mode}" == "front" ]]; then
+        if is_front_key "${key}"; then
+          printf '%s\n' "${line}"
+        fi
+      fi
+    done < "${SOURCE_ENV}"
+  } > "${tmp}"
+
+  install -m 600 "${tmp}" "${dest}"
+  rm -f "${tmp}"
+}
+
+write_filtered_env "${CADDY_OUT}" "caddy"
+write_filtered_env "${BACK_OUT}" "back"
+write_filtered_env "${FRONT_OUT}" "front"
+
+# front가 읽는 TOKEN_FOR_REVALIDATE와 backend가 보내는 CUSTOM__REVALIDATE__TOKEN은 같은 공유
+# 비밀이다(RevalidateService.kt:53이 x-revalidate-token 헤더로 보내고, revalidate.ts:18이 그 값과
+# 비교한다). 별도 키로 두면 두 값이 어긋나도 아무도 실패하지 않고 revalidate만 401이 된다.
+# BACKEND_PROXY_MAX_*는 Web 소유 키라 Platform env 계약에 넣지 않는다(#1453 경계). .env.prod에
+# 존재하면 위 front 필터가 전달하고, 없으면 앱 기본값이 쓰인다.
+append_front_derived_key() {
+  local key="$1"
+  local source_key="$2"
+  local value
+
+  value="$(awk -F= -v k="${source_key}" '$1 == k { print substr($0, index($0, "=") + 1); exit }' "${SOURCE_ENV}")"
+  if [[ -z "${value}" ]]; then
+    return 0
+  fi
+  printf '%s=%s\n' "${key}" "${value}" >> "${FRONT_OUT}"
+}
+
+append_front_derived_key "TOKEN_FOR_REVALIDATE" "CUSTOM__REVALIDATE__TOKEN"
+
+# Status must stay on stderr: compose wrappers capture stdout from `compose exec`.
+echo "materialize_service_env: wrote $(basename "${CADDY_OUT}"), $(basename "${BACK_OUT}") and $(basename "${FRONT_OUT}")" >&2

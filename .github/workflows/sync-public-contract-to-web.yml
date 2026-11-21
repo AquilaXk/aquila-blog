@@ -1,0 +1,256 @@
+name: Dispatch Platform public contract to Web
+
+"on":
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+    inputs:
+      source_ref:
+        description: Platform commit, branch, or pull request ref to validate
+        required: true
+        default: main
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: platform-public-contract-sync
+  cancel-in-progress: false
+
+env:
+  PLATFORM_REPOSITORY: AquilaXk/aquila-blog
+  WEB_REPOSITORY: AquilaXk/aquila-blog-web
+
+jobs:
+  dispatch:
+    name: Validate and dispatch Platform public contract identity
+    if: ${{ github.event_name == 'workflow_dispatch' || vars.REPO_SPLIT_SYNC_ENABLED == 'true' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - name: Resolve producer context
+        id: context
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          EVENT_SHA: ${{ github.sha }}
+          REQUESTED_SOURCE_REF: ${{ inputs.source_ref }}
+          SYNC_ENABLED: ${{ vars.REPO_SPLIT_SYNC_ENABLED }}
+        run: |
+          set -euo pipefail
+          if [[ "${EVENT_NAME}" == "workflow_dispatch" ]]; then
+            source_ref="${REQUESTED_SOURCE_REF}"
+            dispatch_enabled=false
+          else
+            source_ref="${EVENT_SHA}"
+            if [[ "${SYNC_ENABLED}" != "true" ]]; then
+              echo "automatic public-contract delivery requires REPO_SPLIT_SYNC_ENABLED=true" >&2
+              exit 1
+            fi
+            dispatch_enabled=true
+          fi
+          if [[ -z "${source_ref}" || "${source_ref}" == *$'\n'* || "${source_ref}" == *$'\r'* ]]; then
+            echo "source_ref must be one non-empty line" >&2
+            exit 1
+          fi
+          {
+            printf 'source_ref=%s\n' "${source_ref}"
+            printf 'dispatch_enabled=%s\n' "${dispatch_enabled}"
+          } >> "${GITHUB_OUTPUT}"
+
+      - name: Checkout immutable Platform source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ steps.context.outputs.source_ref }}
+          path: platform
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Resolve exact Platform source identity
+        id: source
+        env:
+          DISPATCH_ENABLED: ${{ steps.context.outputs.dispatch_enabled }}
+          EVENT_SHA: ${{ github.sha }}
+          SOURCE_REF: ${{ steps.context.outputs.source_ref }}
+        run: |
+          set -euo pipefail
+          source_commit="$(git -C platform rev-parse HEAD)"
+          if [[ ! "${source_commit}" =~ ^[a-f0-9]{40}$ ]]; then
+            echo "resolved Platform source is not a full lowercase commit SHA" >&2
+            exit 1
+          fi
+          if [[ "${DISPATCH_ENABLED}" == "true" && "${source_commit}" != "${EVENT_SHA}" ]]; then
+            echo "automatic public-contract delivery source does not match the push commit" >&2
+            exit 1
+          fi
+          {
+            printf 'source_commit=%s\n' "${source_commit}"
+            printf 'source_ref=%s\n' "${SOURCE_REF}"
+          } >> "${GITHUB_OUTPUT}"
+
+      - name: Set up Node.js 20
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: "20"
+
+      - name: Verify canonical public contract bytes
+        id: contract
+        working-directory: platform
+        run: |
+          set -euo pipefail
+          node - <<'NODE'
+          const crypto = require("node:crypto")
+          const fs = require("node:fs")
+          const directory = "contracts/public-api"
+          const bytes = {
+            manifest: fs.readFileSync(`${directory}/manifest.json`),
+            openapi: fs.readFileSync(`${directory}/openapi.json`),
+            errorCodes: fs.readFileSync(`${directory}/error-codes.json`),
+            summaryFixtures: fs.readFileSync(`${directory}/summary-fixtures.json`),
+          }
+          const manifest = JSON.parse(bytes.manifest)
+          const openapi = JSON.parse(bytes.openapi)
+          const errorCodes = JSON.parse(bytes.errorCodes)
+          const summaryFixtures = JSON.parse(bytes.summaryFixtures)
+          const hash = (value) => crypto.createHash("sha256").update(value).digest("hex")
+          const exactKeys = (value, expected) => Object.keys(value).sort().join("\n") === [...expected].sort().join("\n")
+          if (!manifest || typeof manifest !== "object" || Array.isArray(manifest) || !exactKeys(manifest, ["version", "contract", "artifacts"])) throw new Error("manifest shape is invalid")
+          if (manifest.version !== 1 || manifest.contract !== "aquila-public-api" || !manifest.artifacts || !exactKeys(manifest.artifacts, ["openapi", "errorCodes", "summaryFixtures"])) throw new Error("manifest identity is invalid")
+          if (!exactKeys(manifest.artifacts.openapi, ["path", "sha256"]) || manifest.artifacts.openapi.path !== "openapi.json" || manifest.artifacts.openapi.sha256 !== hash(bytes.openapi)) throw new Error("OpenAPI bytes do not match the manifest")
+          if (!exactKeys(manifest.artifacts.errorCodes, ["path", "sha256"]) || manifest.artifacts.errorCodes.path !== "error-codes.json" || manifest.artifacts.errorCodes.sha256 !== hash(bytes.errorCodes)) throw new Error("error-code bytes do not match the manifest")
+          if (!exactKeys(manifest.artifacts.summaryFixtures, ["path", "sha256"]) || manifest.artifacts.summaryFixtures.path !== "summary-fixtures.json" || manifest.artifacts.summaryFixtures.sha256 !== hash(bytes.summaryFixtures)) throw new Error("summary fixture bytes do not match the manifest")
+          if (!openapi || typeof openapi !== "object" || Array.isArray(openapi) || !Array.isArray(errorCodes) || !summaryFixtures || typeof summaryFixtures !== "object" || Array.isArray(summaryFixtures) || summaryFixtures.version !== 2 || summaryFixtures.contract !== "aquila-canonical-summary-fixtures" || !Array.isArray(summaryFixtures.fixtures)) throw new Error("public contract JSON is invalid")
+          fs.appendFileSync(process.env.GITHUB_OUTPUT, [
+            `manifest_sha256=${hash(bytes.manifest)}`,
+            `openapi_sha256=${hash(bytes.openapi)}`,
+            `error_codes_sha256=${hash(bytes.errorCodes)}`,
+          ].join("\n") + "\n")
+          NODE
+
+      - name: Complete manual validation without dispatch
+        if: ${{ steps.context.outputs.dispatch_enabled != 'true' }}
+        run: echo "::notice::manual public-contract validation completed without a Web token or repository dispatch"
+
+      - name: Admit current Platform main for delivery
+        id: freshness
+        if: ${{ steps.context.outputs.dispatch_enabled == 'true' }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SOURCE_COMMIT: ${{ steps.source.outputs.source_commit }}
+          SOURCE_REPOSITORY: ${{ env.PLATFORM_REPOSITORY }}
+        run: |
+          set -euo pipefail
+          current_main="$(gh api "repos/${SOURCE_REPOSITORY}/commits/main" --jq '.sha')" || {
+            echo "Platform main lookup failed before public-contract delivery" >&2
+            exit 1
+          }
+          if [[ ! "${current_main}" =~ ^[a-f0-9]{40}$ ]]; then
+            echo "Platform main lookup returned an invalid commit" >&2
+            exit 1
+          fi
+          if [[ "${SOURCE_COMMIT}" == "${current_main}" ]]; then
+            should_dispatch=true
+            reason=exact-current-platform-main
+          else
+            should_dispatch=false
+            reason=stale-platform-source
+          fi
+          printf 'should_dispatch=%s\n' "${should_dispatch}" >> "${GITHUB_OUTPUT}"
+          {
+            echo "## Platform public-contract freshness"
+            echo "- result: ${should_dispatch}"
+            echo "- reason: ${reason}"
+            echo "- source: ${SOURCE_REPOSITORY}@${SOURCE_COMMIT}"
+          } >> "${GITHUB_STEP_SUMMARY}"
+
+      - name: Create Web dispatch token
+        id: web-token
+        if: ${{ steps.freshness.outputs.should_dispatch == 'true' }}
+        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
+        with:
+          client-id: ${{ vars.REPO_SYNC_APP_CLIENT_ID }}
+          private-key: ${{ secrets.REPO_SYNC_APP_PRIVATE_KEY }}
+          owner: AquilaXk
+          repositories: aquila-blog-web
+          permission-contents: write
+
+      - name: Prepare exact public-contract delivery
+        id: delivery
+        if: ${{ steps.freshness.outputs.should_dispatch == 'true' }}
+        env:
+          GH_TOKEN: ${{ steps.web-token.outputs.token }}
+          SCHEMA_VERSION: "1"
+          SOURCE_REPOSITORY: ${{ env.PLATFORM_REPOSITORY }}
+          SOURCE_COMMIT: ${{ steps.source.outputs.source_commit }}
+          MANIFEST_SHA256: ${{ steps.contract.outputs.manifest_sha256 }}
+          OPENAPI_SHA256: ${{ steps.contract.outputs.openapi_sha256 }}
+          ERROR_CODES_SHA256: ${{ steps.contract.outputs.error_codes_sha256 }}
+          TARGET_REPOSITORY: ${{ env.WEB_REPOSITORY }}
+        run: |
+          set -euo pipefail
+          [[ "${SCHEMA_VERSION}" == "1" ]] || exit 1
+          [[ "${SOURCE_REPOSITORY}" == "AquilaXk/aquila-blog" ]] || exit 1
+          [[ "${SOURCE_COMMIT}" =~ ^[a-f0-9]{40}$ ]] || exit 1
+          [[ "${MANIFEST_SHA256}" =~ ^[a-f0-9]{64}$ ]] || exit 1
+          [[ "${OPENAPI_SHA256}" =~ ^[a-f0-9]{64}$ ]] || exit 1
+          [[ "${ERROR_CODES_SHA256}" =~ ^[a-f0-9]{64}$ ]] || exit 1
+          [[ "${TARGET_REPOSITORY}" == "AquilaXk/aquila-blog-web" ]] || exit 1
+          target_commit="$(gh api "repos/${TARGET_REPOSITORY}/commits/main" --jq '.sha')" || {
+            echo "Web main lookup failed before public-contract delivery" >&2
+            exit 1
+          }
+          if [[ ! "${target_commit}" =~ ^[a-f0-9]{40}$ ]]; then
+            echo "Web main lookup returned an invalid commit" >&2
+            exit 1
+          fi
+          delivery_id="$(TARGET_COMMIT="${target_commit}" node - <<'NODE'
+          const crypto = require("node:crypto")
+          const values = ["SCHEMA_VERSION", "SOURCE_REPOSITORY", "SOURCE_COMMIT", "MANIFEST_SHA256", "OPENAPI_SHA256", "ERROR_CODES_SHA256", "TARGET_REPOSITORY", "TARGET_COMMIT"].map((key) => process.env[key])
+          process.stdout.write(crypto.createHash("sha256").update(values.join("\n") + "\n").digest("hex"))
+          NODE
+          )"
+          if [[ ! "${delivery_id}" =~ ^[a-f0-9]{64}$ ]]; then
+            echo "public-contract delivery ID calculation failed" >&2
+            exit 1
+          fi
+          {
+            printf 'target_commit=%s\n' "${target_commit}"
+            printf 'delivery_id=%s\n' "${delivery_id}"
+          } >> "${GITHUB_OUTPUT}"
+      - name: Dispatch exact public-contract identity to Web
+        if: ${{ steps.freshness.outputs.should_dispatch == 'true' }}
+        env:
+          GH_TOKEN: ${{ steps.web-token.outputs.token }}
+          SCHEMA_VERSION: "1"
+          SOURCE_REPOSITORY: ${{ env.PLATFORM_REPOSITORY }}
+          SOURCE_COMMIT: ${{ steps.source.outputs.source_commit }}
+          MANIFEST_SHA256: ${{ steps.contract.outputs.manifest_sha256 }}
+          OPENAPI_SHA256: ${{ steps.contract.outputs.openapi_sha256 }}
+          ERROR_CODES_SHA256: ${{ steps.contract.outputs.error_codes_sha256 }}
+          TARGET_REPOSITORY: ${{ env.WEB_REPOSITORY }}
+          TARGET_COMMIT: ${{ steps.delivery.outputs.target_commit }}
+          DELIVERY_ID: ${{ steps.delivery.outputs.delivery_id }}
+        run: |
+          set -euo pipefail
+          gh api --method POST "repos/${TARGET_REPOSITORY}/dispatches" \
+            -f event_type="platform_public_contract_ready" \
+            -f "client_payload[schema_version]=${SCHEMA_VERSION}" \
+            -f "client_payload[source_repository]=${SOURCE_REPOSITORY}" \
+            -f "client_payload[source_commit]=${SOURCE_COMMIT}" \
+            -f "client_payload[manifest_sha256]=${MANIFEST_SHA256}" \
+            -f "client_payload[openapi_sha256]=${OPENAPI_SHA256}" \
+            -f "client_payload[error_codes_sha256]=${ERROR_CODES_SHA256}" \
+            -f "client_payload[target_repository]=${TARGET_REPOSITORY}" \
+            -f "client_payload[target_commit]=${TARGET_COMMIT}" \
+            -f "client_payload[delivery_id]=${DELIVERY_ID}"
+          {
+            echo "## Platform public-contract delivery"
+            echo "- status: dispatched"
+            echo "- source: ${SOURCE_REPOSITORY}@${SOURCE_COMMIT}"
+            echo "- target: ${TARGET_REPOSITORY}@${TARGET_COMMIT}"
+            echo "- delivery ID: ${DELIVERY_ID}"
+          } >> "${GITHUB_STEP_SUMMARY}"

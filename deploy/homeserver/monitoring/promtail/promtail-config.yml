@@ -1,0 +1,45 @@
+# 참조 구현: grafana/loki (Apache-2.0) — Promtail file_sd_configs 직접 로그 파일 테일링
+server:
+  http_listen_port: 9080
+  grpc_listen_port: 0
+
+positions:
+  filename: /var/lib/promtail/positions.yaml
+  sync_period: 30s
+
+clients:
+  - url: http://loki:3100/loki/api/v1/push
+
+scrape_configs:
+  - job_name: docker-containers
+    file_sd_configs:
+      - files:
+          - /promtail-sd/docker-containers.json
+        refresh_interval: 30s
+    relabel_configs:
+      - source_labels: [__meta_docker_container_label_promtail]
+        regex: ignore
+        action: drop
+      - source_labels: [__meta_docker_container_label_com_docker_compose_project]
+        regex: blog_home
+        action: keep
+      - target_label: job
+        replacement: docker-containers
+      - target_label: env
+        replacement: production
+      - target_label: source
+        replacement: loki
+      - source_labels: [__meta_docker_container_name]
+        regex: '/(.*)'
+        target_label: container
+      - source_labels: [__meta_docker_container_label_com_docker_compose_service]
+        target_label: service
+      - source_labels: [__meta_docker_container_label_com_docker_compose_project]
+        target_label: compose_project
+      - source_labels: [__meta_docker_container_id]
+        target_label: __path__
+        replacement: /var/lib/docker/containers/$1/$1-json.log
+    pipeline_stages:
+      - docker: {}
+      - drop:
+          older_than: 167h

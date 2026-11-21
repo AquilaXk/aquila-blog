@@ -1,0 +1,29 @@
+package com.back.boundedContexts.member.dto
+
+import com.back.boundedContexts.member.domain.shared.Member
+import com.back.global.security.domain.SecurityUser
+import com.fasterxml.jackson.annotation.JsonProperty
+import io.swagger.v3.oas.annotations.media.Schema
+
+data class AuthSessionMemberDto(
+    val id: Long,
+    @get:JsonProperty("isAdmin")
+    @get:Schema(name = "isAdmin", requiredMode = Schema.RequiredMode.REQUIRED)
+    val isAdmin: Boolean,
+    val username: String,
+    val nickname: String,
+) {
+    constructor(securityUser: SecurityUser) : this(
+        id = securityUser.id,
+        isAdmin = securityUser.authorities.any { it.authority == "ROLE_ADMIN" },
+        username = securityUser.nickname,
+        nickname = securityUser.nickname,
+    )
+
+    constructor(member: Member) : this(
+        id = member.id,
+        isAdmin = member.isAdmin,
+        username = member.name,
+        nickname = member.nickname,
+    )
+}

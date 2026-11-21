@@ -1,0 +1,215 @@
+package com.back.boundedContexts.post.model
+
+import com.back.boundedContexts.member.domain.shared.Member
+import com.back.boundedContexts.post.domain.postMixin.PostHasHit
+import com.back.boundedContexts.post.domain.postMixin.PostHasLikes
+import com.back.boundedContexts.post.domain.postMixin.PostHasPolicy
+import com.back.global.jpa.domain.AfterDDL
+import com.back.global.jpa.domain.BaseTime
+import com.back.global.security.application.ContentHtmlTrustState
+import jakarta.persistence.*
+import jakarta.persistence.GenerationType.SEQUENCE
+import org.hibernate.annotations.DynamicUpdate
+import org.hibernate.annotations.SQLRestriction
+import java.time.Instant
+
+/**
+ * Post는 비즈니스 상태와 규칙을 캡슐화하는 도메인 모델입니다.
+ * 도메인 불변조건을 지키며 상태 변경을 메서드 단위로 통제합니다.
+ *
+ * 참조 구현: TryGhost/Ghost (MIT) & payloadcms/payload (MIT) — Unlisted filter index optimization
+ */
+@Entity
+@DynamicUpdate
+@SQLRestriction("deleted_at IS NULL")
+@AfterDDL(
+    """
+    CREATE INDEX IF NOT EXISTS post_idx_listed_created_at_desc
+    ON post (listed, created_at DESC)
+    """,
+)
+@AfterDDL(
+    """
+    CREATE INDEX IF NOT EXISTS post_idx_published_listed_created_at_desc
+    ON post (published, listed, created_at DESC)
+    """,
+)
+@AfterDDL(
+    """
+    CREATE INDEX IF NOT EXISTS post_idx_listed_modified_at_desc
+    ON post (listed, modified_at DESC)
+    """,
+)
+@AfterDDL(
+    """
+    CREATE INDEX IF NOT EXISTS post_idx_author_created_at_desc
+    ON post (author_id, created_at DESC)
+    """,
+)
+@AfterDDL(
+    """
+    CREATE INDEX IF NOT EXISTS post_idx_author_modified_at_desc
+    ON post (author_id, modified_at DESC)
+    """,
+)
+@AfterDDL(
+    """
+    CREATE INDEX IF NOT EXISTS post_idx_deleted_at_desc
+    ON post (deleted_at DESC, id DESC)
+    WHERE deleted_at IS NOT NULL
+    """,
+)
+@AfterDDL(
+    """
+    CREATE INDEX IF NOT EXISTS idx_post_title_content_pgroonga
+    ON post USING pgroonga ((ARRAY["title"::text, "content"::text])
+    pgroonga_text_array_full_text_search_ops_v2) WITH (tokenizer = 'TokenBigram')
+    """,
+)
+@AfterDDL(
+    """
+    CREATE INDEX IF NOT EXISTS idx_post_published_is_temp_draft
+    ON post (published, is_temp_draft)
+    """,
+)
+@AfterDDL(
+    """
+    CREATE INDEX IF NOT EXISTS post_idx_active_hit_count_id_desc
+    ON post (hit_count DESC, id DESC)
+    WHERE deleted_at IS NULL
+    """,
+)
+@AfterDDL(
+    """
+    CREATE INDEX IF NOT EXISTS post_idx_active_likes_count_id_desc
+    ON post (likes_count DESC, id DESC)
+    WHERE deleted_at IS NULL
+    """,
+)
+@AfterDDL(
+    """
+    CREATE INDEX IF NOT EXISTS post_idx_active_unlisted_modified_id_desc
+    ON post (modified_at DESC, id DESC)
+    WHERE deleted_at IS NULL AND published = true AND listed = false
+    """,
+)
+class Post(
+    @field:Id
+    @field:SequenceGenerator(name = "post_seq_gen", sequenceName = "post_seq", allocationSize = 50)
+    @field:GeneratedValue(strategy = SEQUENCE, generator = "post_seq_gen")
+    override val id: Long = 0,
+    @field:ManyToOne(fetch = FetchType.LAZY)
+    @field:JoinColumn(nullable = false)
+    val author: Member,
+    @field:Column(columnDefinition = "TEXT", nullable = false)
+    var title: String,
+    @field:Basic(fetch = FetchType.LAZY)
+    @field:Column(columnDefinition = "TEXT", nullable = false)
+    var content: String,
+    @field:Version
+    var version: Long? = null,
+    @field:Column(nullable = false)
+    var published: Boolean = false,
+    @field:Column(nullable = false)
+    var listed: Boolean = false,
+    @field:Basic(fetch = FetchType.LAZY)
+    @field:Column(name = "content_html", columnDefinition = "TEXT")
+    var contentHtml: String? = null,
+    @field:Column(name = "content_html_hash", length = 64)
+    var contentHtmlHash: String? = null,
+    @field:Column(name = "content_html_sanitizer_policy_version", length = 64)
+    var contentHtmlSanitizerPolicyVersion: String? = null,
+    @field:Enumerated(EnumType.STRING)
+    @field:Column(name = "content_html_trust_state", length = 32)
+    var contentHtmlTrustState: ContentHtmlTrustState? = ContentHtmlTrustState.UNKNOWN,
+    @field:Column(name = "summary_text", columnDefinition = "TEXT")
+    var summaryText: String? = null,
+    @field:Enumerated(EnumType.STRING)
+    @field:Column(name = "summary_source", nullable = false, length = 32)
+    var summarySource: PostSummarySource = PostSummarySource.NONE,
+    @field:Column(name = "summary_content_hash", length = 64)
+    var summaryContentHash: String? = null,
+    @field:Column(name = "summary_algorithm_version", length = 32)
+    var summaryAlgorithmVersion: String? = null,
+    @field:Column(name = "summary_generated_at")
+    var summaryGeneratedAt: Instant? = null,
+    @field:Column(length = 1000)
+    var thumbnail: String? = null,
+    @field:Column(name = "is_temp_draft", nullable = false)
+    var isTempDraft: Boolean = false,
+    @field:Column(name = "likes_count", nullable = false)
+    @org.hibernate.annotations.OptimisticLock(excluded = true)
+    override var likesCount: Int = 0,
+    @field:Column(name = "hit_count", nullable = false)
+    @org.hibernate.annotations.OptimisticLock(excluded = true)
+    override var hitCount: Int = 0,
+) : BaseTime(id),
+    PostHasHit,
+    PostHasLikes,
+    PostHasPolicy {
+    @field:Column
+    var deletedAt: Instant? = null
+
+    fun softDelete() {
+        deletedAt = Instant.now()
+    }
+
+    @field:OneToOne(fetch = FetchType.LAZY)
+    @org.hibernate.annotations.OptimisticLock(excluded = true)
+    var likesCountAttr: PostAttr? = null
+        set(value) {
+            field = value
+            if (value?.intValue != null) {
+                likesCount = value.intValue!!
+            }
+        }
+
+    @field:OneToOne(fetch = FetchType.LAZY)
+    @org.hibernate.annotations.OptimisticLock(excluded = true)
+    var hitCountAttr: PostAttr? = null
+        set(value) {
+            field = value
+            if (value?.intValue != null) {
+                hitCount = value.intValue!!
+            }
+        }
+
+    override val post: Post get() = this
+
+    fun modify(
+        title: String,
+        content: String,
+        published: Boolean? = null,
+        listed: Boolean? = null,
+        contentHtml: String? = this.contentHtml,
+        contentHtmlHash: String? = this.contentHtmlHash,
+        contentHtmlSanitizerPolicyVersion: String? = this.contentHtmlSanitizerPolicyVersion,
+        contentHtmlTrustState: ContentHtmlTrustState? = this.contentHtmlTrustState,
+        thumbnail: String? = this.thumbnail,
+    ) {
+        this.title = title
+        this.content = content
+        this.contentHtml = contentHtml
+        this.contentHtmlHash = contentHtmlHash
+        this.contentHtmlSanitizerPolicyVersion = contentHtmlSanitizerPolicyVersion
+        this.contentHtmlTrustState = contentHtmlTrustState
+        this.thumbnail = thumbnail
+        published?.let { this.published = it }
+        listed?.let { this.listed = it }
+        if (!this.published) this.listed = false
+    }
+
+    fun updateCanonicalSummary(
+        text: String,
+        source: PostSummarySource,
+        contentHash: String,
+        algorithmVersion: String,
+        generatedAt: Instant?,
+    ) {
+        summaryText = text.takeIf { it.isNotBlank() }
+        summarySource = source
+        summaryContentHash = contentHash
+        summaryAlgorithmVersion = algorithmVersion
+        summaryGeneratedAt = generatedAt
+    }
+}

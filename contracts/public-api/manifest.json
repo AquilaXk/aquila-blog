@@ -1,0 +1,18 @@
+{
+  "version": 1,
+  "contract": "aquila-public-api",
+  "artifacts": {
+    "openapi": {
+      "path": "openapi.json",
+      "sha256": "d257f42f62518140e3fa2376c38681923eedd963ab95b43d0fe77a764f4a2533"
+    },
+    "errorCodes": {
+      "path": "error-codes.json",
+      "sha256": "1e1446186d61631a89219d00914c1059dff16dad4d0ae0e8e9e7fe815ebe17c3"
+    },
+    "summaryFixtures": {
+      "path": "summary-fixtures.json",
+      "sha256": "0052d4535843095e25dd891a4aa6f0c2169bbb710b31cb53f674d4b882e50f3f"
+    }
+  }
+}

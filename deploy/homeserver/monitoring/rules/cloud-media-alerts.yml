@@ -1,0 +1,137 @@
+groups:
+  - name: aquila-cloud-media
+    rules:
+      - alert: AquilaCloudUploadFailureRateWarning
+        expr: |
+          (
+            sum(increase(cloud_upload_session_transitions_total{job="back",service="aquila-back",to="FAILED"}[15m]))
+            /
+            clamp_min(
+              sum(increase(cloud_upload_session_transitions_total{job="back",service="aquila-back",from="INITIATING",to="IN_PROGRESS"}[15m])),
+              1
+            )
+          ) > 0.05
+          and
+          sum(increase(cloud_upload_session_transitions_total{job="back",service="aquila-back",from="INITIATING",to="IN_PROGRESS"}[15m])) >= 5
+        for: 15m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Cloud upload failure rate is elevated"
+          description: "FAILED / created (INITIATING→IN_PROGRESS) > 5% for 15m. Check multipart errors and MinIO health."
+
+      - alert: AquilaCloudUploadFailureRateCritical
+        expr: |
+          (
+            sum(increase(cloud_upload_session_transitions_total{job="back",service="aquila-back",to="FAILED"}[15m]))
+            /
+            clamp_min(
+              sum(increase(cloud_upload_session_transitions_total{job="back",service="aquila-back",from="INITIATING",to="IN_PROGRESS"}[15m])),
+              1
+            )
+          ) > 0.20
+          and
+          sum(increase(cloud_upload_session_transitions_total{job="back",service="aquila-back",from="INITIATING",to="IN_PROGRESS"}[15m])) >= 5
+        for: 15m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Cloud upload failure rate is critical"
+          description: "FAILED / created > 20% for 15m. Investigate storage/multipart path immediately."
+
+      - alert: AquilaCloudUploadSessionStuck
+        expr: max(cloud_upload_session_stuck{job="back",service="aquila-back"}) > 0
+        for: 30m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Stale intermediate cloud upload sessions detected"
+          description: "cloud_upload_session_stuck={{ $value }} for 30m. Verify CloudVideoUploadSessionCleanupScheduledJob recovery."
+
+      - alert: AquilaCloudPlayback5xxHigh
+        expr: |
+          (
+            sum(rate(cloud_playback_requests_total{job="back",service="aquila-back",status_class="5xx"}[10m]))
+            /
+            clamp_min(sum(rate(cloud_playback_requests_total{job="back",service="aquila-back"}[10m])), 0.01)
+          ) > 0.02
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Cloud playback 5xx ratio is high"
+          description: "Playback 5xx ratio > 2% for 10m. Check MinIO GET/HEAD and token resolution."
+
+      - alert: AquilaCloudTempDiskLowWarning
+        expr: |
+          (
+            cloud_disk_temp_avail_bytes{job="back",service="aquila-back"}
+            /
+            clamp_min(cloud_disk_temp_total_bytes{job="back",service="aquila-back"}, 1)
+          ) < 0.15
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Backend temp disk free space is low"
+          description: "java.io.tmpdir free ratio < 15% for 10m. Large upload part buffering may fail."
+
+      - alert: AquilaCloudTempDiskLowCritical
+        expr: |
+          (
+            cloud_disk_temp_avail_bytes{job="back",service="aquila-back"}
+            /
+            clamp_min(cloud_disk_temp_total_bytes{job="back",service="aquila-back"}, 1)
+          ) < 0.05
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Backend temp disk free space is critically low"
+          description: "java.io.tmpdir free ratio < 5% for 5m. Upload part buffering can fail soon."
+
+      - alert: AquilaCloudMinioDiskLowWarning
+        expr: |
+          (
+            aquila_host_filesystem_avail_bytes{job="docker_runtime_probe",mount="minio"}
+            /
+            clamp_min(aquila_host_filesystem_size_bytes{job="docker_runtime_probe",mount="minio"}, 1)
+          ) < 0.15
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "MinIO volume free space is low"
+          description: "MinIO host filesystem free ratio < 15% for 10m. Expand AQUILA_EXTERNAL_STORAGE_ROOT disk."
+
+      - alert: AquilaCloudMinioDiskLowCritical
+        expr: |
+          (
+            aquila_host_filesystem_avail_bytes{job="docker_runtime_probe",mount="minio"}
+            /
+            clamp_min(aquila_host_filesystem_size_bytes{job="docker_runtime_probe",mount="minio"}, 1)
+          ) < 0.05
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: "MinIO volume free space is critically low"
+          description: "MinIO host filesystem free ratio < 5% for 5m. Object writes may fail."
+
+      - alert: AquilaCloudReconcileOrphansDetected
+        expr: max(cloud_reconcile_orphans{job="back",service="aquila-back"}) > 0
+        for: 15m
+        labels:
+          severity: info
+        annotations:
+          summary: "Cloud reconcile orphans detected"
+          description: "cloud_reconcile_orphans={{ $value }} for 15m. Review diagnose/repair path before enabling repair."
+
+      - alert: AquilaCloudReconcileOrphansSpike
+        expr: max(cloud_reconcile_orphans{job="back",service="aquila-back"}) > 25
+        for: 15m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Cloud reconcile orphan count spiked"
+          description: "orphan count > 25 for 15m. Check prefix isolation, incomplete uploads, and repair safety threshold."

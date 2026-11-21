@@ -1,0 +1,422 @@
+// 참조 구현: grafana/loki (Apache-2.0) — Promtail file_sd_configs 직접 로그 파일 테일링
+import fs from "node:fs"
+import http from "node:http"
+import path from "node:path"
+import { realpathSync } from "node:fs"
+import { pathToFileURL } from "node:url"
+
+const args = process.argv.slice(2)
+const optionValue = (name, fallback) => {
+  const index = args.indexOf(name)
+  if (index === -1 || index + 1 >= args.length) return fallback
+  return args[index + 1]
+}
+
+const servePort = Number(optionValue("--serve-port", "9920"))
+const composeProject = optionValue("--project", "blog_home")
+const services = optionValue(
+  "--services",
+  "cloudflared,back_blue,back_green,back_read,back_admin,back_worker,db_1,redis_1,minio_1",
+)
+  .split(",")
+  .map((value) => value.trim())
+  .filter(Boolean)
+const diskPaths = optionValue("--disk-paths", "minio=/host-storage/minio")
+  .split(",")
+  .map((value) => value.trim())
+  .filter(Boolean)
+  .map((value) => {
+    const separator = value.indexOf("=")
+    if (separator <= 0) return null
+    return {
+      mount: value.slice(0, separator),
+      path: value.slice(separator + 1),
+    }
+  })
+  .filter(Boolean)
+
+const dockerSocketPath = optionValue("--docker-socket", "/var/run/docker.sock")
+const dockerUrl = optionValue("--docker-url", "")
+const promtailTargetsPath = optionValue("--promtail-targets-path", "")
+const promtailRefreshMs = Math.max(5_000, Number(optionValue("--promtail-refresh-ms", "30000")) || 30_000)
+
+const SAFE_CONTAINER_ID_PATTERN = /^[a-fA-F0-9]{12,64}$/
+const MAX_PROMTAIL_CONTAINERS = 512
+const promtailTargetsState = { lastSerialized: null }
+let promtailTempSequence = 0
+
+const resolveDockerEndpointOptions = ({
+  dockerUrl: rawUrl = dockerUrl,
+  dockerSocketPath: rawSocketPath = dockerSocketPath,
+} = {}) => {
+  const candidate = String(rawUrl || "").trim() || ( /^https?:\/\//i.test(String(rawSocketPath || "").trim()) ? String(rawSocketPath).trim() : "" )
+  if (candidate) {
+    const parsed = new URL(candidate)
+    return {
+      protocol: parsed.protocol,
+      hostname: parsed.hostname,
+      port: parsed.port ? Number(parsed.port) : parsed.protocol === "https:" ? 443 : 2375,
+      basePath: parsed.pathname && parsed.pathname !== "/" ? parsed.pathname.replace(/\/+$/, "") : "",
+    }
+  }
+  return {
+    socketPath: String(rawSocketPath || "/var/run/docker.sock"),
+  }
+}
+
+const dockerEndpoint = resolveDockerEndpointOptions()
+
+// Spring Boot's readiness group. Every backend container answers here, so it stays the default and
+// the pre-#1541 `<component>=<host>:<port>` argument form keeps working unchanged.
+const DEFAULT_READINESS_PATH = "/actuator/health/readiness"
+
+// `<component>=<host>:<port>` or `<component>=<host>:<port><path>`.
+//
+// The front tier has no `/actuator/*` surface, so probing it without a per-target path would report
+// every front container as never-ready (404) - a permanently red gauge that operators learn to
+// ignore. The path is read from the first `/` after the address, which keeps `target` (the metric
+// label) at `host:port` so existing series and the `{component="api"}` alert are untouched.
+const parseReadinessTargets = (raw) =>
+  String(raw ?? "")
+    .split(",")
+    .map((value) => value.trim())
+    .filter(Boolean)
+    .map((value) => {
+      const separator = value.indexOf("=")
+      const component = separator > 0 ? value.slice(0, separator) : "unknown"
+      const address = separator > 0 ? value.slice(separator + 1) : value
+      const pathStart = address.indexOf("/")
+      const target = pathStart === -1 ? address : address.slice(0, pathStart)
+      const path = pathStart === -1 ? DEFAULT_READINESS_PATH : address.slice(pathStart)
+      return { component, target: target || value, path }
+    })
+
+const readinessTargets = parseReadinessTargets(
+  optionValue(
+    "--readiness-targets",
+    "api=back-blue:8080,api=back-green:8080,read=back-read:8080,admin=back-admin:8080,worker=back_worker:8080",
+  ),
+)
+
+const escapeLabel = (value) => value.replace(/\\/g, "\\\\").replace(/"/g, '\\"').replace(/\n/g, "\\n")
+
+const metricLine = (name, labels, value) => {
+  const labelText = Object.entries(labels)
+    .map(([key, labelValue]) => `${key}="${escapeLabel(String(labelValue))}"`)
+    .join(",")
+  return `${name}{${labelText}} ${Number.isFinite(value) ? value : 0}`
+}
+
+const matchingContainerForService = (containers, service) =>
+  containers
+    .filter((candidate) => {
+      const labels = candidate.Labels || {}
+      return labels["com.docker.compose.project"] === composeProject && labels["com.docker.compose.service"] === service
+    })
+    .sort((left, right) => {
+      const leftRunning = String(left.State || "").toLowerCase() === "running" ? 1 : 0
+      const rightRunning = String(right.State || "").toLowerCase() === "running" ? 1 : 0
+      if (leftRunning !== rightRunning) return rightRunning - leftRunning
+      return (right.Created || 0) - (left.Created || 0)
+    })[0]
+
+const normalizeContainerName = (names) => {
+  if (!Array.isArray(names) || names.length === 0) return ""
+  const rawName = String(names[0] || "").trim()
+  if (!rawName) return ""
+  return rawName.startsWith("/") ? rawName : `/${rawName}`
+}
+
+const buildPromtailTargets = (containers, project = composeProject) => {
+  if (!Array.isArray(containers)) return []
+  const matched = []
+
+  for (let index = 0; index < containers.length; index += 1) {
+    if (matched.length >= MAX_PROMTAIL_CONTAINERS) break
+    const candidate = containers[index]
+    if (!candidate || typeof candidate !== "object") continue
+    if (String(candidate.State || "").toLowerCase() !== "running") continue
+
+    const labels = candidate.Labels && typeof candidate.Labels === "object" ? candidate.Labels : {}
+    if (labels["com.docker.compose.project"] !== project) continue
+
+    const containerId = String(candidate.Id || "").trim()
+    if (!SAFE_CONTAINER_ID_PATTERN.test(containerId)) continue
+
+    matched.push({
+      containerId,
+      targets: [containerId],
+      labels: {
+        __meta_docker_container_id: containerId,
+        __meta_docker_container_name: normalizeContainerName(candidate.Names),
+        __meta_docker_container_label_com_docker_compose_service: String(labels["com.docker.compose.service"] || ""),
+        __meta_docker_container_label_com_docker_compose_project: String(labels["com.docker.compose.project"] || ""),
+        __meta_docker_container_label_promtail: String(labels.promtail || ""),
+        __path__: `/var/lib/docker/containers/${containerId}/${containerId}-json.log`,
+      },
+    })
+  }
+
+  matched.sort((left, right) => left.containerId.localeCompare(right.containerId))
+  return matched.map(({ targets, labels }) => ({ targets, labels }))
+}
+
+const writePromtailTargetsIfChanged = (filePath, targets, state = promtailTargetsState) => {
+  if (!filePath) return false
+  const serialized = `${JSON.stringify(targets, null, 2)}\n`
+  if (state.lastSerialized === serialized && fs.existsSync(filePath)) {
+    return false
+  }
+
+  const targetDir = path.dirname(filePath)
+  fs.mkdirSync(targetDir, { recursive: true })
+  const tempPath = path.join(targetDir, `.${path.basename(filePath)}.tmp.${process.pid}.${++promtailTempSequence}`)
+  try {
+    fs.writeFileSync(tempPath, serialized, { encoding: "utf8", mode: 0o644 })
+    fs.renameSync(tempPath, filePath)
+    state.lastSerialized = serialized
+    return true
+  } catch (error) {
+    try {
+      fs.unlinkSync(tempPath)
+    } catch {
+      // Ignore cleanup failures after a write/rename error.
+    }
+    throw error
+  }
+}
+
+const dockerGet = (path) =>
+  new Promise((resolve, reject) => {
+    const chunks = []
+    const requestOptions = dockerEndpoint.socketPath
+      ? { method: "GET", path, socketPath: dockerEndpoint.socketPath, timeout: 5000 }
+      : {
+          method: "GET",
+          protocol: dockerEndpoint.protocol,
+          hostname: dockerEndpoint.hostname,
+          port: dockerEndpoint.port,
+          path: `${dockerEndpoint.basePath}${path}`,
+          timeout: 5000,
+        }
+
+    const request = http.request(requestOptions, (response) => {
+      response.on("data", (chunk) => chunks.push(chunk))
+      response.on("end", () => {
+        const status = response.statusCode || 0
+        if (status < 200 || status >= 300) {
+          reject(new Error(`docker ${path} returned ${status}`))
+          return
+        }
+        const body = Buffer.concat(chunks).toString("utf8")
+        resolve(JSON.parse(body || "null"))
+      })
+    })
+
+    request.on("timeout", () => {
+      request.destroy(new Error(`docker request timed out: ${path}`))
+    })
+    request.on("error", reject)
+    request.end()
+  })
+
+const probeReadiness = ({ component, target, path = DEFAULT_READINESS_PATH }) =>
+  new Promise((resolve) => {
+    const [host, port = "8080"] = target.split(":")
+    const request = http.request(
+      {
+        method: "GET",
+        host,
+        port: Number(port),
+        path,
+        // front readiness 경로는 실제 백엔드까지 가는 요청이라(30s 스크레이프 x 두 색 = 분당 4회)
+        // 백엔드 접근 로그에 섞인다. 프로브 트래픽을 사용자 트래픽과 구분할 수 있게 표시한다.
+        headers: { "user-agent": "aquila-docker-runtime-probe/1.0" },
+        timeout: 3000,
+      },
+      (response) => {
+        response.resume()
+        response.on("end", () => {
+          const value = response.statusCode === 200 ? 1 : 0
+          resolve(metricLine("aquila_backend_readiness_up", { component, target }, value))
+        })
+      },
+    )
+
+    request.on("timeout", () => {
+      request.destroy()
+      resolve(metricLine("aquila_backend_readiness_up", { component, target }, 0))
+    })
+    request.on("error", () => {
+      resolve(metricLine("aquila_backend_readiness_up", { component, target }, 0))
+    })
+    request.end()
+  })
+
+const collectServiceMetrics = async (containers, service) => {
+  const container = matchingContainerForService(containers, service)
+
+  if (!container) {
+    return [
+      metricLine("docker_container_restart_count", { service }, 0),
+      metricLine("docker_container_running", { service }, 0),
+      metricLine("docker_container_memory_usage_bytes", { service }, 0),
+      metricLine("docker_container_memory_limit_bytes", { service }, 0),
+      metricLine("docker_container_oom_killed", { service }, 0),
+    ]
+  }
+
+  const inspect = await dockerGet(`/containers/${container.Id}/json`)
+  const stats = inspect.State?.Running ? await dockerGet(`/containers/${container.Id}/stats?stream=false&one-shot=true`) : null
+  const memoryUsage = stats?.memory_stats?.usage || 0
+  const memoryLimit = stats?.memory_stats?.limit || 0
+  const restartCount = inspect.RestartCount || 0
+
+  return [
+    metricLine("docker_container_restart_count", { service }, restartCount),
+    metricLine("docker_container_running", { service }, inspect.State?.Running ? 1 : 0),
+    metricLine("docker_container_memory_usage_bytes", { service }, memoryUsage),
+    metricLine("docker_container_memory_limit_bytes", { service }, memoryLimit),
+    metricLine("docker_container_oom_killed", { service }, inspect.State?.OOMKilled ? 1 : 0),
+  ]
+}
+
+const collectDiskMetrics = () => {
+  const lines = [
+    "# HELP aquila_host_filesystem_avail_bytes Available bytes on a host path watched by docker-runtime-probe.",
+    "# TYPE aquila_host_filesystem_avail_bytes gauge",
+    "# HELP aquila_host_filesystem_size_bytes Total bytes on a host path watched by docker-runtime-probe.",
+    "# TYPE aquila_host_filesystem_size_bytes gauge",
+    "# HELP aquila_host_filesystem_up Whether a watched host path is readable.",
+    "# TYPE aquila_host_filesystem_up gauge",
+  ]
+
+  for (const disk of diskPaths) {
+    try {
+      const stats = fs.statfsSync(disk.path)
+      const bsize = Number(stats.bsize || 0)
+      const blocks = Number(stats.blocks || 0)
+      const bavail = Number(stats.bavail || 0)
+      lines.push(metricLine("aquila_host_filesystem_avail_bytes", { mount: disk.mount, path: disk.path }, bavail * bsize))
+      lines.push(metricLine("aquila_host_filesystem_size_bytes", { mount: disk.mount, path: disk.path }, blocks * bsize))
+      lines.push(metricLine("aquila_host_filesystem_up", { mount: disk.mount, path: disk.path }, 1))
+    } catch {
+      lines.push(metricLine("aquila_host_filesystem_avail_bytes", { mount: disk.mount, path: disk.path }, 0))
+      lines.push(metricLine("aquila_host_filesystem_size_bytes", { mount: disk.mount, path: disk.path }, 0))
+      lines.push(metricLine("aquila_host_filesystem_up", { mount: disk.mount, path: disk.path }, 0))
+    }
+  }
+
+  return lines
+}
+
+const syncPromtailTargets = (containers) => {
+  if (!promtailTargetsPath) return
+  const targets = buildPromtailTargets(containers, composeProject)
+  writePromtailTargetsIfChanged(promtailTargetsPath, targets, promtailTargetsState)
+}
+
+const collectMetrics = async () => {
+  const containers = await dockerGet("/containers/json?all=1")
+  syncPromtailTargets(containers)
+  const lines = [
+    "# HELP docker_runtime_probe_up Docker runtime probe success.",
+    "# TYPE docker_runtime_probe_up gauge",
+    "docker_runtime_probe_up 1",
+    "# HELP docker_container_restart_count Docker restart count by compose service.",
+    "# TYPE docker_container_restart_count gauge",
+    "# HELP docker_container_running Docker running state by compose service.",
+    "# TYPE docker_container_running gauge",
+    "# HELP docker_container_memory_usage_bytes Docker container memory usage by compose service.",
+    "# TYPE docker_container_memory_usage_bytes gauge",
+    "# HELP docker_container_memory_limit_bytes Docker container memory limit by compose service.",
+    "# TYPE docker_container_memory_limit_bytes gauge",
+    "# HELP docker_container_oom_killed Docker OOMKilled state by compose service.",
+    "# TYPE docker_container_oom_killed gauge",
+    // Name kept for series continuity. Since #1541 it also carries component=\"front\", whose
+    // readiness path is the front -> backend server-side proxy route rather than an actuator group.
+    "# HELP aquila_backend_readiness_up Readiness endpoint probe result by component.",
+    "# TYPE aquila_backend_readiness_up gauge",
+  ]
+
+  const serviceMetricLines = await Promise.all(services.map((service) => collectServiceMetrics(containers, service)))
+  const readinessMetricLines = await Promise.all(readinessTargets.map((target) => probeReadiness(target)))
+  lines.push(...serviceMetricLines.flat())
+  lines.push(...readinessMetricLines)
+  lines.push(...collectDiskMetrics())
+
+  return `${lines.join("\n")}\n`
+}
+
+const server = http.createServer(async (request, response) => {
+  if (request.url === "/healthz") {
+    response.writeHead(200, { "content-type": "text/plain; charset=utf-8" })
+    response.end("ok\n")
+    return
+  }
+
+  if (request.url !== "/metrics") {
+    response.writeHead(404, { "content-type": "text/plain; charset=utf-8" })
+    response.end("not found\n")
+    return
+  }
+
+  try {
+    const metrics = await collectMetrics()
+    response.writeHead(200, { "content-type": "text/plain; version=0.0.4; charset=utf-8" })
+    response.end(metrics)
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error)
+    response.writeHead(200, { "content-type": "text/plain; version=0.0.4; charset=utf-8" })
+    response.end(`docker_runtime_probe_up 0\ndocker_runtime_probe_error{message="${escapeLabel(message).slice(0, 160)}"} 1\n`)
+  }
+})
+
+// Same CLI-entry guard as public-edge-probe.mjs. Without it, importing this module from a unit test
+// would bind the exporter port as a side effect.
+const isCliEntry = () => {
+  const entryPath = process.argv[1]
+  if (!entryPath) return false
+  try {
+    return import.meta.url === pathToFileURL(realpathSync(entryPath)).href
+  } catch {
+    return import.meta.url === pathToFileURL(entryPath).href
+  }
+}
+
+let promtailRefreshInFlight = false
+const refreshPromtailTargets = async () => {
+  if (!promtailTargetsPath || promtailRefreshInFlight) return
+  promtailRefreshInFlight = true
+  try {
+    const containers = await dockerGet("/containers/json?all=1")
+    syncPromtailTargets(containers)
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error)
+    console.error(`promtail target sync failed: ${message}`)
+  } finally {
+    promtailRefreshInFlight = false
+  }
+}
+
+if (isCliEntry()) {
+  if (promtailTargetsPath) {
+    writePromtailTargetsIfChanged(promtailTargetsPath, [], promtailTargetsState)
+    void refreshPromtailTargets()
+    setInterval(() => {
+      void refreshPromtailTargets()
+    }, promtailRefreshMs).unref()
+  }
+  server.listen(servePort, "0.0.0.0", () => {
+    console.log(`docker-runtime-probe listening on :${servePort}`)
+  })
+}
+
+export {
+  DEFAULT_READINESS_PATH,
+  buildPromtailTargets,
+  parseReadinessTargets,
+  resolveDockerEndpointOptions,
+  writePromtailTargetsIfChanged,
+}
+

@@ -1,0 +1,349 @@
+name: Security
+
+on:
+  pull_request:
+    branches:
+      - main
+  push:
+    branches:
+      - main
+  schedule:
+    - cron: "23 2 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
+
+jobs:
+  # PR: 즉시 성공으로 required-check drift만 막고 full NVD는 돌리지 않는다 (#1344).
+  # main push / weekly schedule / workflow_dispatch: OWASP+NVD full scan (#1124 fail-closed).
+  backend-dependency-check:
+    runs-on: ubuntu-latest
+    # Cold NVD sync + Gradle nvd retries can take time; bounded to 2h (#1124, #1385).
+    timeout-minutes: 120
+    permissions:
+      contents: read
+    steps:
+      - name: Defer full NVD scan on pull requests
+        if: github.event_name == 'pull_request'
+        shell: bash
+        run: |
+          set -euo pipefail
+          {
+            echo "## Backend dependency check (PR path)"
+            echo "- Full OWASP/NVD \`dependencyCheckAnalyze\` is deferred to \`main\` push, weekly schedule, and \`workflow_dispatch\` (#1344)."
+            echo "- PR still runs dependency-review, OSV, Trivy, and exception schema gates."
+          } >> "${GITHUB_STEP_SUMMARY}"
+          echo "PR path: full NVD dependency-check deferred (#1344)."
+
+      - name: Checkout
+        if: github.event_name != 'pull_request'
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up JDK 25
+        if: github.event_name != 'pull_request'
+        uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6 # v6.0.1
+        with:
+          distribution: temurin
+          java-version: "25"
+          cache: gradle
+
+      - name: Cache OWASP dependency-check NVD data
+        if: github.event_name != 'pull_request'
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.gradle/dependency-check-data
+          # Stable key so main/schedule share a warm NVD DB; do not key by run_id (#1383).
+          key: owasp-nvd-${{ runner.os }}-${{ github.ref_name }}-v2
+          restore-keys: |
+            owasp-nvd-${{ runner.os }}-
+
+      - name: Run backend dependency vulnerability scan
+        if: github.event_name != 'pull_request'
+        id: backend_dependency_scan
+        working-directory: back
+        env:
+          NVD_API_KEY: ${{ secrets.NVD_API_KEY }}
+        run: |
+          # Reject empty or whitespace-only secrets; Gradle only injects isNotBlank() keys.
+          if [[ -z "${NVD_API_KEY//[[:space:]]/}" ]]; then
+            echo "ran=false" >> "${GITHUB_OUTPUT}"
+            echo "::error title=Backend dependency scan blocked::NVD_API_KEY secret is required for push, scheduled, and manual security scans (#1124, #1344)."
+            exit 1
+          fi
+          echo "ran=true" >> "${GITHUB_OUTPUT}"
+          # Keep fail-closed. Do not wrap with a multi-hour shell retry loop: cold NVD sync
+          # already approaches the job timeout, and Gradle nvd.maxRetryCount covers transient 503s (#1383/#1385).
+          ./gradlew --no-daemon dependencyCheckAnalyze
+
+      - name: Upload backend dependency check reports
+        if: always() && github.event_name != 'pull_request' && steps.backend_dependency_scan.outputs.ran == 'true'
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: backend-dependency-check-reports
+          path: |
+            back/build/reports/dependency-check-report.*
+            back/build/reports/dependency-check/
+          # Cancelled/timeout mid-scan may leave no report; upload itself stays non-blocking (#1385).
+          if-no-files-found: warn
+          retention-days: 14
+
+      # Fail-closed when analyze succeeded but produced no reports (upload warn must not greenwash).
+      - name: Require dependency-check reports after successful scan
+        if: github.event_name != 'pull_request' && steps.backend_dependency_scan.outcome == 'success'
+        working-directory: back
+        shell: bash
+        run: |
+          set -euo pipefail
+          shopt -s nullglob
+          reports=(
+            build/reports/dependency-check-report.*
+            build/reports/dependency-check/*
+          )
+          if ((${#reports[@]} == 0)); then
+            echo "::error title=Missing dependency-check reports::dependencyCheckAnalyze succeeded but no reports were found (#1385)."
+            exit 1
+          fi
+          echo "dependency-check reports present: ${#reports[@]}"
+
+  # 이중 의존성 리뷰 안내 (Defense-in-depth):
+  # 공식 dependency-review-action을 실행하며, reusable-backend-quality.yml의 자체 API 검증과 병행 동작합니다.
+  # 두 작업 모두 GitHub Dependency Graph compare API를 활용하므로 API 장애 시 동시 실패할 수 있습니다 (#1124).
+  dependency-review:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Review Gradle dependency changes
+        uses: actions/dependency-review-action@a1d282b36b6f3519aa1f3fc636f609c47dddb294 # v5.0.0
+
+  codeql:
+    name: codeql (java-kotlin)
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    permissions:
+      actions: read
+      contents: read
+      security-events: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@256d634097be96e792d6764f9edaefc4320557b1 # v4
+        with:
+          languages: java-kotlin
+          queries: security-extended,security-and-quality
+
+      - name: Set up JDK 25
+        uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6 # v6.0.1
+        with:
+          distribution: temurin
+          java-version: "25"
+          cache: gradle
+
+      - name: Build JVM sources for CodeQL
+        working-directory: back
+        run: ./gradlew --no-daemon --no-build-cache --rerun-tasks classes -x test
+
+      - name: Perform CodeQL Analysis (trusted context)
+        if: github.event_name != 'pull_request' || (github.event.pull_request.head.repo.fork == false && github.actor != 'dependabot[bot]')
+        uses: github/codeql-action/analyze@256d634097be96e792d6764f9edaefc4320557b1 # v4
+
+      - name: Perform CodeQL Analysis (no upload for fork/dependabot PR)
+        if: github.event_name == 'pull_request' && (github.event.pull_request.head.repo.fork == true || github.actor == 'dependabot[bot]')
+        uses: github/codeql-action/analyze@256d634097be96e792d6764f9edaefc4320557b1 # v4
+        with:
+          upload: never
+
+  vulnerability-exception-schema:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up Node.js 20
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: "20"
+
+      - name: Validate vulnerability exception allowlist
+        run: |
+          node tools/guards/check-vulnerability-exceptions.mjs
+          node --test tools/test/vulnerability-exceptions.test.mjs
+
+  container-image-scan:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up Node.js 20
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: "20"
+
+      - name: Validate vulnerability exception allowlist
+        run: node tools/guards/check-vulnerability-exceptions.mjs
+
+      - name: Install Trivy
+        env:
+          TRIVY_VERSION: "0.72.0"
+        run: |
+          set -euo pipefail
+          curl -fsSL --retry 8 --retry-all-errors --retry-max-time 180 -o /tmp/trivy.tgz \
+            "https://github.com/aquasecurity/trivy/releases/download/v${TRIVY_VERSION}/trivy_${TRIVY_VERSION}_Linux-64bit.tar.gz"
+          tar -xzf /tmp/trivy.tgz -C /tmp trivy
+          sudo mv /tmp/trivy /usr/local/bin/trivy
+          trivy --version
+
+      - name: Resolve deploy runtime base images
+        id: images
+        shell: bash
+        run: |
+          set -euo pipefail
+          # Backend: final FROM of back/Dockerfile (GHCR build/deploy base).
+          back_image="$(grep -E '^FROM[[:space:]]+' back/Dockerfile | tail -n1 | awk '{print $2}')"
+          if [[ -z "${back_image}" ]]; then
+            echo "failed to parse backend Dockerfile FROM image" >&2
+            exit 1
+          fi
+          echo "back_image=${back_image}" >> "$GITHUB_OUTPUT"
+          echo "back runtime image: ${back_image}"
+
+      - name: Trivy scan backend runtime image
+        env:
+          IMAGE: ${{ steps.images.outputs.back_image }}
+        run: |
+          set -euo pipefail
+          # OS packages only: app/library vulnerabilities are gated by backend NVD.
+          trivy image --scanners vuln --severity HIGH,CRITICAL --ignore-unfixed --pkg-types os \
+            --format json --output "${RUNNER_TEMP}/trivy-back.json" "${IMAGE}"
+          node tools/guards/check-vulnerability-exceptions.mjs --filter-trivy "${RUNNER_TEMP}/trivy-back.json"
+
+  sbom:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Install Syft
+        env:
+          SYFT_VERSION: "v1.19.0"
+        run: |
+          set -euo pipefail
+          curl -fsSL --retry 8 --retry-all-errors --retry-max-time 180 -o /tmp/syft.tgz \
+            "https://github.com/anchore/syft/releases/download/${SYFT_VERSION}/syft_${SYFT_VERSION#v}_linux_amd64.tar.gz"
+          tar -xzf /tmp/syft.tgz -C /tmp syft
+          sudo mv /tmp/syft /usr/local/bin/syft
+          syft version
+
+      - name: Generate backend CycloneDX SBOM
+        run: |
+          set -euo pipefail
+          mkdir -p "${RUNNER_TEMP}/sbom"
+          syft dir:back -o cyclonedx-json="${RUNNER_TEMP}/sbom/back.cdx.json"
+          test -s "${RUNNER_TEMP}/sbom/back.cdx.json"
+
+      - name: Upload SBOM artifacts
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: sbom-cyclonedx
+          path: ${{ runner.temp }}/sbom/*.cdx.json
+          if-no-files-found: error
+          retention-days: 14
+
+  securityGatesComplete:
+    name: security-gates-complete
+    if: always() && github.event_name == 'push'
+    needs:
+      - backend-dependency-check
+      - codeql
+      - vulnerability-exception-schema
+      - container-image-scan
+      - sbom
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      statuses: write
+    steps:
+      - name: Record exact-SHA Security gate result
+        env:
+          GH_TOKEN: ${{ github.token }}
+          DEPENDENCY_RESULT: ${{ needs.backend-dependency-check.result }}
+          CODEQL_RESULT: ${{ needs.codeql.result }}
+          EXCEPTION_RESULT: ${{ needs.vulnerability-exception-schema.result }}
+          IMAGE_RESULT: ${{ needs.container-image-scan.result }}
+          SBOM_RESULT: ${{ needs.sbom.result }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          STATE="success"
+          DESCRIPTION="All exact-SHA Security gates passed."
+          for RESULT in \
+            "${DEPENDENCY_RESULT}" \
+            "${CODEQL_RESULT}" \
+            "${EXCEPTION_RESULT}" \
+            "${IMAGE_RESULT}" \
+            "${SBOM_RESULT}"; do
+            if [ "${RESULT}" != "success" ]; then
+              STATE="failure"
+              DESCRIPTION="One or more exact-SHA Security gates did not pass."
+              break
+            fi
+          done
+
+          gh api --method POST \
+            "repos/${GITHUB_REPOSITORY}/statuses/${GITHUB_SHA}" \
+            -f state="${STATE}" \
+            -f context="aquila/security-gates-complete" \
+            -f description="${DESCRIPTION}" \
+            -f target_url="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}" \
+            --silent
+
+          if [ "${STATE}" != "success" ]; then
+            echo "Security gate marker recorded a terminal failure for sha=${GITHUB_SHA}" >&2
+            exit 1
+          fi
+
+  deploy:
+    if: github.event_name == 'push' && needs.securityGatesComplete.result == 'success'
+    needs:
+      - securityGatesComplete
+    permissions:
+      actions: read
+      attestations: write
+      contents: read
+      id-token: write
+      packages: write
+      statuses: read
+    uses: ./.github/workflows/deploy.yml
+    secrets: inherit

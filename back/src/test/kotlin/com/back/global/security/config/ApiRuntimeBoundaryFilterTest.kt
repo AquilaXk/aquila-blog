@@ -1,0 +1,278 @@
+package com.back.global.security.config
+
+import jakarta.servlet.http.HttpServletResponse
+import org.assertj.core.api.Assertions.assertThat
+import org.junit.jupiter.api.DisplayName
+import org.junit.jupiter.api.Test
+import org.springframework.mock.env.MockEnvironment
+import org.springframework.mock.web.MockFilterChain
+import org.springframework.mock.web.MockHttpServletRequest
+import org.springframework.mock.web.MockHttpServletResponse
+
+@DisplayName("ApiRuntimeBoundaryFilter 테스트")
+class ApiRuntimeBoundaryFilterTest {
+    @Test
+    @DisplayName("read 모드에서 게시글 feed GET 경로는 차단하지 않는다")
+    fun `read mode allows post feed get endpoint`() {
+        val filter = createFilter("read")
+        val request = MockHttpServletRequest("GET", "/post/api/v1/posts/feed")
+        val response = MockHttpServletResponse()
+
+        filter.doFilter(request, response, MockFilterChain())
+
+        assertThat(response.status).isEqualTo(HttpServletResponse.SC_OK)
+    }
+
+    @Test
+    @DisplayName("read 모드에서 related/author와 images GET 경로는 차단하지 않는다")
+    fun `read mode allows related author and images get endpoints`() {
+        val filter = createFilter("read")
+
+        for (path in listOf(
+            "/post/api/v1/posts/related/author",
+            "/post/api/v1/images/posts/2026/03/cover.webp",
+        )) {
+            val request = MockHttpServletRequest("GET", path)
+            val response = MockHttpServletResponse()
+
+            filter.doFilter(request, response, MockFilterChain())
+
+            assertThat(response.status).isEqualTo(HttpServletResponse.SC_OK)
+        }
+    }
+
+    @Test
+    @DisplayName("read 모드에서 외부 cloud content GET HEAD 경로는 차단하지 않는다")
+    fun `read mode allows external cloud content get and head endpoints`() {
+        val filter = createFilter("read")
+
+        for (method in listOf("GET", "HEAD")) {
+            val request = MockHttpServletRequest(method, "/system/api/v1/public/cloud/files/12/playback")
+            val response = MockHttpServletResponse()
+
+            filter.doFilter(request, response, MockFilterChain())
+
+            assertThat(response.status).isEqualTo(HttpServletResponse.SC_OK)
+        }
+    }
+
+    @Test
+    @DisplayName("worker/none 모드는 API를 fail-closed로 차단한다")
+    fun `worker and none modes fail closed for api`() {
+        for (mode in listOf("worker", "none")) {
+            val filter = createFilter(mode)
+            val request = MockHttpServletRequest("GET", "/post/api/v1/posts/feed")
+            val response = MockHttpServletResponse()
+
+            filter.doFilter(request, response, MockFilterChain())
+
+            assertThat(response.status).isEqualTo(HttpServletResponse.SC_SERVICE_UNAVAILABLE)
+            assertThat(response.contentAsString).contains("503-1")
+        }
+    }
+
+    @Test
+    @DisplayName("런타임 경계 503 응답에도 CORS 헤더를 포함한다")
+    fun `blocked runtime boundary response includes cors headers`() {
+        val filter = createFilter("read")
+        val request = MockHttpServletRequest("POST", "/post/api/v1/posts/466/hit")
+        request.addHeader("Origin", "https://blog.aquilaxk.site")
+        val response = MockHttpServletResponse()
+
+        filter.doFilter(request, response, MockFilterChain())
+
+        assertThat(response.status).isEqualTo(HttpServletResponse.SC_SERVICE_UNAVAILABLE)
+        assertThat(response.getHeader("Access-Control-Allow-Origin")).isEqualTo("https://blog.aquilaxk.site")
+        assertThat(response.getHeader("Access-Control-Allow-Credentials")).isEqualTo("true")
+        assertThat(response.getHeader("Retry-After")).isEqualTo("1")
+        assertThat(response.contentAsString).contains("503-1")
+    }
+
+    @Test
+    @DisplayName("런타임 경계 503 응답은 apex·www origin에 CORS 헤더를 붙이지 않는다")
+    fun `blocked runtime boundary response omits cors headers for apex and www origins`() {
+        for (origin in listOf("https://aquilaxk.site", "https://www.aquilaxk.site", "https://www.blog.aquilaxk.site")) {
+            val filter = createFilter("read")
+            val request = MockHttpServletRequest("POST", "/post/api/v1/posts/466/hit")
+            request.addHeader("Origin", origin)
+            val response = MockHttpServletResponse()
+
+            filter.doFilter(request, response, MockFilterChain())
+
+            assertThat(response.status).isEqualTo(HttpServletResponse.SC_SERVICE_UNAVAILABLE)
+            assertThat(response.getHeader("Access-Control-Allow-Origin")).isNull()
+            assertThat(response.getHeader("Access-Control-Allow-Credentials")).isNull()
+        }
+    }
+
+    @Test
+    @DisplayName("admin 모드에서도 hit 경로 OPTIONS preflight는 차단하지 않는다")
+    fun `admin mode allows hit options preflight`() {
+        val filter = createFilter("admin")
+        val request = MockHttpServletRequest("OPTIONS", "/post/api/v1/posts/466/hit")
+        request.addHeader("Origin", "https://blog.aquilaxk.site")
+        request.addHeader("Access-Control-Request-Method", "POST")
+        val response = MockHttpServletResponse()
+
+        filter.doFilter(request, response, MockFilterChain())
+
+        assertThat(response.status).isEqualTo(HttpServletResponse.SC_OK)
+    }
+
+    @Test
+    @DisplayName("read 모드에서 actuator와 non-api 경로는 필터를 건너뛴다")
+    fun `read mode skips actuator and non api paths`() {
+        val filter = createFilter("read")
+
+        for (path in listOf("/actuator/health", "/favicon.ico")) {
+            val request = MockHttpServletRequest("GET", path)
+            val response = MockHttpServletResponse()
+
+            filter.doFilter(request, response, MockFilterChain())
+
+            assertThat(response.status).isEqualTo(HttpServletResponse.SC_OK)
+        }
+    }
+
+    @Test
+    @DisplayName("context-path가 있어도 runtime boundary path 판정이 동작한다")
+    fun `context path is stripped before runtime boundary matching`() {
+        val filter = createFilter("read")
+        val request = MockHttpServletRequest("GET", "/post/api/v1/posts/feed")
+        request.contextPath = "/blog"
+        request.requestURI = "/blog/post/api/v1/posts/feed"
+        val response = MockHttpServletResponse()
+
+        filter.doFilter(request, response, MockFilterChain())
+
+        assertThat(response.status).isEqualTo(HttpServletResponse.SC_OK)
+    }
+
+    @Test
+    @DisplayName("cors policy가 없어도 차단 응답은 503으로 종료된다")
+    fun `blocked response works without cors policy`() {
+        val filter =
+            ApiRuntimeBoundaryFilter(
+                "none",
+                null,
+                TestPublicApiRequestMatchers.defaultMatcher(),
+            )
+        val request = MockHttpServletRequest("GET", "/post/api/v1/posts/feed")
+        val response = MockHttpServletResponse()
+
+        filter.doFilter(request, response, MockFilterChain())
+
+        assertThat(response.status).isEqualTo(HttpServletResponse.SC_SERVICE_UNAVAILABLE)
+        assertThat(response.contentAsString).contains("503-1")
+    }
+
+    @Test
+    @DisplayName("admin 모드는 member public GET을 edge public-read가 아니므로 허용한다")
+    fun `admin mode allows member public get endpoints`() {
+        val filter = createFilter("admin")
+        val request =
+            MockHttpServletRequest("GET", "/member/api/v1/members/adminProfile")
+        val response = MockHttpServletResponse()
+
+        filter.doFilter(request, response, MockFilterChain())
+
+        assertThat(response.status).isEqualTo(HttpServletResponse.SC_OK)
+    }
+
+    @Test
+    @DisplayName("read 모드는 member public GET을 edge subset 밖이므로 차단한다")
+    fun `read mode blocks member public get endpoints`() {
+        val filter = createFilter("read")
+        val request =
+            MockHttpServletRequest("GET", "/member/api/v1/members/adminProfile")
+        val response = MockHttpServletResponse()
+
+        filter.doFilter(request, response, MockFilterChain())
+
+        assertThat(response.status).isEqualTo(HttpServletResponse.SC_SERVICE_UNAVAILABLE)
+    }
+
+    @Test
+    @DisplayName("퍼센트 인코딩이나 중복 슬래시가 포함된 API 경로도 런타임 경계를 우회하지 못한다")
+    fun `encoded or duplicate slash paths do not bypass runtime boundary`() {
+        val filter = createFilter("read")
+
+        for (rawPath in listOf(
+            "/member/%61pi/v1/members/adminProfile",
+            "//post//api/v1/posts/466/hit",
+            "/post/api/v1/posts/466/hit;jsessionid=1",
+        )) {
+            val request = MockHttpServletRequest(if (rawPath.endsWith("/hit") || rawPath.contains("/hit;")) "POST" else "GET", rawPath)
+            val response = MockHttpServletResponse()
+
+            filter.doFilter(request, response, MockFilterChain())
+
+            assertThat(response.status).isEqualTo(HttpServletResponse.SC_SERVICE_UNAVAILABLE)
+            assertThat(response.contentAsString).contains("503-1")
+        }
+    }
+
+    @Test
+    @DisplayName("isAllowed는 all 모드를 항상 허용한다")
+    fun `isAllowed returns true for all mode`() {
+        val filter = createFilter("all")
+        val method =
+            ApiRuntimeBoundaryFilter::class.java.getDeclaredMethod(
+                "isAllowed",
+                RuntimeApiMode::class.java,
+                String::class.java,
+                String::class.java,
+            )
+        method.isAccessible = true
+
+        val allowed =
+            method.invoke(
+                filter,
+                RuntimeApiMode.ALL,
+                "GET",
+                "/post/api/v1/posts/feed",
+            ) as Boolean
+
+        assertThat(allowed).isTrue()
+    }
+
+    @Test
+    @DisplayName("PublicApiRequestMatcher publicApiRoutes는 contributor 경로를 노출한다")
+    fun `public api routes are exposed from matcher`() {
+        val routes = TestPublicApiRequestMatchers.defaultMatcher().publicApiRoutes()
+
+        assertThat(routes).isNotEmpty
+        assertThat(routes.map { it.pattern }).anyMatch { it.contains("/posts/feed") }
+    }
+
+    @Test
+    @DisplayName("read 모드는 관리자 전용 mine/temp GET을 차단하고 admin 모드는 허용한다")
+    fun `read mode blocks admin post read endpoints while admin mode allows them`() {
+        val readFilter = createFilter("read")
+        val adminFilter = createFilter("admin")
+
+        listOf("/post/api/v1/posts/mine", "/post/api/v1/posts/temp").forEach { path ->
+            val readResponse = MockHttpServletResponse()
+            readFilter.doFilter(MockHttpServletRequest("GET", path), readResponse, MockFilterChain())
+            assertThat(readResponse.status).isEqualTo(HttpServletResponse.SC_SERVICE_UNAVAILABLE)
+
+            val adminResponse = MockHttpServletResponse()
+            adminFilter.doFilter(MockHttpServletRequest("GET", path), adminResponse, MockFilterChain())
+            assertThat(adminResponse.status).isEqualTo(HttpServletResponse.SC_OK)
+        }
+    }
+
+    private fun createFilter(mode: String): ApiRuntimeBoundaryFilter =
+        ApiRuntimeBoundaryFilter(
+            mode,
+            createApiCorsPolicy(),
+            TestPublicApiRequestMatchers.defaultMatcher(),
+        )
+
+    private fun createApiCorsPolicy(): ApiCorsPolicy =
+        ApiCorsPolicy(
+            environment = MockEnvironment().withProperty("spring.profiles.active", "prod"),
+            siteFrontUrl = "https://blog.aquilaxk.site",
+            siteBackUrl = "https://api.blog.aquilaxk.site",
+        )
+}

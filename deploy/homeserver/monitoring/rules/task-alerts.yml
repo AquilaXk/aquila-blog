@@ -1,0 +1,590 @@
+groups:
+  - name: aquila-task-queue
+    rules:
+      - alert: AquilaTaskQueueBacklogHigh
+        expr: task_queue_ready_pending > 500
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Task ready backlog is high"
+          description: "ready_pending={{ $value }} for 10m. Consider API/worker split or worker scale-up."
+
+      - alert: AquilaTaskQueueStaleProcessing
+        expr: task_queue_stale_processing >= 3
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Stale processing tasks detected"
+          description: "stale_processing={{ $value }} for 5m. Check worker health and stuck handlers."
+
+      - alert: AquilaApiLatencyP95High
+        expr: |
+          (
+            histogram_quantile(
+              0.95,
+              sum by (le) (
+                rate(
+                  {__name__=~"http_server_requests_seconds_bucket|http_server_request_duration_seconds_bucket",job="back",service="aquila-back",uri!~"/actuator.*"}[5m]
+                )
+              )
+            )
+            and on() (
+              sum(
+                rate(
+                  {__name__=~"http_server_requests_seconds_count|http_server_request_duration_seconds_count",job="back",service="aquila-back",uri!~"/actuator.*"}[5m]
+                )
+              ) > bool 0.2
+            )
+          ) > 1
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "API p95 latency is high"
+          description: "p95 > 1s for 10m. Check DB/Redis/task queue pressure."
+
+      - alert: AquilaFeedLatencyP95High
+        expr: |
+          (
+            histogram_quantile(
+              0.95,
+              sum by (le) (
+                rate(
+                  {__name__=~"http_server_requests_seconds_bucket|http_server_request_duration_seconds_bucket",job="back",service="aquila-back",uri="/post/api/v1/posts/feed"}[5m]
+                )
+              )
+            )
+            and on() (
+              sum(
+                rate(
+                  {__name__=~"http_server_requests_seconds_count|http_server_request_duration_seconds_count",job="back",service="aquila-back",uri="/post/api/v1/posts/feed"}[5m]
+                )
+              ) > bool 0.05
+            )
+          ) > 1
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Feed API p95 latency is high"
+          description: "feed p95 > 1s for 10m. Check post read cache hit, DB latency, and upstream proxy timing."
+
+      - alert: AquilaFeedLatencyP99High
+        expr: |
+          (
+            histogram_quantile(
+              0.99,
+              sum by (le) (
+                rate(
+                  {__name__=~"http_server_requests_seconds_bucket|http_server_request_duration_seconds_bucket",job="back",service="aquila-back",uri="/post/api/v1/posts/feed"}[5m]
+                )
+              )
+            )
+            and on() (
+              sum(
+                rate(
+                  {__name__=~"http_server_requests_seconds_count|http_server_request_duration_seconds_count",job="back",service="aquila-back",uri="/post/api/v1/posts/feed"}[5m]
+                )
+              ) > bool 0.05
+            )
+          ) > 2
+        for: 10m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Feed API p99 latency is high"
+          description: "feed p99 > 2s for 10m. Investigate outlier queries and upstream saturation."
+
+      - alert: AquilaFeedOutlierOver5sRatioHigh
+        expr: |
+          (
+            (
+              sum(
+                rate(
+                  {__name__=~"http_server_requests_seconds_bucket|http_server_request_duration_seconds_bucket",job="back",service="aquila-back",uri="/post/api/v1/posts/feed",le="+Inf"}[5m]
+                )
+              )
+              -
+              sum(
+                rate(
+                  {__name__=~"http_server_requests_seconds_bucket|http_server_request_duration_seconds_bucket",job="back",service="aquila-back",uri="/post/api/v1/posts/feed",le=~"5|5\\.0"}[5m]
+                )
+              )
+            )
+            /
+            clamp_min(
+              sum(
+                rate(
+                  {__name__=~"http_server_requests_seconds_count|http_server_request_duration_seconds_count",job="back",service="aquila-back",uri="/post/api/v1/posts/feed"}[5m]
+                )
+              ),
+              0.001
+            )
+          ) > 0.03
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Feed API >5s outlier ratio is high"
+          description: "More than 3% of feed requests exceed 5s for 10m. Verify cache hit ratio, DB plan drift, and timeout budget."
+
+      - alert: AquilaPostReadFeedCacheHitRatioLow
+        expr: |
+          (
+            sum(rate(post_read_cache_result_total{cache=~"post-feed-v5|post-feed-cursor-first-v2",result="hit"}[10m]))
+            /
+            clamp_min(
+              sum(rate(post_read_cache_result_total{cache=~"post-feed-v5|post-feed-cursor-first-v2",result=~"hit|miss"}[10m])),
+              0.001
+            )
+          ) < 0.35
+        for: 15m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Post read feed cache hit ratio is low"
+          description: "Feed-related cache hit ratio stayed below 35% for 15m. Check cache key churn, TTL, and purge frequency."
+
+      - alert: AquilaFeedOriginErrorRateHigh
+        expr: |
+          (
+            sum(
+              rate(
+                {__name__=~"http_server_requests_seconds_count|http_server_request_duration_seconds_count",job="back",service="aquila-back",uri="/post/api/v1/posts/feed",status=~"5.."}[5m]
+              )
+            )
+            /
+            clamp_min(
+              sum(
+                rate(
+                  {__name__=~"http_server_requests_seconds_count|http_server_request_duration_seconds_count",job="back",service="aquila-back",uri="/post/api/v1/posts/feed"}[5m]
+                )
+              ),
+              0.001
+            )
+          ) > 0.02
+        for: 10m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Feed origin error rate is high"
+          description: "Feed 5xx ratio exceeded 2% for 10m. Check backend exceptions, upstream timeout budget, and rollback criteria."
+
+      - alert: AquilaBackScrapeDown
+        expr: max(up{job="back",service="aquila-back",component="api"}) < 1
+        for: 3m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Back metrics scrape is down"
+          description: "Prometheus cannot scrape any blue/green API backend target for 3m."
+
+      - alert: AquilaBackReadinessDown
+        expr: max(aquila_backend_readiness_up{component="api"}) < 1
+        for: 3m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Back API readiness path is unavailable"
+          description: "No blue/green API backend readiness endpoint has returned 200 for 3m."
+
+      # front readiness는 front -> backend 서버 사이드 프록시 경로를 재는 것이라, 여기가 0이면
+      # 컨테이너가 healthy여도 로그인·목록·상세가 전부 죽은 상태다(#1539 실측).
+      #
+      # 두 번째 항이 필요한 이유: front 프로필을 끄는 것은 문서화된 rollback 경로다
+      # (docs/ops/homeserver-front-domain-cutover.md). 컨테이너가 아예 없는 상태에서도 readiness는
+      # 0이므로, 조건 없이 걸면 의도한 rollback이 critical 알람을 계속 울린다.
+      - alert: AquilaFrontReadinessDown
+        expr: |
+          max(aquila_backend_readiness_up{component="front"}) < 1
+          and
+          max(docker_container_running{job="docker_runtime_probe",service=~"front_(blue|green)"}) == 1
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Front backend-proxy readiness path is unavailable"
+          description: "A front container is running but no blue/green front readiness probe has returned 200 for 5m. Check BACKEND_INTERNAL_URL, the Caddy internal site address, and backend health."
+
+      - alert: AquilaFrontRuntimeMetricsScrapeDown
+        expr: |
+          label_replace(
+            max by (service) (
+              docker_container_running{job="docker_runtime_probe",service=~"front_(blue|green)"} == 1
+            ),
+            "deploy_color",
+            "$1",
+            "service",
+            "front_(blue|green)"
+          ) unless on (deploy_color)
+          max by (deploy_color) (
+            up{job="front",service="aquila-front"} == 1
+          )
+        for: 3m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Web runtime metrics scrape is down"
+          description: "Prometheus has no successful metrics scrape for the running {{ $labels.deploy_color }} front target for 3m."
+
+      - alert: AquilaBackWorkerScrapeDown
+        expr: max(up{job="back",service="aquila-back",component="worker"}) < 1
+        for: 3m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Back worker metrics scrape is down"
+          description: "Prometheus cannot scrape the backend worker target for 3m. Task queue and DLQ alerts may stop evaluating."
+
+      - alert: AquilaBackRuntimeSplitScrapeDown
+        expr: |
+          (
+            max by (component) (up{job="back",service="aquila-back",component=~"read|admin"}) < 1
+          )
+          and on (component)
+          label_replace(
+            max by (service) (docker_container_running{job="docker_runtime_probe",service=~"back_(read|admin)"}) == 1,
+            "component",
+            "$1",
+            "service",
+            "back_(read|admin)"
+          )
+        for: 3m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Runtime-split backend metrics scrape is down"
+          description: "Prometheus cannot scrape a running runtime-split {{ $labels.component }} backend target for 3m."
+
+      - alert: AquilaTaskDlqRateHigh
+        expr: sum(rate(task_processor_result_total{status="dlq"}[10m])) > 0
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Task DLQ rate is above zero"
+          description: "DLQ tasks are accumulating. Check failed handlers and replay policy."
+
+      - alert: AquilaPostSearchIndexLagP95High
+        expr: histogram_quantile(0.95, sum by (le) (rate(post_search_index_task_lag_seconds_bucket[10m]))) > 120
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Search index async sync lag p95 is high"
+          description: "post.search_index.task.lag p95 > 120s for 10m."
+
+  - name: aquila-ddos-defense
+    rules:
+      - alert: AquilaDockerRuntimeProbeScrapeDown
+        expr: min(up{job="docker_runtime_probe",service="aquila-docker-runtime-probe"}) < 1
+        for: 3m
+        labels:
+          severity: warning
+        annotations:
+          summary: "docker runtime probe scrape is down"
+          description: "Prometheus cannot scrape docker_runtime_probe for 3m. Check probe container health and docker socket access."
+
+      - alert: AquilaContainerRestarted
+        expr: increase(docker_container_restart_count{job="docker_runtime_probe",service=~"back_.+|front_.+|db_1|redis_1|minio_1|cloudflared|autoheal|docker_socket_proxy|postgres_exporter"}[15m]) > 0
+        for: 1m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Container restarted recently"
+          description: "{{ $labels.service }} restart_count increased in the last 15m. Check deploy churn, host pressure, or crash loops."
+
+      - alert: AquilaContainerOomKilled
+        expr: docker_container_oom_killed{job="docker_runtime_probe",service=~"back_.+|front_.+|db_1|redis_1|minio_1"} > 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Container was OOM killed"
+          description: "{{ $labels.service }} reports OOMKilled. Check memory limits, heap pressure, and host memory."
+
+      - alert: AquilaApiRateLimitRejectedHigh
+        expr: sum(rate(api_rate_limit_rejected_total{job="back",service="aquila-back"}[5m])) > 0.5
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "API rate-limit rejections are high"
+          description: "Backend Redis rate-limit backstop is rejecting more than 0.5 req/s for 5m. Check Cloudflare WAF/rate limit events and attack source distribution."
+
+      - alert: AquilaApi429RatioHigh
+        expr: |
+          (
+            sum(rate({__name__=~"http_server_requests_seconds_count|http_server_request_duration_seconds_count",job="back",service="aquila-back",status="429"}[5m]))
+            /
+            clamp_min(
+              sum(rate({__name__=~"http_server_requests_seconds_count|http_server_request_duration_seconds_count",job="back",service="aquila-back"}[5m])),
+              0.001
+            )
+          ) > 0.10
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "API 429 ratio is high"
+          description: "More than 10% of backend API responses are 429 for 5m. Verify Cloudflare edge limits and backend Redis backstop thresholds."
+
+      - alert: AquilaPublicReadRpsHigh
+        expr: |
+          sum(
+            rate(
+              {__name__=~"http_server_requests_seconds_count|http_server_request_duration_seconds_count",job="back",service="aquila-back",uri=~"/post/api/v1/posts(/feed|/feed/cursor|/bootstrap|/explore|/explore/cursor|/search|/tags|/\\{id\\}|/\\{id\\}/meta|/\\{id\\}/content|/[0-9]+(/[a-z]+)?)?"}[5m]
+            )
+          ) > 50
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Public read API RPS is high"
+          description: "Public read endpoints exceeded 50 req/s for 10m. Check Cloudflare Security Events and edge cache hit behavior."
+
+      - alert: AquilaApiOrigin5xxRatioHigh
+        expr: |
+          (
+            sum(rate({__name__=~"http_server_requests_seconds_count|http_server_request_duration_seconds_count",job="back",service="aquila-back",status=~"5.."}[5m]))
+            /
+            clamp_min(
+              sum(rate({__name__=~"http_server_requests_seconds_count|http_server_request_duration_seconds_count",job="back",service="aquila-back"}[5m])),
+              0.001
+            )
+          ) > 0.02
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: "API origin 5xx ratio is high"
+          description: "Backend 5xx ratio exceeded 2% for 5m. Check whether DDoS pressure reached origin and consider Cloudflare emergency rules."
+
+      - alert: AquilaApiP99LatencyHigh
+        expr: |
+          (
+            histogram_quantile(
+              0.99,
+              sum by (le) (
+                rate({__name__=~"http_server_requests_seconds_bucket|http_server_request_duration_seconds_bucket",job="back",service="aquila-back",uri!~"/actuator.*"}[5m])
+              )
+            )
+            and on() (
+              sum(rate({__name__=~"http_server_requests_seconds_count|http_server_request_duration_seconds_count",job="back",service="aquila-back",uri!~"/actuator.*"}[5m])) > bool 0.2
+            )
+          ) > 2
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "API p99 latency is high"
+          description: "API p99 latency stayed above 2s for 10m. Check origin saturation, Redis latency, and Cloudflare edge mitigation."
+
+      - alert: AquilaCloudflaredRestartCountHigh
+        expr: increase(docker_container_restart_count{job="docker_runtime_probe",service="cloudflared"}[15m]) > 0
+        for: 1m
+        labels:
+          severity: warning
+        annotations:
+          summary: "cloudflared restarted recently"
+          description: "cloudflared restart_count increased in the last 15m. Check Tunnel health, Cloudflare edge connectivity, and host pressure."
+
+      - alert: AquilaBackendContainerMemoryHigh
+        expr: |
+          (
+            docker_container_memory_usage_bytes{job="docker_runtime_probe",service=~"back_.+"}
+            /
+            clamp_min(docker_container_memory_limit_bytes{job="docker_runtime_probe",service=~"back_.+"}, 1)
+          ) > 0.85
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Backend container memory usage is high"
+          description: "A backend container is using more than 85% of its Docker memory limit for 10m. Check DDoS pressure and runtime split sizing."
+
+      - alert: AquilaRedisCommandLatencyHigh
+        expr: |
+          histogram_quantile(
+            0.95,
+            sum by (le) (
+              rate({__name__=~"redis_commands_duration_seconds_bucket|lettuce_command_completion_seconds_bucket|lettuce_command_duration_seconds_bucket",job="back",service="aquila-back"}[5m])
+            )
+          ) > 0.05
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Redis command latency is high"
+          description: "redis command latency p95 exceeded 50ms for 10m. Check API rate-limit pressure and Redis saturation."
+
+      - alert: AquilaPostgresDiskUsageHigh
+        expr: |
+          (
+            pg_database_size_bytes{job="postgres_exporter",datname=~"blog.*|blog_prod"}
+            /
+            107374182400
+          ) > 0.90
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "PostgreSQL container resource usage is high"
+          description: "PostgreSQL database size exceeded 90% of the 100GiB disk budget for 10m. Check database disk pressure before writes fail."
+
+      - alert: AquilaPostgresUnavailable
+        expr: docker_container_running{job="docker_runtime_probe",service="db_1"} < 1
+        for: 3m
+        labels:
+          severity: critical
+        annotations:
+          summary: "PostgreSQL container is unavailable"
+          description: "db_1 is not running for 3m. Writes, migrations, and login flows can fail."
+
+      - alert: AquilaPostgresConnectionSaturationHigh
+        expr: |
+          (
+            sum(pg_stat_database_numbackends{job="postgres_exporter",datname=~"blog.*|blog_prod"})
+            /
+            clamp_min(sum(pg_settings_max_connections{job="postgres_exporter"}), 1)
+          ) > 0.85
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "PostgreSQL connection pool saturation is high"
+          description: "PostgreSQL active database backends exceeded 85% of max_connections for 10m. Check slow queries and pool sizing."
+
+      - alert: AquilaPostgresExporterScrapeDown
+        expr: min(up{job="postgres_exporter"}) < 1
+        for: 3m
+        labels:
+          severity: warning
+        annotations:
+          summary: "PostgreSQL exporter scrape is down"
+          description: "Prometheus cannot scrape postgres_exporter for 3m. Every pg_* series is gone, so AquilaPostgresDiskUsageHigh and AquilaPostgresConnectionSaturationHigh cannot fire at all while this lasts. Check the exporter container (a rejected command-line flag exits 1 in a restart loop), the pinned image, and the pg_monitor role credentials."
+
+      - alert: AquilaPostgresCheckpointMetricsMissing
+        expr: absent(pg_stat_checkpointer_num_timed_total{job="postgres_exporter"})
+        for: 15m
+        labels:
+          severity: warning
+        annotations:
+          summary: "PostgreSQL checkpoint metrics are not being collected"
+          description: "postgres_exporter has exposed no pg_stat_checkpointer series for 15m. A collector that silently stops leaves checkpoint and bgwriter observability blank (#1419). Check that POSTGRES_EXPORTER_IMAGE is v0.17.0 or newer, that --collector.stat_checkpointer is still set, and that the exporter is scrapeable."
+
+      - alert: AquilaRedisUnavailable
+        expr: docker_container_running{job="docker_runtime_probe",service="redis_1"} < 1
+        for: 3m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Redis container is unavailable"
+          description: "redis_1 is not running for 3m. Login, cache, and rate-limit behavior can degrade."
+
+      - alert: AquilaMinioUnavailable
+        expr: docker_container_running{job="docker_runtime_probe",service="minio_1"} < 1
+        for: 3m
+        labels:
+          severity: critical
+        annotations:
+          summary: "MinIO container is unavailable"
+          description: "minio_1 is not running for 3m. Media upload and object reads can fail."
+
+  - name: aquila-monitoring-stack
+    rules:
+      - alert: AquilaPublicEdgeProbeScrapeDown
+        expr: min(up{job="public_edge_probe",service="aquila-public-edge-probe"}) < 1
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Public edge probe scrape is down"
+          description: "Prometheus cannot scrape public_edge_probe for 5m. Check the exporter container, live probe refresh loop, and network path."
+
+      - alert: AquilaPublicEdgeColdRatioHigh
+        expr: |
+          (
+            count(aquila_public_edge_probe_request_ttfb_seconds{request_index="1",cache_state=~"MISS|STALE"})
+            /
+            clamp_min(count(aquila_public_edge_probe_request_ttfb_seconds{request_index="1"}), 1)
+          ) > 0.5
+        for: 15m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Public edge cold ratio is high"
+          description: "More than half of first-request probes are MISS/STALE for 15m. Check deploy churn, cache invalidation frequency, and edge warm-up path."
+
+      - alert: AquilaPublicEdgeFirstRequestTtfbHigh
+        expr: max(aquila_public_edge_probe_request_ttfb_seconds{request_index="1"}) > 0.8
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Public edge first-request TTFB is high"
+          description: "Synthetic public route first-request TTFB stayed above 800ms for 10m. Check cold edge cache, origin SSR timing, and deploy recency."
+
+      - alert: AquilaLokiScrapeDown
+        expr: min(up{job="loki",service="aquila-loki"}) < 1
+        for: 3m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Loki metrics scrape is down"
+          description: "Prometheus cannot scrape Loki for 3m. Check loki container and network."
+
+      - alert: AquilaPromtailScrapeDown
+        expr: min(up{job="promtail",service="aquila-promtail"}) < 1
+        for: 3m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Promtail metrics scrape is down"
+          description: "Prometheus cannot scrape Promtail for 3m. Check promtail container and docker log mount."
+
+      - alert: AquilaPublicEdgeProbeRouteDown
+        expr: min(aquila_public_edge_probe_route_up) < 1
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Public edge route probe is failing"
+          description: "At least one public edge probe route has failed for 5m. Check Cloudflare Tunnel (cloudflared), the Caddy web vhost, and the active front/back containers on the home server."
+
+      # The bounded match gauge reports the second warm sample against the expected HIT state.
+      # `absent()` keeps a missing home contract series from becoming a false-green empty vector.
+      - alert: AquilaPublicEdgeCacheStateUnobserved
+        expr: |
+          (
+            min by (route_class, expected_state) (
+              aquila_public_edge_probe_cache_state_match{route_class="home",expected_state="HIT"}
+            ) < 1
+            or absent(aquila_public_edge_probe_cache_state_match{route_class="home",expected_state="HIT"})
+          )
+        for: 30m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Public edge cache state is no longer observable"
+          description: "The home route's warm cache state has mismatched HIT for 30m or is missing. Check the front container, the Caddy web vhost header handling, and the probe route set."
+
+      - alert: AquilaExternalBackupFailed
+        expr: increase(aquila_external_backup_failed_total[30m]) > 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "External backup failed"
+          description: "The external backup failure counter increased in the last 30m. Check deploy workflow logs and backup storage."
+
+      - alert: AquilaDeployRollbackDetected
+        expr: increase(aquila_deploy_rollback_total[30m]) > 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Deploy rollback detected"
+          description: "The deploy rollback counter increased in the last 30m. Check the failed deploy gate and rollback reason."

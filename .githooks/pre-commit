@@ -1,0 +1,69 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+REPO_ROOT="$(git rev-parse --show-toplevel)"
+cd "${REPO_ROOT}"
+commit_index_file="${GIT_INDEX_FILE-}"
+unset $(git rev-parse --local-env-vars)
+if [[ -n "${commit_index_file}" ]]; then
+  export GIT_INDEX_FILE="${commit_index_file}"
+fi
+
+staged_files="$(git diff --cached --name-only --diff-filter=ACMRD)"
+if [[ -z "${staged_files}" ]]; then
+  exit 0
+fi
+
+bash tools/guards/check-forbidden-tracked-files.sh --staged
+node tools/repo-boundary/check-platform-boundary.mjs
+
+needs_public_contract_check="false"
+needs_test_inventory_check="false"
+needs_precommit_route_check="false"
+while IFS= read -r file; do
+  case "${file}" in
+    back/build.gradle.kts|back/settings.gradle.kts|back/gradle/backend-test-infra.gradle.kts|back/src/main/*|back/src/test/kotlin/com/back/global/springDoc/*|back/src/test/kotlin/com/back/global/contracts/*|contracts/public-api/*|tools/contracts/sync-public-contracts.mjs|tools/contracts/write-public-manifest.mjs|tools/test/public-contract-manifest.test.mjs)
+      needs_public_contract_check="true"
+      ;;
+    tools/test/test-execution-inventory.json|tools/ci/verify-test-execution-inventory.mjs|tools/test/test-execution-inventory.test.mjs)
+      needs_test_inventory_check="true"
+      ;;
+    .github/workflows/ci.yml)
+      needs_test_inventory_check="true"
+      ;;
+    .github/workflows/dependabot-credential-contract.yml|.github/workflows/reusable-backend-quality.yml|.github/workflows/security.yml|.github/workflows/backup-restore-drill.yml)
+      needs_test_inventory_check="true"
+      ;;
+    .githooks/pre-commit|tools/test/hook-drift-guard.test.sh)
+      needs_precommit_route_check="true"
+      ;;
+  esac
+done <<< "${staged_files}"
+
+if [[ "${needs_test_inventory_check}" == "true" ]]; then
+  echo "[pre-commit] test execution inventory 검사 실행"
+  node tools/ci/verify-test-execution-inventory.mjs
+fi
+
+if [[ "${needs_precommit_route_check}" == "true" ]]; then
+  echo "[pre-commit] pre-commit 변경 경계 검사 실행"
+  bash tools/test/hook-drift-guard.test.sh
+fi
+
+if [[ "${needs_public_contract_check}" == "true" ]]; then
+  if [[ ! -x "back/gradlew" ]]; then
+    echo "[pre-commit] back/gradlew 실행 파일을 찾지 못해 Platform 계약 검사를 실행할 수 없습니다." >&2
+    exit 1
+  fi
+
+  echo "[pre-commit] Platform 계약 산출물 검사 실행"
+  back/gradlew -p back test \
+    --tests "com.back.global.springDoc.OpenApiContractExportTest" \
+    --tests "com.back.global.contracts.ErrorCodeContractExportTest"
+  node tools/contracts/sync-public-contracts.mjs
+  git ls-files --error-unmatch -- \
+    contracts/public-api/openapi.json \
+    contracts/public-api/error-codes.json \
+    contracts/public-api/manifest.json >/dev/null
+  git diff --exit-code -- contracts/public-api
+fi

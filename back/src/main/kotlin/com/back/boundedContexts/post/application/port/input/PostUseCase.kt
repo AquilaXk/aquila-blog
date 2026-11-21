@@ -1,0 +1,188 @@
+package com.back.boundedContexts.post.application.port.input
+
+import com.back.boundedContexts.member.domain.shared.Member
+import com.back.boundedContexts.post.domain.Post
+import com.back.boundedContexts.post.dto.AdmDeletedPostDto
+import com.back.boundedContexts.post.dto.AdmPostFacetCounts
+import com.back.boundedContexts.post.dto.PostInteractionReadStateDto
+import com.back.boundedContexts.post.dto.PostRevisionSnapshotDto
+import com.back.boundedContexts.post.dto.PostRevisionSummaryDto
+import com.back.boundedContexts.post.dto.PostWithContentDto
+import com.back.boundedContexts.post.dto.PublicPostDetailContentCacheDto
+import com.back.boundedContexts.post.dto.PublicSitemapPostItemDto
+import com.back.boundedContexts.post.dto.TagCountDto
+import com.back.boundedContexts.post.model.PostSummaryMode
+import com.back.standard.dto.page.PagedResult
+import com.back.standard.dto.post.type1.PostSearchSortType1
+import java.time.Instant
+
+interface PostUseCase {
+    fun count(): Long
+
+    fun getAdminPostFacetCounts(): AdmPostFacetCounts
+
+    fun randomSecureTip(): String
+
+    fun write(
+        author: Member,
+        title: String,
+        content: String,
+        published: Boolean = false,
+        listed: Boolean = false,
+        idempotencyKey: String? = null,
+        contentHtml: String? = null,
+        summary: String? = null,
+        summaryMode: PostSummaryMode,
+    ): Post
+
+    fun findById(id: Long): Post?
+
+    fun findPublicDetailById(id: Long): Post?
+
+    fun isPublicDetailReadable(id: Long): Boolean
+
+    fun findPublicDetailContentById(id: Long): PublicPostDetailContentCacheDto?
+
+    fun findInteractionReadStateById(id: Long): PostInteractionReadStateDto?
+
+    fun getAuthenticatedPostDetail(
+        id: Long,
+        actor: Member,
+        hasAdminRole: Boolean,
+    ): PostWithContentDto
+
+    fun findLatest(): Post?
+
+    fun modify(
+        actor: Member,
+        post: Post,
+        title: String,
+        content: String,
+        published: Boolean? = null,
+        listed: Boolean? = null,
+        expectedVersion: Long,
+        contentHtml: String? = null,
+        summary: String? = null,
+        summaryMode: PostSummaryMode? = null,
+    )
+
+    fun delete(
+        post: Post,
+        actor: Member,
+    )
+
+    fun incrementHit(post: Post)
+
+    fun incrementLike(post: Post)
+
+    fun decrementLike(post: Post)
+
+    fun findPagedByKw(
+        kw: String,
+        sort: PostSearchSortType1,
+        page: Int,
+        pageSize: Int,
+    ): PagedResult<Post>
+
+    fun findRecommendedExplorePage(
+        page: Int,
+        pageSize: Int,
+    ): PagedResult<Post>
+
+    fun findPagedByKwForAdmin(
+        kw: String,
+        sort: PostSearchSortType1,
+        page: Int,
+        pageSize: Int,
+        status: String = "all",
+    ): PagedResult<Post>
+
+    fun findDeletedPagedByKwForAdmin(
+        kw: String,
+        page: Int,
+        pageSize: Int,
+    ): PagedResult<AdmDeletedPostDto>
+
+    fun restoreDeletedByIdForAdmin(id: Long): Post
+
+    fun hardDeleteDeletedByIdForAdmin(id: Long)
+
+    fun findPagedByAuthor(
+        author: Member,
+        kw: String,
+        sort: PostSearchSortType1,
+        page: Int,
+        pageSize: Int,
+    ): PagedResult<Post>
+
+    fun findPagedByKwAndTag(
+        kw: String,
+        tag: String,
+        sort: PostSearchSortType1,
+        page: Int,
+        pageSize: Int,
+    ): PagedResult<Post>
+
+    fun findPublicByCursor(
+        cursorSortValue: Long?,
+        cursorId: Long?,
+        limit: Int,
+        sort: PostSearchSortType1,
+    ): List<Post>
+
+    fun findPublicByTagCursor(
+        tag: String,
+        cursorSortValue: Long?,
+        cursorId: Long?,
+        limit: Int,
+        sort: PostSearchSortType1,
+    ): List<Post>
+
+    fun findPublicByAuthorExceptPost(
+        authorId: Long,
+        excludePostId: Long?,
+        limit: Int,
+    ): List<Post>
+
+    fun findAdjacentPublicPosts(
+        createdAt: Instant,
+        id: Long,
+    ): Pair<Post?, Post?>
+
+    fun getPublicTagCounts(): List<TagCountDto>
+
+    fun findTemp(author: Member): Post?
+
+    fun getOrCreateTemp(author: Member): Pair<Post, Boolean>
+
+    fun saveTempDraft(
+        actor: Member,
+        postId: Long,
+        request: com.back.boundedContexts.post.dto.PostTempDraftSaveRequest,
+    ): Post
+
+    fun isTempDraft(post: Post): Boolean
+
+    fun resolveTempDraftPostIds(posts: List<Post>): Set<Long>
+
+    fun bulkActionForAdmin(
+        actor: Member,
+        ids: List<Long>,
+        action: com.back.boundedContexts.post.dto.AdmPostBulkActionType,
+    ): com.back.boundedContexts.post.dto.AdmPostBulkActionResBody
+
+    fun getPublicSitemapItems(limit: Int): List<PublicSitemapPostItemDto>
+
+    fun getPostRevisionsForAdmin(postId: Long): List<PostRevisionSummaryDto>
+
+    fun getPostRevisionSnapshotForAdmin(
+        postId: Long,
+        revisionId: Long,
+    ): PostRevisionSnapshotDto
+
+    fun restorePostRevisionForAdmin(
+        actor: Member,
+        postId: Long,
+        revisionId: Long,
+    ): Post
+}

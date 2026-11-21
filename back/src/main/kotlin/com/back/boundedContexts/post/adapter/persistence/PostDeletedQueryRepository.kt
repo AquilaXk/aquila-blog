@@ -1,0 +1,285 @@
+package com.back.boundedContexts.post.adapter.persistence
+
+import com.back.boundedContexts.member.domain.shared.memberMixin.decodeMemberProfileWorkspaceContent
+import com.back.boundedContexts.member.domain.shared.memberMixin.defaultProfileImageUrl
+import com.back.boundedContexts.post.dto.AdmDeletedPostDto
+import com.back.boundedContexts.post.dto.AdmDeletedPostSnapshotDto
+import com.back.boundedContexts.post.dto.AdmPostFacetCounts
+import org.springframework.data.domain.Page
+import org.springframework.data.domain.PageImpl
+import org.springframework.data.domain.Pageable
+import org.springframework.data.support.PageableExecutionUtils
+import org.springframework.jdbc.core.JdbcTemplate
+import org.springframework.stereotype.Component
+
+@Component
+class PostDeletedQueryRepository(
+    private val jdbcTemplate: JdbcTemplate,
+) {
+    private companion object {
+        const val PUBLISHED_PROFILE_WORKSPACE_ATTR_NAME = "profileWorkspacePublished"
+    }
+
+    /**
+     * 참조 구현: TryGhost/Ghost (MIT) & payloadcms/payload (MIT)
+     * 단일 테이블 스캔으로 관리자 게시물 상태별 건수와 콘텐츠 참여 지표를 한 번에 집계한다.
+     */
+    fun getAdminPostFacetCounts(): AdmPostFacetCounts =
+        jdbcTemplate
+            .query(
+                """
+                select
+                    coalesce(sum(case when deleted_at is null then 1 else 0 end), 0) as all_count,
+                    coalesce(sum(case when deleted_at is null and published = true then 1 else 0 end), 0) as published_count,
+                    coalesce(sum(case when deleted_at is null and published = false and is_temp_draft = true then 1 else 0 end), 0) as draft_count,
+                    coalesce(sum(case when deleted_at is null and published = false and is_temp_draft = false then 1 else 0 end), 0) as private_count,
+                    coalesce(sum(case when deleted_at is null and published = true and listed = false then 1 else 0 end), 0) as unlisted_count,
+                    coalesce(sum(case when deleted_at is not null then 1 else 0 end), 0) as deleted_count,
+                    coalesce(sum(case when deleted_at is null then hit_count else 0 end), 0) as total_hit_count,
+                    coalesce(sum(case when deleted_at is null then likes_count else 0 end), 0) as total_likes_count
+                from post
+                """.trimIndent(),
+            ) { rs, _ ->
+                AdmPostFacetCounts(
+                    all = rs.getLong("all_count"),
+                    published = rs.getLong("published_count"),
+                    draft = rs.getLong("draft_count"),
+                    privateCount = rs.getLong("private_count"),
+                    unlisted = rs.getLong("unlisted_count"),
+                    deleted = rs.getLong("deleted_count"),
+                    totalHitCount = rs.getLong("total_hit_count"),
+                    totalLikesCount = rs.getLong("total_likes_count"),
+                )
+            }.firstOrNull() ?: AdmPostFacetCounts(0, 0, 0, 0, 0, 0, 0, 0)
+
+    fun findDeletedSnapshotById(id: Long): AdmDeletedPostSnapshotDto? =
+        jdbcTemplate
+            .query(
+                """
+                select id, title, content, author_id, published, listed
+                from post
+                where id = ?
+                  and deleted_at is not null
+                """.trimIndent(),
+                { rs, _ ->
+                    AdmDeletedPostSnapshotDto(
+                        id = rs.getLong("id"),
+                        title = rs.getString("title"),
+                        content = rs.getString("content"),
+                        authorId = rs.getLong("author_id"),
+                        published = rs.getBoolean("published"),
+                        listed = rs.getBoolean("listed"),
+                    )
+                },
+                id,
+            ).firstOrNull()
+
+    fun findDeletedPagedByKw(
+        kw: String,
+        pageable: Pageable,
+    ): Page<AdmDeletedPostDto> {
+        val normalizedKw = kw.trim()
+        val hasKeyword = normalizedKw.isNotBlank()
+        val escapedKw = "%${escapeLike(normalizedKw.lowercase())}%"
+
+        val whereClause =
+            if (hasKeyword) {
+                """
+                p.deleted_at is not null
+                  and (
+                    lower(p.title) like ? escape '\'
+                    or lower(p.content) like ? escape '\'
+                  )
+                """.trimIndent()
+            } else {
+                "p.deleted_at is not null"
+            }
+
+        val listSql =
+            """
+            select
+              p.id,
+              p.title,
+              p.author_id,
+              coalesce(m.nickname, m.login_id, '알 수 없음') as author_name,
+              ma.str_value as author_profile_workspace,
+              ma.modified_at as author_profile_img_modified_at,
+              m.modified_at as author_modified_at,
+              m.deleted_at as author_deleted_at,
+              p.published,
+              p.listed,
+              p.created_at,
+              p.modified_at,
+              p.deleted_at
+            from post p
+            left join member m on m.id = p.author_id
+            left join member_attr ma on ma.subject_id = m.id and ma.name = ?
+            where $whereClause
+            order by p.deleted_at desc, p.id desc
+            limit ? offset ?
+            """.trimIndent()
+
+        val listParams =
+            mutableListOf<Any>().apply {
+                add(PUBLISHED_PROFILE_WORKSPACE_ATTR_NAME)
+                if (hasKeyword) {
+                    add(escapedKw)
+                    add(escapedKw)
+                }
+                add(pageable.pageSize)
+                add(pageable.offset)
+            }
+
+        val rows =
+            jdbcTemplate.query(
+                listSql,
+                { rs, _ ->
+                    AdmDeletedPostDto(
+                        id = rs.getLong("id"),
+                        title = rs.getString("title"),
+                        authorId = rs.getLong("author_id"),
+                        authorName = rs.getString("author_name"),
+                        authorProfileImgUrl =
+                            resolveAuthorProfileImgUrl(
+                                rawWorkspace = rs.getString("author_profile_workspace"),
+                                profileImgModifiedAt = rs.getTimestamp("author_profile_img_modified_at")?.toInstant(),
+                                authorModifiedAt = rs.getTimestamp("author_modified_at")?.toInstant(),
+                                authorDeleted = rs.getTimestamp("author_deleted_at") != null,
+                            ),
+                        published = rs.getBoolean("published"),
+                        listed = rs.getBoolean("listed"),
+                        createdAt = rs.getTimestamp("created_at").toInstant(),
+                        modifiedAt = rs.getTimestamp("modified_at").toInstant(),
+                        deletedAt = rs.getTimestamp("deleted_at").toInstant(),
+                    )
+                },
+                *listParams.toTypedArray(),
+            )
+
+        if (pageable.offset == 0L && rows.size < pageable.pageSize) {
+            return PageImpl(rows, pageable, rows.size.toLong())
+        }
+
+        return PageableExecutionUtils.getPage(rows, pageable) {
+            val countSql =
+                """
+                select count(*)
+                from post p
+                where $whereClause
+                """.trimIndent()
+            val countParams =
+                if (hasKeyword) {
+                    arrayOf<Any>(escapedKw, escapedKw)
+                } else {
+                    emptyArray()
+                }
+            jdbcTemplate.queryForObject(countSql, Long::class.java, *countParams) ?: 0L
+        }
+    }
+
+    fun softDeleteById(id: Long): Boolean {
+        val updatedRows =
+            jdbcTemplate.update(
+                """
+                update post
+                set deleted_at = now(),
+                    modified_at = now()
+                where id = ?
+                  and deleted_at is null
+                """.trimIndent(),
+                id,
+            )
+        return updatedRows > 0
+    }
+
+    fun restoreDeletedById(id: Long): Boolean {
+        val updatedRows =
+            jdbcTemplate.update(
+                """
+                update post
+                set deleted_at = null,
+                    modified_at = now()
+                where id = ?
+                  and deleted_at is not null
+                  and not exists (
+                      select 1
+                      from member_account_deletion mad
+                      where mad.member_id = post.author_id
+                  )
+                """.trimIndent(),
+                id,
+            )
+        return updatedRows > 0
+    }
+
+    fun hardDeleteDeletedById(id: Long): Boolean {
+        val markedRows =
+            jdbcTemplate.update(
+                """
+                update post
+                set likes_count_attr_id = null,
+                    hit_count_attr_id = null
+                where id = ?
+                  and deleted_at is not null
+                """.trimIndent(),
+                id,
+            )
+        if (markedRows <= 0) return false
+
+        jdbcTemplate.update("delete from post_like where post_id = ?", id)
+        jdbcTemplate.update("delete from post_attr where subject_id = ?", id)
+        jdbcTemplate.update("update post_write_request_idempotency set post_id = null where post_id = ?", id)
+
+        val deletedRows =
+            jdbcTemplate.update(
+                """
+                delete from post
+                where id = ?
+                  and deleted_at is not null
+                """.trimIndent(),
+                id,
+            )
+        return deletedRows > 0
+    }
+
+    private fun escapeLike(value: String): String {
+        var firstSpecial = -1
+        for (i in 0 until value.length) {
+            val ch = value[i]
+            if (ch == '\\' || ch == '%' || ch == '_') {
+                firstSpecial = i
+                break
+            }
+        }
+        if (firstSpecial < 0) return value
+        val sb = StringBuilder(value.length + 4)
+        sb.append(value, 0, firstSpecial)
+        for (i in firstSpecial until value.length) {
+            val ch = value[i]
+            if (ch == '\\' || ch == '%' || ch == '_') {
+                sb.append('\\')
+            }
+            sb.append(ch)
+        }
+        return sb.toString()
+    }
+
+    private fun resolveAuthorProfileImgUrl(
+        rawWorkspace: String?,
+        profileImgModifiedAt: java.time.Instant?,
+        authorModifiedAt: java.time.Instant?,
+        authorDeleted: Boolean,
+    ): String {
+        if (authorDeleted) return defaultProfileImageUrl()
+
+        val normalizedUrl =
+            requireNotNull(decodeMemberProfileWorkspaceContent(rawWorkspace)) {
+                "Active post author profile workspace is missing or invalid"
+            }.profileImageUrl
+        if (normalizedUrl.isBlank()) return defaultProfileImageUrl()
+
+        val version = profileImgModifiedAt ?: authorModifiedAt ?: return normalizedUrl
+        val separator = if (normalizedUrl.contains("?")) "&" else "?"
+        return "$normalizedUrl${separator}v=${version.toEpochMilli()}"
+    }
+}

@@ -1,0 +1,173 @@
+name: CI
+
+on:
+  pull_request:
+    branches:
+      - main
+    paths:
+      - "front"
+      - "front/**"
+      - "back/**"
+      - "contracts/public-api/**"
+      - "contracts/web/**"
+      - "tools/contracts/**"
+      - "tools/test/**"
+      - "tools/test/public-contract-manifest.test.mjs"
+      - "tools/test/sync-public-contract-workflow.test.mjs"
+      - "tools/test/setup-node-pin-parity.test.mjs"
+      - "tools/test/frontend-image-workflow.test.mjs"
+      - "tools/test/dockerfile-supply-chain.test.mjs"
+      - "tools/security/native-image-evidence.mjs"
+      - "deploy/**"
+      - "restore-privacy-gate.sh"
+      - "AGENTS.md"
+      - "CLAUDE.md"
+      - "GEMINI.md"
+      - "CURSOR.md"
+      - "COPILOT.md"
+      - "docs/**"
+      - ".githooks/**"
+      - "tools/guards/check-forbidden-tracked-files.sh"
+      - "tools/guards/check-hook-drift.sh"
+      - "tools/guards/check-r-migration-no-ddl.sh"
+      - "tools/guards/check-terraform-no-world-open-sg.sh"
+      - "tools/ci/**"
+      - "tools/repo-boundary/**"
+      - "tools/repo-split/**"
+      - "tools/guards/check-public-api-caddy-drift.sh"
+      - "tools/guards/public-api-read-caddy-paths.sot"
+      - "**/*.tf"
+      - "tools/test/check-forbidden-tracked-files.test.sh"
+      - "tools/test/materialize-compose-test-env.test.mjs"
+      - "tools/test/repository-standalone-verification.test.sh"
+      - ".github/workflows/**"
+      - "CHANGELOG.md"
+      - "README.md"
+      - "TODO.md"
+      - "LICENSE"
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: read
+  pull-requests: read
+
+jobs:
+  backend-ci:
+    permissions:
+      contents: read
+      issues: write
+      pull-requests: write
+    uses: ./.github/workflows/reusable-backend-quality.yml
+    secrets:
+      CI_DB_PASSWORD: ${{ secrets.CI_DB_PASSWORD }}
+      CI_REDIS_PASSWORD: ${{ secrets.CI_REDIS_PASSWORD }}
+
+  platform-standalone:
+    name: Platform Standalone
+    permissions:
+      contents: read
+    runs-on: ubuntu-latest
+    timeout-minutes: 150
+    steps:
+      - name: Checkout exact source SHA with history
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Set up Node.js 20
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: "20"
+
+      - name: Set up JDK 25
+        uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6 # v6.0.1
+        with:
+          distribution: temurin
+          java-version: "25"
+          cache: gradle
+
+      - name: Verify standalone harness contracts
+        run: bash tools/test/repository-standalone-verification.test.sh
+
+      - name: Verify repository quality config boundary
+        run: node --test tools/test/repository-quality-config-boundary.test.mjs
+
+      - name: Verify repository split baseline
+        run: bash tools/test/repository-split-baseline.test.sh
+
+      - name: Verify public contract sync workflow contract
+        run: node --test tools/test/sync-public-contract-workflow.test.mjs
+
+      - name: Verify setup-node pin parity contract
+        run: node --test tools/test/setup-node-pin-parity.test.mjs
+
+      - name: Verify front image workflow contract
+        run: node --test tools/test/frontend-image-workflow.test.mjs
+
+      - name: Verify native image evidence contract
+        run: node --test tools/test/native-image-evidence.test.mjs
+
+      - name: Verify contentHtml trust inventory contract
+        run: node --test tools/test/content-html-trust-inventory.test.mjs
+
+      - name: Verify hot-query telemetry capability contract
+        run: node --test tools/test/hot-query-telemetry-capability.test.mjs
+
+      - name: Verify hot-query telemetry aggregate contract
+        env:
+          HOT_QUERY_POSTGRES_INTEGRATION: "1"
+        run: node --test tools/test/hot-query-telemetry-aggregate.test.mjs
+
+      - name: Verify hot-query telemetry candidate contract
+        env:
+          HOT_QUERY_POSTGRES_INTEGRATION: "1"
+        run: node --test tools/test/hot-query-telemetry-candidate.test.mjs
+
+      - name: Verify Dockerfile supply-chain contracts
+        run: node --test tools/test/dockerfile-supply-chain.test.mjs
+
+      # front 서비스 모델은 compose 프로필 뒤에 있어서 기본 `compose config`가 렌더링하지 않는다.
+      # 프로필을 켠 모델을 CI에서 한 번도 평가하지 않으면 front 정의가 깨져도 배포 시점에야 안다.
+      - name: Verify homeserver compose renders with the front profile
+        shell: bash
+        run: |
+          set -euo pipefail
+          env_file="${RUNNER_TEMP}/compose-front.env"
+          node tools/repo-split/materialize-compose-test-env.mjs \
+            --source deploy/homeserver/.env.prod.example \
+            --output "${env_file}" \
+            --contract deploy/env/env.contract.json
+          bash deploy/homeserver/materialize_service_env.sh "${env_file}"
+          trap 'rm -f deploy/homeserver/.env.back.prod deploy/homeserver/.env.caddy.prod deploy/homeserver/.env.front.prod' EXIT
+
+          # 프로필이 꺼진 기본 모델은 front 없이도 평가돼야 한다 (병합 즉시 기존 배포가 깨지지 않는 조건).
+          docker compose --env-file "${env_file}" -f deploy/homeserver/docker-compose.prod.yml config >/dev/null
+          rendered="$(COMPOSE_PROFILES=front,runtime-split docker compose --env-file "${env_file}" \
+            -f deploy/homeserver/docker-compose.prod.yml config)"
+          for service in front_blue front_green; do
+            if ! grep -q "^  ${service}:$" <<<"${rendered}"; then
+              echo "::error::${service} did not render with the front profile enabled" >&2
+              exit 1
+            fi
+          done
+          echo "front profile renders front_blue and front_green"
+
+      - name: Run Platform archive standalone gate
+        id: standalone_gate
+        env:
+          STANDALONE_ARTIFACT_DIR: ${{ runner.temp }}/platform-standalone
+          TEST_DB_PASSWORD: ${{ secrets.CI_DB_PASSWORD }}
+          TEST_REDIS_PASSWORD: ${{ secrets.CI_REDIS_PASSWORD }}
+        run: bash tools/repo-split/verify-platform-standalone.sh "${GITHUB_SHA}"
+
+      - name: Upload Platform standalone evidence
+        if: always() && steps.standalone_gate.outcome != 'skipped'
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: platform-standalone-${{ github.sha }}
+          path: ${{ runner.temp }}/platform-standalone
+          if-no-files-found: error
+          retention-days: 14

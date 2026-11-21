@@ -1,0 +1,969 @@
+package com.back.boundedContexts.post.application.service
+
+import com.back.boundedContexts.post.application.port.input.PostPublicReadQueryUseCase
+import com.back.boundedContexts.post.application.port.input.PostUseCase
+import com.back.boundedContexts.post.domain.Post
+import com.back.boundedContexts.post.dto.AdjacentPostsDto
+import com.back.boundedContexts.post.dto.CursorFeedPageDto
+import com.back.boundedContexts.post.dto.FeedPostDto
+import com.back.boundedContexts.post.dto.FeedPostDtoMappingFailureType
+import com.back.boundedContexts.post.dto.PostWithContentDto
+import com.back.boundedContexts.post.dto.PublicPostDetailContentCacheDto
+import com.back.boundedContexts.post.dto.PublicPostDetailMetaCacheDto
+import com.back.boundedContexts.post.dto.PublicPostDetailSnapshotCacheDto
+import com.back.boundedContexts.post.dto.PublicPostsBootstrapDto
+import com.back.boundedContexts.post.dto.PublicSitemapPostsResBody
+import com.back.boundedContexts.post.dto.TagCountDto
+import com.back.global.exception.application.AppException
+import com.back.global.exception.application.ErrorCode
+import com.back.standard.dto.page.PageDto
+import com.back.standard.dto.page.PagedResult
+import com.back.standard.dto.post.type1.PostSearchSortType1
+import io.micrometer.core.instrument.MeterRegistry
+import io.micrometer.core.instrument.Tag
+import org.slf4j.LoggerFactory
+import org.springframework.beans.factory.annotation.Value
+import org.springframework.cache.Cache
+import org.springframework.cache.CacheManager
+import org.springframework.cache.annotation.Cacheable
+import org.springframework.stereotype.Service
+import org.springframework.transaction.annotation.Transactional
+import java.security.MessageDigest
+import java.time.Clock
+import java.util.HexFormat
+import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicLong
+import kotlin.math.max
+
+@Service
+class PostPublicReadQueryService(
+    private val postUseCase: PostUseCase,
+    private val postReadBulkheadService: PostReadBulkheadService,
+    private val cacheManager: CacheManager,
+    private val meterRegistry: MeterRegistry? = null,
+    @Value("\${custom.post.read.cursor-signing-secret:}") cursorSigningSecret: String,
+    @Value("\${custom.post.read.cursor-signing-key-version:}") cursorSigningKeyVersion: String,
+    @Value("\${custom.post.read.cursor-previous-signing-secret:}") cursorPreviousSigningSecret: String,
+    @Value("\${custom.post.read.cursor-previous-signing-key-version:}") cursorPreviousSigningKeyVersion: String,
+    @Value("\${custom.post.read.cursor-previous-expires-at-epoch-seconds:}") cursorPreviousExpiresAtEpochSeconds: String,
+    @Value("\${custom.post.read.detail-content-cache-max-chars:120000}") detailContentCacheMaxChars: Int,
+    @Value("\${custom.post.read.detail-snapshot-cache-max-chars:180000}") detailSnapshotCacheMaxChars: Int,
+    clock: Clock,
+) : PostPublicReadQueryUseCase {
+    private val logger = LoggerFactory.getLogger(PostPublicReadQueryService::class.java)
+    private val cursorCodec =
+        PostPublicCursorCodec(
+            cursorSigningSecret = cursorSigningSecret,
+            cursorSigningKeyVersion = cursorSigningKeyVersion,
+            cursorPreviousSigningSecret = cursorPreviousSigningSecret,
+            cursorPreviousSigningKeyVersion = cursorPreviousSigningKeyVersion,
+            cursorPreviousExpiresAtEpochSeconds = cursorPreviousExpiresAtEpochSeconds,
+            clock = clock,
+        )
+    private val detailContentCacheLimit = detailContentCacheMaxChars.coerceAtLeast(2_048)
+    private val detailSnapshotCacheLimit = detailSnapshotCacheMaxChars.coerceAtLeast(detailContentCacheLimit)
+    private val detailCacheLockRegistry = ConcurrentHashMap<Long, DetailCacheLock>()
+    private val cachePayloadMaxBytes = ConcurrentHashMap<String, AtomicLong>()
+    private val adjacentCacheKeys = java.util.concurrent.ConcurrentLinkedDeque<Long>()
+    private val adjacentCacheKeySet = ConcurrentHashMap.newKeySet<Long>()
+
+    @Transactional(readOnly = true)
+    @Cacheable(
+        cacheNames = [PostQueryCacheNames.FEED],
+        key = "'page=' + #page + ':size=' + #pageSize + ':sort=' + #sort.name()",
+        sync = true,
+    )
+    override fun getPublicFeed(
+        page: Int,
+        pageSize: Int,
+        sort: PostSearchSortType1,
+    ): PageDto<FeedPostDto> =
+        runReadQuery("feed", "page=$page size=$pageSize sort=${sort.name}") {
+            postReadBulkheadService.withFeedPermit {
+                toFeedPostDtoPage(
+                    postUseCase.findPagedByKw("", sort, page, pageSize),
+                )
+            }
+        }
+
+    @Transactional(readOnly = true)
+    @Cacheable(
+        cacheNames = [PostQueryCacheNames.FEED_CURSOR_FIRST],
+        key = "'size=' + #pageSize + ':sort=' + #sort.name()",
+        condition =
+            "T(com.back.boundedContexts.post.application.service.PostPublicReadQueryService)" +
+                ".isFirstCursorRequest(#cursor)",
+        sync = true,
+    )
+    override fun getPublicFeedByCursor(
+        cursor: String?,
+        pageSize: Int,
+        sort: PostSearchSortType1,
+    ): CursorFeedPageDto =
+        runReadQuery(
+            "feed-cursor",
+            "pageSize=$pageSize sort=${sort.name} cursorPresent=${!cursor.isNullOrBlank()}",
+        ) {
+            postReadBulkheadService.withFeedPermit {
+                val safeSort = cursorCodec.requireCursorSort(sort)
+                val safePageSize = pageSize.coerceIn(1, MAX_CURSOR_PAGE_SIZE)
+                val parsedCursor = cursorCodec.parseCursor(cursor, safeSort)
+                val rows =
+                    postUseCase.findPublicByCursor(
+                        cursorSortValue = parsedCursor?.sortValue,
+                        cursorId = parsedCursor?.id,
+                        limit = safePageSize + 2,
+                        sort = safeSort,
+                    )
+                toCursorFeedPageDto(rows, safePageSize, safeSort)
+            }
+        }
+
+    @Transactional(readOnly = true)
+    @Cacheable(
+        cacheNames = [PostQueryCacheNames.EXPLORE],
+        key =
+            "'page=' + #page + ':size=' + #pageSize + ':sort=' + #sort.name()" +
+                " + ':kw=' + T(com.back.boundedContexts.post.application.service.PostPublicReadQueryService).toCacheKeyToken(#kw)" +
+                " + ':tag=' + T(com.back.boundedContexts.post.application.service.PostPublicReadQueryService).toCacheKeyToken(#tag)",
+        condition =
+            "!T(com.back.boundedContexts.post.application.service.PostPublicReadQueryService)" +
+                ".shouldBypassExploreCache(#page, #kw, #tag)",
+        sync = true,
+    )
+    override fun getPublicExplore(
+        page: Int,
+        pageSize: Int,
+        kw: String,
+        tag: String,
+        sort: PostSearchSortType1,
+    ): PageDto<FeedPostDto> =
+        runReadQuery(
+            "explore",
+            "page=$page size=$pageSize sort=${sort.name} kw=${kw.trim().take(80)} tag=${tag.trim().take(80)}",
+        ) {
+            postReadBulkheadService.withExplorePermit {
+                val normalizedKw = kw.trim()
+                val normalizedTag = tag.trim()
+                val postPage =
+                    if (normalizedTag.isBlank()) {
+                        if (normalizedKw.isBlank() && sort == PostSearchSortType1.CREATED_AT) {
+                            postUseCase.findRecommendedExplorePage(page, pageSize)
+                        } else {
+                            postUseCase.findPagedByKw(normalizedKw, sort, page, pageSize)
+                        }
+                    } else {
+                        postUseCase.findPagedByKwAndTag(normalizedKw, normalizedTag, sort, page, pageSize)
+                    }
+                toFeedPostDtoPage(postPage)
+            }
+        }
+
+    @Transactional(readOnly = true)
+    @Cacheable(
+        cacheNames = [PostQueryCacheNames.EXPLORE_CURSOR_FIRST],
+        key =
+            "'size=' + #pageSize + ':sort=' + #sort.name()" +
+                " + ':tag=' + T(com.back.boundedContexts.post.application.service.PostPublicReadQueryService).toCacheKeyToken(#tag)",
+        condition =
+            "T(com.back.boundedContexts.post.application.service.PostPublicReadQueryService)" +
+                ".isFirstCursorRequest(#cursor) && #tag.trim().length() > 0",
+        sync = true,
+    )
+    override fun getPublicExploreByCursor(
+        cursor: String?,
+        pageSize: Int,
+        tag: String,
+        sort: PostSearchSortType1,
+    ): CursorFeedPageDto =
+        runReadQuery(
+            "explore-cursor",
+            "pageSize=$pageSize sort=${sort.name} tag=${tag.take(80)} cursorPresent=${!cursor.isNullOrBlank()}",
+        ) {
+            postReadBulkheadService.withExplorePermit {
+                val safeSort = cursorCodec.requireCursorSort(sort)
+                val safePageSize = pageSize.coerceIn(1, MAX_CURSOR_PAGE_SIZE)
+                val normalizedTag = tag.trim()
+                if (normalizedTag.isBlank()) {
+                    throw AppException(ErrorCode.BAD_REQUEST, "태그 커서 탐색에는 tag 파라미터가 필요합니다.")
+                }
+                val parsedCursor = cursorCodec.parseCursor(cursor, safeSort)
+                val rows =
+                    postUseCase.findPublicByTagCursor(
+                        tag = normalizedTag,
+                        cursorSortValue = parsedCursor?.sortValue,
+                        cursorId = parsedCursor?.id,
+                        limit = safePageSize + 2,
+                        sort = safeSort,
+                    )
+                toCursorFeedPageDto(rows, safePageSize, safeSort)
+            }
+        }
+
+    @Transactional(readOnly = true)
+    @Cacheable(
+        cacheNames = [PostQueryCacheNames.SEARCH],
+        key =
+            "'page=' + #page + ':size=' + #pageSize + ':sort=' + #sort.name()" +
+                " + ':kw=' + T(com.back.boundedContexts.post.application.service.PostPublicReadQueryService).toCacheKeyToken(#kw)",
+        condition =
+            "#kw.trim().length() > 0 && !T(com.back.boundedContexts.post.application.service.PostPublicReadQueryService)" +
+                ".shouldBypassSearchCache(#page, #kw)",
+        sync = true,
+    )
+    override fun getPublicSearch(
+        page: Int,
+        pageSize: Int,
+        kw: String,
+        sort: PostSearchSortType1,
+    ): PageDto<FeedPostDto> =
+        runReadQuery(
+            "search",
+            "page=$page size=$pageSize sort=${sort.name} kw=${kw.trim().take(80)}",
+        ) {
+            postReadBulkheadService.withSearchPermit {
+                if (isSearchNegativeCached(page, pageSize, sort, kw)) {
+                    return@withSearchPermit PageDto(PagedResult(emptyList(), page, pageSize, 0))
+                }
+                val postPage = postUseCase.findPagedByKw(kw, sort, page, pageSize)
+                val pageDto = toFeedPostDtoPage(postPage)
+                if (shouldCacheSearchNegative(page, kw) && postPage.content.isEmpty()) {
+                    val written =
+                        recordCacheWriteFailureSafe(PostQueryCacheNames.SEARCH_NEGATIVE, "put") {
+                            cacheManager
+                                .getCache(PostQueryCacheNames.SEARCH_NEGATIVE)
+                                ?.put(buildSearchCacheKey(page, pageSize, sort, kw), true)
+                        }
+                    if (written) recordCacheResult(PostQueryCacheNames.SEARCH_NEGATIVE, "put")
+                } else if (pageDto.content.isNotEmpty()) {
+                    recordCacheWriteFailureSafe(PostQueryCacheNames.SEARCH_NEGATIVE, "evict") {
+                        cacheManager
+                            .getCache(PostQueryCacheNames.SEARCH_NEGATIVE)
+                            ?.evict(buildSearchCacheKey(page, pageSize, sort, kw))
+                    }
+                }
+                pageDto
+            }
+        }
+
+    @Transactional(readOnly = true)
+    override fun getPublicPostDetail(id: Long): PostWithContentDto =
+        runReadQuery("detail", "id=$id") {
+            postReadBulkheadService.withDetailPermit {
+                if (isDetailNegativeCached(id)) {
+                    throw AppException(ErrorCode.NOT_FOUND, "존재하지 않는 글입니다.")
+                }
+                // 캐시의 과거 공개 상태가 현재 접근 권한을 대신하지 않도록 먼저 확인한다.
+                if (!postUseCase.isPublicDetailReadable(id)) {
+                    markDetailNegativeCache(id)
+                    throw AppException(ErrorCode.NOT_FOUND, "존재하지 않는 글입니다.")
+                }
+                val cachedSnapshot = readCachedPublicPostDetailSnapshot(id)
+                if (cachedSnapshot != null) {
+                    return@withDetailPermit cachedSnapshot.toPostWithContentDto()
+                }
+
+                withDetailCacheLock(id) {
+                    val snapshotCache = cacheManager.getCache(PostQueryCacheNames.DETAIL_PUBLIC_SNAPSHOT)
+                    val doubleChecked = snapshotCache?.get(id, PublicPostDetailSnapshotCacheDto::class.java)
+                    if (doubleChecked != null) {
+                        recordCacheResult(PostQueryCacheNames.DETAIL_PUBLIC_SNAPSHOT, "hit")
+                        return@withDetailCacheLock doubleChecked.toPostWithContentDto()
+                    }
+
+                    val (meta, loadedPost) = getOrLoadPublicPostDetailMeta(id)
+                    val content = getOrLoadPublicPostDetailContent(id, loadedPost)
+                    val merged = meta.merge(content)
+                    cachePublicPostDetailSnapshot(snapshotCache, id, merged)
+                    merged
+                }
+            }
+        }
+
+    private fun cachePublicPostDetailSnapshot(
+        snapshotCache: Cache?,
+        id: Long,
+        detail: PostWithContentDto,
+    ) {
+        if (!shouldCacheDetailSnapshot(detail)) {
+            recordCacheResult(PostQueryCacheNames.DETAIL_PUBLIC_SNAPSHOT, "skip_large")
+            return
+        }
+        val written =
+            recordCacheWriteFailureSafe(PostQueryCacheNames.DETAIL_PUBLIC_SNAPSHOT, "put") {
+                snapshotCache?.put(id, PublicPostDetailSnapshotCacheDto.from(detail))
+            }
+        if (!written) return
+        recordCacheResult(PostQueryCacheNames.DETAIL_PUBLIC_SNAPSHOT, "put")
+        recordCachePayloadSize(
+            PostQueryCacheNames.DETAIL_PUBLIC_SNAPSHOT,
+            estimateDetailSnapshotPayloadSize(detail),
+        )
+    }
+
+    @Transactional(readOnly = true)
+    override fun getPublicRelatedByAuthor(
+        authorId: Long,
+        excludePostId: Long?,
+        limit: Int,
+    ): List<FeedPostDto> =
+        runReadQuery(
+            "related-author",
+            "authorId=$authorId excludePostId=${excludePostId ?: "_"} limit=$limit",
+        ) {
+            postReadBulkheadService.withExplorePermit {
+                postUseCase
+                    .findPublicByAuthorExceptPost(
+                        authorId = authorId,
+                        excludePostId = excludePostId,
+                        limit = limit.coerceIn(1, 12),
+                    ).mapNotNull(::toFeedPostDto)
+            }
+        }
+
+    @Transactional(readOnly = true)
+    @Cacheable(cacheNames = [PostQueryCacheNames.TAGS], key = "'public'", sync = true)
+    override fun getPublicTagCounts(): List<TagCountDto> =
+        runReadQuery("tags", "public=true") {
+            postReadBulkheadService.withTagsPermit {
+                postUseCase.getPublicTagCounts()
+            }
+        }
+
+    @Transactional(readOnly = true)
+    @Cacheable(
+        cacheNames = [PostQueryCacheNames.BOOTSTRAP],
+        key =
+            "T(com.back.boundedContexts.post.application.service.PostPublicReadQueryService)" +
+                ".buildBootstrapCacheKey(#pageSize, #sort, #tag)",
+        sync = true,
+    )
+    override fun getPublicBootstrap(
+        tag: String,
+        pageSize: Int,
+        sort: PostSearchSortType1,
+    ): PublicPostsBootstrapDto =
+        runReadQuery(
+            "bootstrap",
+            "pageSize=$pageSize sort=${sort.name} tag=${tag.take(80)}",
+        ) {
+            val normalizedTag = tag.trim()
+            val safeSort = cursorCodec.requireCursorSort(sort)
+            val safePageSize = pageSize.coerceIn(1, MAX_CURSOR_PAGE_SIZE)
+            val feed =
+                postReadBulkheadService.withFeedPermit {
+                    val rows =
+                        if (normalizedTag.isBlank()) {
+                            postUseCase.findPublicByCursor(
+                                cursorSortValue = null,
+                                cursorId = null,
+                                limit = safePageSize + 2,
+                                sort = safeSort,
+                            )
+                        } else {
+                            postUseCase.findPublicByTagCursor(
+                                tag = normalizedTag,
+                                cursorSortValue = null,
+                                cursorId = null,
+                                limit = safePageSize + 2,
+                                sort = safeSort,
+                            )
+                        }
+                    toCursorFeedPageDto(rows, safePageSize, safeSort)
+                }
+            val tags =
+                postReadBulkheadService.withTagsPermit {
+                    postUseCase.getPublicTagCounts()
+                }
+            PublicPostsBootstrapDto(feed = feed, tags = tags)
+        }
+
+    @Transactional(readOnly = true)
+    @Cacheable(
+        cacheNames = [PostQueryCacheNames.SITEMAP],
+        key = "#limit",
+        sync = true,
+    )
+    override fun getPublicSitemap(limit: Int): PublicSitemapPostsResBody =
+        runReadQuery("sitemap", "limit=$limit") {
+            postReadBulkheadService.withFeedPermit {
+                PublicSitemapPostsResBody(items = postUseCase.getPublicSitemapItems(limit))
+            }
+        }
+
+    @Transactional(readOnly = true)
+    override fun getAdjacentPosts(id: Long): AdjacentPostsDto =
+        runReadQuery("adjacent", "id=$id") {
+            postReadBulkheadService.withExplorePermit {
+                if (isDetailNegativeCached(id)) {
+                    throw AppException(ErrorCode.NOT_FOUND, "존재하지 않는 글입니다.")
+                }
+                if (!postUseCase.isPublicDetailReadable(id)) {
+                    markDetailNegativeCache(id)
+                    throw AppException(ErrorCode.NOT_FOUND, "존재하지 않는 글입니다.")
+                }
+
+                val cached = readCachedAdjacentPosts(id)
+                if (cached != null) {
+                    return@withExplorePermit cached
+                }
+
+                val (meta, _) = getOrLoadPublicPostDetailMeta(id)
+                if (!meta.listed) {
+                    val empty = AdjacentPostsDto(null, null)
+                    cacheAdjacentPosts(id, empty)
+                    return@withExplorePermit empty
+                }
+
+                val (prevPost, nextPost) = postUseCase.findAdjacentPublicPosts(meta.createdAt, meta.id)
+                val result =
+                    AdjacentPostsDto(
+                        previousPost = prevPost?.let(::toFeedPostDto),
+                        nextPost = nextPost?.let(::toFeedPostDto),
+                    )
+                cacheAdjacentPosts(id, result)
+                result
+            }
+        }
+
+    private fun readCachedAdjacentPosts(id: Long): AdjacentPostsDto? {
+        val cache = cacheManager.getCache(PostQueryCacheNames.ADJACENT_POSTS) ?: return null
+        val cached = cache.get(id, AdjacentPostsDto::class.java)
+        if (cached != null) {
+            recordCacheResult(PostQueryCacheNames.ADJACENT_POSTS, "hit")
+            return cached
+        }
+        recordCacheResult(PostQueryCacheNames.ADJACENT_POSTS, "miss")
+        return null
+    }
+
+    private fun cacheAdjacentPosts(
+        id: Long,
+        dto: AdjacentPostsDto,
+    ) {
+        val cache = cacheManager.getCache(PostQueryCacheNames.ADJACENT_POSTS) ?: return
+        val written =
+            recordCacheWriteFailureSafe(PostQueryCacheNames.ADJACENT_POSTS, "put") {
+                cache.put(id, dto)
+            }
+        if (!written) return
+        recordCacheResult(PostQueryCacheNames.ADJACENT_POSTS, "put")
+        recordCachePayloadSize(PostQueryCacheNames.ADJACENT_POSTS, estimateAdjacentPayloadSize(dto))
+
+        if (adjacentCacheKeySet.add(id)) {
+            adjacentCacheKeys.addLast(id)
+            while (adjacentCacheKeySet.size > MAX_ADJACENT_CACHE_ENTRIES) {
+                val oldestId = adjacentCacheKeys.pollFirst() ?: break
+                adjacentCacheKeySet.remove(oldestId)
+                cache.evict(oldestId)
+            }
+        }
+    }
+
+    private fun estimateAdjacentPayloadSize(dto: AdjacentPostsDto): Int {
+        var size = 64
+        dto.previousPost?.let { size += it.title.length + it.summary.length + 128 }
+        dto.nextPost?.let { size += it.title.length + it.summary.length + 128 }
+        return size
+    }
+
+    private fun <T> runReadQuery(
+        endpoint: String,
+        detail: String,
+        block: () -> T,
+    ): T {
+        val startedAt = System.nanoTime()
+        val metricEndpoint = endpoint.trim().ifBlank { "unknown" }.take(40)
+        try {
+            val result = block()
+            meterRegistry
+                ?.timer("post.read.endpoint.duration", "endpoint", metricEndpoint, "status", "success")
+                ?.record(System.nanoTime() - startedAt, TimeUnit.NANOSECONDS)
+            return result
+        } catch (exception: Exception) {
+            val safeEndpoint =
+                endpoint
+                    .replace('\r', ' ')
+                    .replace('\n', ' ')
+                    .replace('\t', ' ')
+                    .trim()
+                    .take(MAX_LOG_FIELD_LENGTH)
+            val safeDetail =
+                detail
+                    .replace('\r', ' ')
+                    .replace('\n', ' ')
+                    .replace('\t', ' ')
+                    .trim()
+                    .take(MAX_LOG_FIELD_LENGTH)
+            logger.error(
+                "post_public_read_failed endpoint={} detail={} exception={}",
+                safeEndpoint,
+                safeDetail,
+                exception::class.java.simpleName,
+                exception,
+            )
+            meterRegistry
+                ?.timer("post.read.endpoint.duration", "endpoint", metricEndpoint, "status", "failed")
+                ?.record(System.nanoTime() - startedAt, TimeUnit.NANOSECONDS)
+            throw exception
+        }
+    }
+
+    private fun isSearchNegativeCached(
+        page: Int,
+        pageSize: Int,
+        sort: PostSearchSortType1,
+        kw: String,
+    ): Boolean {
+        if (!shouldCacheSearchNegative(page, kw)) return false
+        val cacheKey = buildSearchCacheKey(page, pageSize, sort, kw)
+        val cached =
+            readNegativeCacheFlag(
+                cacheName = PostQueryCacheNames.SEARCH_NEGATIVE,
+                cacheKey = cacheKey,
+            )
+        recordCacheResult(PostQueryCacheNames.SEARCH_NEGATIVE, if (cached) "hit" else "miss")
+        return cached
+    }
+
+    private fun shouldCacheSearchNegative(
+        page: Int,
+        kw: String,
+    ): Boolean = page == 1 && !shouldBypassSearchCache(page, kw)
+
+    private fun buildSearchCacheKey(
+        page: Int,
+        pageSize: Int,
+        sort: PostSearchSortType1,
+        kw: String,
+    ): String = "page=$page:size=$pageSize:sort=${sort.name}:kw=${toCacheKeyToken(kw)}"
+
+    private fun isDetailNegativeCached(id: Long): Boolean {
+        val cached =
+            readNegativeCacheFlag(
+                cacheName = PostQueryCacheNames.DETAIL_PUBLIC_NEGATIVE,
+                cacheKey = id,
+            )
+        recordCacheResult(PostQueryCacheNames.DETAIL_PUBLIC_NEGATIVE, if (cached) "hit" else "miss")
+        return cached
+    }
+
+    private fun markDetailNegativeCache(id: Long) {
+        val written =
+            recordCacheWriteFailureSafe(PostQueryCacheNames.DETAIL_PUBLIC_NEGATIVE, "put") {
+                cacheManager
+                    .getCache(PostQueryCacheNames.DETAIL_PUBLIC_NEGATIVE)
+                    ?.put(id, true)
+            }
+        if (written) {
+            recordCacheResult(PostQueryCacheNames.DETAIL_PUBLIC_NEGATIVE, "put")
+        }
+    }
+
+    private fun recordCacheWriteFailureSafe(
+        cacheName: String,
+        operation: String,
+        write: () -> Unit,
+    ): Boolean {
+        try {
+            write()
+            return true
+        } catch (exception: RuntimeException) {
+            meterRegistry
+                ?.counter("post.read.cache.write.failure", "cache", cacheName, "operation", operation)
+                ?.increment()
+            logger.warn("Cache write failed (cache={}, operation={})", cacheName, operation, exception)
+            return false
+        }
+    }
+
+    /**
+     * 음수 캐시는 "true" 센티널만 유효값으로 인정한다.
+     * 배포/직렬화 정책 전환으로 타입이 달라도 500으로 전파하지 않고 miss+evict로 복구한다.
+     */
+    private fun readNegativeCacheFlag(
+        cacheName: String,
+        cacheKey: Any,
+    ): Boolean {
+        val cache = cacheManager.getCache(cacheName) ?: return false
+        return try {
+            val rawValue = cache.get(cacheKey)?.get() ?: return false
+            if (rawValue.toBooleanSentinel() == true) {
+                true
+            } else {
+                logger.warn(
+                    "negative_cache_value_mismatch cache={} key={} valueType={} value={} -> evict",
+                    cacheName,
+                    sanitizeLogField(cacheKey.toString(), MAX_CACHE_KEY_LOG_LENGTH),
+                    rawValue::class.java.name,
+                    sanitizeLogField(rawValue.toString(), MAX_CACHE_VALUE_LOG_LENGTH),
+                )
+                cache.evict(cacheKey)
+                recordCacheResult(cacheName, "evict_mismatch")
+                false
+            }
+        } catch (exception: RuntimeException) {
+            logger.warn(
+                "negative_cache_read_failed cache={} key={} -> fallback miss",
+                cacheName,
+                sanitizeLogField(cacheKey.toString(), MAX_CACHE_KEY_LOG_LENGTH),
+                exception,
+            )
+            runCatching { cache.evict(cacheKey) }
+            recordCacheResult(cacheName, "evict_error")
+            false
+        }
+    }
+
+    private fun Any.toBooleanSentinel(): Boolean? =
+        when (this) {
+            is Boolean -> this
+            is String ->
+                when (this.trim().lowercase()) {
+                    "true",
+                    "1",
+                    "yes",
+                    "y",
+                    "on",
+                    -> true
+                    "false",
+                    "0",
+                    "no",
+                    "n",
+                    "off",
+                    -> false
+                    else -> null
+                }
+            is Number -> this.toInt() != 0
+            else -> null
+        }
+
+    private fun sanitizeLogField(
+        value: String,
+        maxLength: Int,
+    ): String =
+        value
+            .replace('\r', ' ')
+            .replace('\n', ' ')
+            .replace('\t', ' ')
+            .trim()
+            .take(maxLength)
+
+    private fun getOrLoadPublicPostDetailContent(
+        id: Long,
+        loadedPost: Post?,
+    ): PublicPostDetailContentCacheDto {
+        val contentCache = cacheManager.getCache(PostQueryCacheNames.DETAIL_PUBLIC_CONTENT)
+        val cached = contentCache?.get(id, PublicPostDetailContentCacheDto::class.java)
+        if (cached != null) {
+            recordCacheResult(PostQueryCacheNames.DETAIL_PUBLIC_CONTENT, "hit")
+            return cached
+        }
+        recordCacheResult(PostQueryCacheNames.DETAIL_PUBLIC_CONTENT, "miss")
+
+        val loaded =
+            if (loadedPost != null) {
+                PublicPostDetailContentCacheDto.from(loadedPost)
+            } else {
+                postUseCase.findPublicDetailContentById(id)
+                    ?: run {
+                        markDetailNegativeCache(id)
+                        throw AppException(ErrorCode.NOT_FOUND, "존재하지 않는 글입니다.")
+                    }
+            }
+
+        if (shouldCacheDetailContent(loaded)) {
+            val written =
+                recordCacheWriteFailureSafe(PostQueryCacheNames.DETAIL_PUBLIC_CONTENT, "put") {
+                    contentCache?.put(id, loaded)
+                }
+            if (written) {
+                recordCacheResult(PostQueryCacheNames.DETAIL_PUBLIC_CONTENT, "put")
+                recordCachePayloadSize(
+                    PostQueryCacheNames.DETAIL_PUBLIC_CONTENT,
+                    loaded.content.length + (loaded.contentHtml?.length ?: 0),
+                )
+            }
+        } else {
+            recordCacheResult(PostQueryCacheNames.DETAIL_PUBLIC_CONTENT, "skip_large")
+        }
+        return loaded
+    }
+
+    private fun shouldCacheDetailContent(content: PublicPostDetailContentCacheDto): Boolean {
+        val plainLength = content.content.length
+        val htmlLength = content.contentHtml?.length ?: 0
+        val totalLength = plainLength + htmlLength
+        return totalLength <= detailContentCacheLimit
+    }
+
+    private fun readCachedPublicPostDetailSnapshot(id: Long): PublicPostDetailSnapshotCacheDto? {
+        val cached =
+            cacheManager
+                .getCache(PostQueryCacheNames.DETAIL_PUBLIC_SNAPSHOT)
+                ?.get(id, PublicPostDetailSnapshotCacheDto::class.java)
+        if (cached != null) {
+            recordCacheResult(PostQueryCacheNames.DETAIL_PUBLIC_SNAPSHOT, "hit")
+            return cached
+        }
+        recordCacheResult(PostQueryCacheNames.DETAIL_PUBLIC_SNAPSHOT, "miss")
+        return null
+    }
+
+    private fun getOrLoadPublicPostDetailMeta(id: Long): Pair<PublicPostDetailMetaCacheDto, Post?> {
+        val metaCache = cacheManager.getCache(PostQueryCacheNames.DETAIL_PUBLIC_META)
+        val cached = metaCache?.get(id, PublicPostDetailMetaCacheDto::class.java)
+        if (cached != null) {
+            recordCacheResult(PostQueryCacheNames.DETAIL_PUBLIC_META, "hit")
+            return cached to null
+        }
+        recordCacheResult(PostQueryCacheNames.DETAIL_PUBLIC_META, "miss")
+
+        val post =
+            postUseCase.findPublicDetailById(id)
+                ?: run {
+                    markDetailNegativeCache(id)
+                    throw AppException(ErrorCode.NOT_FOUND, "존재하지 않는 글입니다.")
+                }
+        post.checkActorCanRead(null)
+        val loaded = PublicPostDetailMetaCacheDto.from(post)
+        val written =
+            recordCacheWriteFailureSafe(PostQueryCacheNames.DETAIL_PUBLIC_META, "put") {
+                metaCache?.put(id, loaded)
+            }
+        if (written) {
+            recordCacheResult(PostQueryCacheNames.DETAIL_PUBLIC_META, "put")
+            recordCachePayloadSize(PostQueryCacheNames.DETAIL_PUBLIC_META, estimateDetailMetaPayloadSize(loaded))
+        }
+        return loaded to post
+    }
+
+    private class DetailCacheLock {
+        @JvmField
+        var waiters: Int = 0
+    }
+
+    private fun <T> withDetailCacheLock(
+        id: Long,
+        supplier: () -> T,
+    ): T {
+        val lock =
+            detailCacheLockRegistry.compute(id) { _, existing ->
+                (existing ?: DetailCacheLock()).also { it.waiters += 1 }
+            }!!
+        return try {
+            synchronized(lock) {
+                supplier()
+            }
+        } finally {
+            detailCacheLockRegistry.computeIfPresent(id) { _, current ->
+                current.waiters -= 1
+                if (current.waiters <= 0) null else current
+            }
+        }
+    }
+
+    private fun recordCacheResult(
+        cacheName: String,
+        result: String,
+    ) {
+        meterRegistry?.counter("post.read.cache.result", "cache", cacheName, "result", result)?.increment()
+    }
+
+    private fun recordCachePayloadSize(
+        cacheName: String,
+        bytes: Int,
+    ) {
+        val safeBytes = bytes.coerceAtLeast(0)
+        meterRegistry?.summary("post.read.cache.payload.bytes", "cache", cacheName)?.record(safeBytes.toDouble())
+        val maxRef =
+            cachePayloadMaxBytes.computeIfAbsent(cacheName) {
+                val ref = AtomicLong(0)
+                val tags = listOf(Tag.of("cache", cacheName))
+                meterRegistry?.gauge(
+                    "post.read.cache.payload.max.bytes",
+                    tags,
+                    ref,
+                )
+                ref
+            }
+        maxRef.accumulateAndGet(safeBytes.toLong()) { prev, current -> max(prev, current) }
+    }
+
+    private fun estimateDetailMetaPayloadSize(meta: PublicPostDetailMetaCacheDto): Int =
+        meta.title.length +
+            meta.authorName.length +
+            meta.authorUsername.length +
+            meta.authorProfileImageUrl.length +
+            meta.authorProfileImageDirectUrl.length +
+            128
+
+    private fun shouldCacheDetailSnapshot(detail: PostWithContentDto): Boolean =
+        estimateDetailSnapshotPayloadSize(detail) <= detailSnapshotCacheLimit
+
+    private fun estimateDetailSnapshotPayloadSize(detail: PostWithContentDto): Int =
+        detail.title.length +
+            detail.authorName.length +
+            detail.authorUsername.length +
+            detail.authorProfileImageUrl.length +
+            detail.authorProfileImageDirectUrl.length +
+            detail.content.length +
+            (detail.contentHtml?.length ?: 0) +
+            256
+
+    private fun toFeedPostDtoPage(postPage: PagedResult<Post>): PageDto<FeedPostDto> =
+        PageDto(
+            PagedResult(
+                content = postPage.content.mapNotNull(::toFeedPostDto),
+                page = postPage.page,
+                pageSize = postPage.pageSize,
+                totalElements = postPage.totalElements,
+            ),
+        )
+
+    private fun toCursorFeedPageDto(
+        rows: List<Post>,
+        pageSize: Int,
+        sort: PostSearchSortType1,
+    ): CursorFeedPageDto {
+        if (rows.isEmpty()) {
+            return CursorFeedPageDto(
+                content = emptyList(),
+                pageSize = pageSize,
+                hasNext = false,
+                nextCursor = null,
+            )
+        }
+
+        val cursorRows =
+            rows.mapNotNull { post ->
+                cursorCodec.toCursorPostRow(post, sort) { postId, exception ->
+                    recordFeedPostDtoMappingFailure(postId, FeedPostDtoMappingFailureType.CORE, exception)
+                }
+            }
+        if (cursorRows.isEmpty()) {
+            return CursorFeedPageDto(
+                content = emptyList(),
+                pageSize = pageSize,
+                hasNext = false,
+                nextCursor = null,
+            )
+        }
+
+        val hasNext = cursorRows.size > pageSize
+        val currentRows = cursorRows.take(pageSize)
+        val content = currentRows.mapNotNull { row -> toFeedPostDto(row.post) }
+        val nextCursor =
+            if (hasNext) {
+                currentRows.lastOrNull()?.let { cursorCodec.encodeCursor(it.sortValue, it.post.id, sort) }
+            } else {
+                null
+            }
+
+        return CursorFeedPageDto(
+            content = content,
+            pageSize = pageSize,
+            hasNext = hasNext && nextCursor != null,
+            nextCursor = nextCursor,
+        )
+    }
+
+    private fun toFeedPostDto(post: Post): FeedPostDto? =
+        runCatching {
+            FeedPostDto.from(post, ::recordFeedPostDtoMappingFailure)
+        }.getOrElse { exception ->
+            recordFeedPostDtoMappingFailure(post.id, FeedPostDtoMappingFailureType.CORE, exception)
+            null
+        }
+
+    private fun recordFeedPostDtoMappingFailure(
+        postId: Long,
+        failureType: FeedPostDtoMappingFailureType,
+        exception: Throwable,
+    ) {
+        logger.warn(
+            "post_feed_dto_mapping_failed postId={} failureType={} exception={}",
+            postId,
+            failureType.metricTag,
+            exception::class.java.simpleName,
+            exception,
+        )
+        meterRegistry
+            ?.counter("post.feed.dto.mapping.failure", "failureType", failureType.metricTag)
+            ?.increment()
+    }
+
+    companion object {
+        const val MAX_ADJACENT_CACHE_ENTRIES = 1024
+        private val WHITESPACE_REGEX = Regex("\\s+")
+
+        @JvmStatic
+        fun normalizeCacheToken(raw: String): String =
+            raw
+                .trim()
+                .replace(WHITESPACE_REGEX, " ")
+                .lowercase()
+
+        @JvmStatic
+        fun toCacheKeyToken(raw: String): String {
+            val normalized = normalizeCacheToken(raw)
+            if (normalized.isBlank()) return "_"
+            if (normalized.length <= CACHE_KEY_DIRECT_MAX_LENGTH) return normalized
+            return "__h:${sha256Hex(normalized)}"
+        }
+
+        @JvmStatic
+        fun shouldBypassExploreCache(
+            page: Int,
+            kw: String,
+            tag: String,
+        ): Boolean {
+            val normalizedKw = normalizeCacheToken(kw)
+            val normalizedTag = normalizeCacheToken(tag)
+            return page > MAX_CACHEABLE_PAGE ||
+                normalizedKw.length > MAX_CACHEABLE_KW_LENGTH ||
+                normalizedTag.length > MAX_CACHEABLE_TAG_LENGTH ||
+                normalizedKw.length + normalizedTag.length > MAX_CACHEABLE_TOTAL_LENGTH
+        }
+
+        @JvmStatic
+        fun shouldBypassSearchCache(
+            page: Int,
+            kw: String,
+        ): Boolean {
+            val normalizedKw = normalizeCacheToken(kw)
+            if (normalizedKw.isBlank()) return true
+            return page > MAX_CACHEABLE_PAGE || normalizedKw.length > MAX_CACHEABLE_KW_LENGTH
+        }
+
+        @JvmStatic
+        fun isFirstCursorRequest(cursor: String?): Boolean = cursor.isNullOrBlank()
+
+        @JvmStatic
+        fun buildBootstrapCacheKey(
+            pageSize: Int,
+            sort: PostSearchSortType1,
+            tag: String,
+        ): String = "size=$pageSize:sort=${sort.name}:tag=${toCacheKeyToken(tag)}"
+
+        private fun sha256Hex(value: String): String {
+            val digest =
+                MessageDigest
+                    .getInstance("SHA-256")
+                    .digest(value.toByteArray(Charsets.UTF_8))
+            return HexFormat.of().formatHex(digest, 0, CACHE_KEY_HASH_BYTES)
+        }
+
+        private const val CACHE_KEY_DIRECT_MAX_LENGTH = 24
+        private const val CACHE_KEY_HASH_BYTES = 12
+        private const val MAX_CACHEABLE_PAGE = 10
+        private const val MAX_CACHEABLE_KW_LENGTH = 24
+        private const val MAX_CACHEABLE_TAG_LENGTH = 24
+        private const val MAX_CACHEABLE_TOTAL_LENGTH = 32
+        private const val MAX_LOG_FIELD_LENGTH = 240
+        private const val MAX_CACHE_KEY_LOG_LENGTH = 120
+        private const val MAX_CACHE_VALUE_LOG_LENGTH = 80
+        private const val MAX_CURSOR_PAGE_SIZE = 30
+    }
+}

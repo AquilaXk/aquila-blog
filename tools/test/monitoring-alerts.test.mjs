@@ -1,0 +1,592 @@
+import assert from "node:assert/strict"
+import { spawnSync } from "node:child_process"
+import { readFileSync } from "node:fs"
+import path from "node:path"
+import test from "node:test"
+
+const repoRoot = path.resolve(import.meta.dirname, "../..")
+const composePath = path.join(repoRoot, "deploy/homeserver/docker-compose.prod.yml")
+const contractPath = path.join(repoRoot, "deploy/env/env.contract.json")
+const workflowPath = path.join(repoRoot, ".github/workflows/deploy.yml")
+const prometheusPath = path.join(repoRoot, "deploy/homeserver/monitoring/prometheus.yml")
+const caddyPath = path.join(repoRoot, "deploy/homeserver/caddy/Caddyfile")
+const alertmanagerPath = path.join(repoRoot, "deploy/homeserver/monitoring/alertmanager.yml")
+const taskAlertsPath = path.join(repoRoot, "deploy/homeserver/monitoring/rules/task-alerts.yml")
+const publicEdgeDashboardPath = path.join(repoRoot, "deploy/homeserver/monitoring/grafana/dashboards/blog-public-edge.json")
+const webRuntimeDashboardPath = path.join(repoRoot, "deploy/homeserver/monitoring/grafana/dashboards/blog-web-runtime.json")
+
+const read = (filePath) => readFileSync(filePath, "utf8")
+
+const promtoolTestPath = path.join(repoRoot, "tools/test/task-alerts.promtool-test.yml")
+const CACHE_STATE_ALERT = "AquilaPublicEdgeCacheStateUnobserved"
+const WEB_RUNTIME_SCRAPE_ALERT = "AquilaFrontRuntimeMetricsScrapeDown"
+
+// Block-scalar expr of a single alert, located by name. Every index is asserted so a rename or a
+// reformat reports what moved instead of throwing on a -1 slice.
+const alertExpr = (alertsText, alertName) => {
+  const ruleStart = alertsText.indexOf(`alert: ${alertName}`)
+  assert.notEqual(ruleStart, -1, `${alertName} is missing from task-alerts.yml`)
+  const rule = alertsText.slice(ruleStart)
+
+  const exprStart = rule.indexOf("expr: |")
+  assert.notEqual(exprStart, -1, `${alertName} no longer uses a block-scalar expr`)
+  const body = rule.slice(exprStart + "expr: |".length)
+
+  const exprEnd = body.indexOf("\n        for:")
+  assert.notEqual(exprEnd, -1, `${alertName} expr block is not terminated by a for: line`)
+  return {
+    text: body.slice(0, exprEnd),
+    start: ruleStart + exprStart,
+    end: ruleStart + exprStart + "expr: |".length + exprEnd,
+  }
+}
+
+const collapseWhitespace = (text) => text.replace(/\s+/g, " ").trim()
+
+const collapsePromql = (text) =>
+  collapseWhitespace(text)
+    .replace(/\b(label_replace|by|on)\s+\(/g, "$1(")
+    .replace(/\)\s+\(/g, ")(")
+    .replace(/\(\s+/g, "(")
+    .replace(/\s+\)/g, ")")
+
+const promtoolAvailable = () => {
+  const probe = spawnSync("promtool", ["--version"], { stdio: "ignore" })
+  return probe.status === 0
+}
+
+// Resolved `command:` of a compose service, or null when this environment cannot resolve the file.
+//
+// Availability of the docker CLI is the wrong predicate. The backend-ci runner has docker compose
+// but its version rejects this file under --no-interpolate:
+//   invalid spec: ${AQUILA_EXTERNAL_STORAGE_ROOT:-/mnt/aquila-blog-data}:/host-storage:ro: too many colons
+// (the short volume syntax carries a `:` inside the default expansion). So the probe has to be the
+// real call. Callers assert the same contract either way - only the reader changes, never the check.
+const resolvedServiceCommand = (service) => {
+  const resolved = spawnSync(
+    "docker",
+    ["compose", "-f", composePath, "config", "--no-interpolate", "--format", "json"],
+    { encoding: "utf8" },
+  )
+  if (resolved.status !== 0 || !resolved.stdout) return null
+  try {
+    return JSON.parse(resolved.stdout).services[service].command
+  } catch {
+    return null
+  }
+}
+
+const runPromtoolTest = (testFilePath) => spawnSync("promtool", ["test", "rules", testFilePath], { encoding: "utf8" })
+
+const targetKey = (contract, targetName, keyName) => {
+  const target = contract.targets[targetName]
+  assert(target, `missing target ${targetName}`)
+  return (target.keys || []).find((definition) => definition.name === keyName)
+}
+
+test("operations alert email channel is wired through env contract, compose, and deploy preflight", () => {
+  const contract = JSON.parse(read(contractPath))
+  const compose = read(composePath)
+  const workflow = read(workflowPath)
+  const prometheus = read(prometheusPath)
+  const alertmanager = read(alertmanagerPath)
+
+  assert.deepEqual(targetKey(contract, "home-server-source", "ALERTMANAGER_IMAGE"), {
+    name: "ALERTMANAGER_IMAGE",
+    kind: "digest-image",
+    required: false,
+  })
+  assert.deepEqual(targetKey(contract, "home-server-source", "OPERATIONS_ALERT_EMAIL_TO"), {
+    name: "OPERATIONS_ALERT_EMAIL_TO",
+    kind: "email",
+    secret: true,
+  })
+  assert.deepEqual(targetKey(contract, "home-server-source", "ALERTMANAGER_SMTP_AUTH_ENABLED"), {
+    name: "ALERTMANAGER_SMTP_AUTH_ENABLED",
+    kind: "boolean",
+    required: false,
+  })
+  assert.deepEqual(targetKey(contract, "home-server-source", "ALERTMANAGER_SMTP_AUTH_USERNAME"), {
+    name: "ALERTMANAGER_SMTP_AUTH_USERNAME",
+    requiredWhen: { key: "ALERTMANAGER_SMTP_AUTH_ENABLED", equals: "true" },
+  })
+  assert.deepEqual(targetKey(contract, "home-server-source", "ALERTMANAGER_SMTP_AUTH_PASSWORD"), {
+    name: "ALERTMANAGER_SMTP_AUTH_PASSWORD",
+    secret: true,
+    requiredWhen: { key: "ALERTMANAGER_SMTP_AUTH_ENABLED", equals: "true" },
+    minLength: 8,
+  })
+
+  assert.match(compose, /alertmanager:/)
+  assert.match(compose, /image:\s+\$\{ALERTMANAGER_IMAGE:\?ALERTMANAGER_IMAGE is required \(sha256 digest required\)\}/)
+  assert.match(compose, /> \/tmp\/alertmanager\.yml/)
+  assert.match(compose, /--config\.file=\/tmp\/alertmanager\.yml/)
+  assert.doesNotMatch(compose, /--config\.expand-env/)
+  assert.doesNotMatch(
+    compose.slice(compose.indexOf("  alertmanager:"), compose.indexOf("  postgres_exporter:")),
+    /env_file:/,
+  )
+  assert.match(
+    compose,
+    /OPERATIONS_ALERT_EMAIL_TO:\s+\$\{OPERATIONS_ALERT_EMAIL_TO:\?OPERATIONS_ALERT_EMAIL_TO is required\}/,
+  )
+  assert.match(compose, /ALERTMANAGER_SMTP_SMARTHOST:\s+\$\{SPRING__MAIL__HOST:\?SPRING__MAIL__HOST is required\}:\$\{SPRING__MAIL__PORT:\?SPRING__MAIL__PORT is required\}/)
+  assert.match(compose, /ALERTMANAGER_SMTP_FROM:\s+\$\{ALERTMANAGER_SMTP_FROM:\?ALERTMANAGER_SMTP_FROM is required\}/)
+  assert.match(compose, /ALERTMANAGER_SMTP_AUTH_USERNAME:\s+\$\{ALERTMANAGER_SMTP_AUTH_USERNAME:-\}/)
+  assert.match(compose, /ALERTMANAGER_SMTP_AUTH_PASSWORD:\s+\$\{ALERTMANAGER_SMTP_AUTH_PASSWORD:-\}/)
+  assert.match(compose, /ALERTMANAGER_SMTP_REQUIRE_TLS:\s+\$\{SPRING__MAIL__PROPERTIES__MAIL__SMTP__STARTTLS__ENABLE:-true\}/)
+  assert.match(compose, /\$\$ALERTMANAGER_SMTP_SMARTHOST/)
+  assert.match(compose, /\$\$ALERTMANAGER_SMTP_AUTH_PASSWORD/)
+  assert.match(compose, /\$\$ALERTMANAGER_GRAFANA_ROOT_URL/)
+  assert.match(compose, /\$\$OPERATIONS_ALERT_EMAIL_TO/)
+  assert.match(compose, /operations-email/)
+  assert.match(compose, /email_configs:/)
+  assert.match(compose, /send_resolved: true/)
+  assert.match(compose, /alertname=~"Aquila\(PublicEdgeProbeScrapeDown\|DockerRuntimeProbeScrapeDown\|BackWorkerScrapeDown\)"/)
+  assert.match(compose, /templates:/)
+  assert.match(compose, /\/tmp\/alertmanager-email\.tmpl/)
+  assert.match(compose, /define "aquila\.email\.subject"/)
+  assert.match(compose, /define "aquila\.email\.text"/)
+  assert.match(compose, /define "aquila\.email\.html"/)
+  assert.match(compose, /\$\$title := or \(index \.CommonAnnotations "title_ko"\)/)
+  assert.match(compose, /\$\$severity := or \.CommonLabels\.severity "unknown"/)
+  assert.match(compose, /\[Aquila 운영\]\[\{\{ template "aquila\.status_ko" \.Status \}\}\]/)
+  assert.match(compose, /Subject: "\{\{ template \\"aquila\.email\.subject\\" \. \}\}"/)
+  assert.match(compose, /text: "\{\{ template \\"aquila\.email\.text\\" \. \}\}"/)
+  assert.match(compose, /html: "\{\{ template \\"aquila\.email\.html\\" \. \}\}"/)
+  assert.match(compose, /Grafana에서 보기/)
+  assert.doesNotMatch(compose, /GeneratorURL/)
+  assert.doesNotMatch(compose, /monitoring\/alertmanager\.yml:\/etc\/alertmanager\/alertmanager\.yml:ro/)
+  assert.match(compose, /alertmanager_data:$/m)
+
+  assert.match(prometheus, /alerting:\n(?:.*\n)*\s+alertmanagers:/)
+  assert.match(prometheus, /targets:\s+\["alertmanager:9093"\]/)
+  assert.match(prometheus, /job_name: postgres_exporter/)
+  assert.match(prometheus, /targets:\s+\["postgres_exporter:9187"\]/)
+
+  assert.match(alertmanager, /receiver:\s+drop/)
+  assert.match(alertmanager, /- name: drop/)
+  assert.match(alertmanager, /group_by:\s+\["alertname", "severity"\]/)
+  assert.doesNotMatch(alertmanager, /\$\{ALERTMANAGER_/)
+  assert.doesNotMatch(alertmanager, /\$\{OPERATIONS_ALERT_EMAIL_TO\}/)
+  assert.doesNotMatch(alertmanager, /email_configs:/)
+  assert.doesNotMatch(alertmanager, /webhook_configs:/)
+
+  assert.match(workflow, /Validate HOME_SERVER_ENV contract/)
+  assert(workflow.indexOf("Validate HOME_SERVER_ENV contract") < workflow.indexOf("Deploy over SSH"))
+})
+
+test("operations alert email recipient is required before homeserver deploy", async () => {
+  const { loadContract, validateEnvText } = await import("../env/validate-env.mjs")
+
+  const result = validateEnvText({
+    contract: loadContract(contractPath),
+    target: "home-server-source",
+    text: "",
+  })
+
+  assert.equal(result.ok, false)
+  assert(result.errors.some((error) => error.key === "OPERATIONS_ALERT_EMAIL_TO" && error.message === "is required"))
+})
+
+test("operations alert rules cover launch-blocking failure domains", () => {
+  const taskAlerts = read(taskAlertsPath)
+  const requiredAlerts = [
+    "AquilaPublicEdgeProbeRouteDown",
+    "AquilaBackReadinessDown",
+    "AquilaApiOrigin5xxRatioHigh",
+    "AquilaContainerRestarted",
+    "AquilaContainerOomKilled",
+    "AquilaPostgresDiskUsageHigh",
+    "AquilaPostgresUnavailable",
+    "AquilaPostgresConnectionSaturationHigh",
+    "AquilaRedisUnavailable",
+    "AquilaMinioUnavailable",
+    "AquilaTaskDlqRateHigh",
+    "AquilaExternalBackupFailed",
+    "AquilaDeployRollbackDetected",
+  ]
+
+  for (const alertName of requiredAlerts) {
+    assert.match(taskAlerts, new RegExp(`alert: ${alertName}\\b`), `${alertName} rule is missing`)
+  }
+
+  assert.match(taskAlerts, /aquila_public_edge_probe_route_up/)
+  assert.match(taskAlerts, /aquila_backend_readiness_up\{component="api"\}/)
+  assert.match(taskAlerts, /docker_container_running\{job="docker_runtime_probe",service="db_1"\}/)
+  assert.match(taskAlerts, /pg_stat_database_numbackends/)
+  assert.match(taskAlerts, /pg_settings_max_connections/)
+  assert.match(taskAlerts, /docker_container_running\{job="docker_runtime_probe",service="redis_1"\}/)
+  assert.match(taskAlerts, /docker_container_running\{job="docker_runtime_probe",service="minio_1"\}/)
+  assert.match(taskAlerts, /backup.*failed|external.*backup/i)
+  assert.match(taskAlerts, /rollback/i)
+})
+
+// Scope note: everything below is a *repo-side* contract over tracked files. None of it
+// observes the image actually running in production -- POSTGRES_EXPORTER_IMAGE comes from
+// the HOME_SERVER_ENV secret, and deploy.yml's preserve_pre_deploy_runtime_image_env_keys
+// restores the server's existing value whenever the secret does not pin the key, so the
+// fallback tags asserted here are only reached on a first-ever deploy. If the owner never
+// updates the secret, production stays on v0.15.0 and this test still passes. The runtime
+// safety net is AquilaPostgresExporterScrapeDown and AquilaPostgresCheckpointMetricsMissing,
+// not this file (#1426).
+test("postgres_exporter image pins, compose flags, and blind-spot alerts stay consistent", () => {
+  const compose = read(composePath)
+  const taskAlerts = read(taskAlertsPath)
+  const deployScript = read(path.join(repoRoot, "deploy/homeserver/blue_green_deploy.sh"))
+  const backupScript = read(path.join(repoRoot, "deploy/homeserver/create_external_backup.sh"))
+
+  const exporterStart = compose.indexOf("\n  postgres_exporter:")
+  const grafanaStart = compose.indexOf("\n  grafana:")
+  assert(exporterStart >= 0, "postgres_exporter service is missing from the compose file")
+  // slice() would silently widen to the whole file if the end marker moved (negative index).
+  assert(grafanaStart > exporterStart, "grafana must still follow postgres_exporter in the compose file")
+  // This file joined CI with #1541; before that it only ever ran locally, where compose resolves.
+  // Both branches assert the same contract, so bringing the file into CI costs no coverage.
+  const exporterCommand = resolvedServiceCommand("postgres_exporter")
+  if (exporterCommand) {
+    assert.deepEqual(exporterCommand, ["--collector.stat_checkpointer"])
+  } else {
+    // Same guarantee without compose: the flag must be the service's only command entry.
+    const exporterBlock = compose.slice(exporterStart, grafanaStart)
+    const commandStart = exporterBlock.indexOf("\n    command:\n")
+    assert.notEqual(commandStart, -1, "postgres_exporter must declare a command list")
+    // Only the list items directly under `command:`. Filtering the whole block instead would also
+    // collect the depends_on and networks entries.
+    const commandEntries = []
+    for (const line of exporterBlock.slice(commandStart + "\n    command:\n".length).split("\n")) {
+      if (!/^\s+-\s/.test(line)) break
+      commandEntries.push(line)
+    }
+    assert.deepEqual(
+      commandEntries.map((line) => line.trim().replace(/^-\s*/, "").replace(/^"(.*)"$/, "$1")),
+      ["--collector.stat_checkpointer"],
+    )
+  }
+
+  // Drift guard only: keeps the three tracked fallback pins from diverging or rolling back
+  // below v0.17.0, the first release carrying the pg_stat_checkpointer fix. These three did
+  // drift apart before, which is why they are checked together rather than one
+  // representative file. This says nothing about the deployed image -- see the scope note.
+  for (const [name, source] of [
+    ["blue_green_deploy.sh", deployScript],
+    ["create_external_backup.sh", backupScript],
+    ["deploy.yml", read(workflowPath)],
+  ]) {
+    const pin = source.match(
+      /ensure_image_(?:env_)?key_from_local_digest "POSTGRES_EXPORTER_IMAGE" "[^"]*postgres-exporter:v(\d+)\.(\d+)\.(\d+)"/,
+    )
+    assert(pin, `${name} must pin a versioned postgres-exporter fallback image`)
+    const [major, minor] = [Number(pin[1]), Number(pin[2])]
+    assert(
+      major > 0 || minor >= 17,
+      `${name} postgres-exporter fallback must be >= v0.17.0 for PG17+ pg_stat_checkpointer, got v${pin[1]}.${pin[2]}.${pin[3]}`,
+    )
+  }
+
+  // A collector that silently stops producing series leaves no alert and no dashboard gap,
+  // so the absence of the series is itself the signal that has to page (#1419).
+  assert.match(taskAlerts, /alert: AquilaPostgresCheckpointMetricsMissing\b/)
+  assert.match(taskAlerts, /absent\(pg_stat_checkpointer_num_timed_total\{job="postgres_exporter"\}\)/)
+
+  // If the exporter itself dies, AquilaPostgresDiskUsageHigh and
+  // AquilaPostgresConnectionSaturationHigh evaluate against an empty vector and can never
+  // fire. That blind spot needs its own signal, plus restart coverage (#1426).
+  assert.match(taskAlerts, /alert: AquilaPostgresExporterScrapeDown\b/)
+  assert.match(taskAlerts, /min\(up\{job="postgres_exporter"\}\) < 1/)
+
+  const restartAlert = taskAlerts.match(/alert: AquilaContainerRestarted\n\s*expr: ([^\n]+)/)
+  assert(restartAlert, "AquilaContainerRestarted rule is missing")
+  assert.match(restartAlert[1], /postgres_exporter/)
+
+  const probeServices = compose.match(/-\s*"--services"\s*\n\s*-\s*"([^"]+)"/)
+  assert(probeServices, "docker_runtime_probe must pass an explicit --services list")
+  assert(
+    probeServices[1].split(",").map((value) => value.trim()).includes("postgres_exporter"),
+    "postgres_exporter must be exported by docker_runtime_probe for AquilaContainerRestarted to see it",
+  )
+})
+
+test("autoheal and its docker socket proxy stay under continuous restart observation", () => {
+  const compose = read(composePath)
+  const taskAlerts = read(taskAlertsPath)
+
+  const probeBlock = compose.slice(compose.indexOf("\n  docker_runtime_probe:"))
+  const probeServicesOption = probeBlock.match(/-\s*"--services"\s*\n\s*-\s*"([^"]+)"/)
+  assert(probeServicesOption, "docker_runtime_probe must pass an explicit --services list")
+  const probedServices = probeServicesOption[1].split(",").map((value) => value.trim())
+
+  const restartAlert = taskAlerts.match(/alert: AquilaContainerRestarted\n\s*expr: ([^\n]+)/)
+  assert(restartAlert, "AquilaContainerRestarted rule is missing")
+  const alertedServices = restartAlert[1].match(/service=~"([^"]+)"/)
+  assert(alertedServices, "AquilaContainerRestarted must select services by regex")
+  const alertedAlternatives = alertedServices[1].split("|").map((value) => value.trim())
+
+  // A crash-looping autoheal (or its socket proxy) is invisible between deploys
+  // unless the probe exports its restart count and the alert selects it (#1407).
+  for (const service of ["autoheal", "docker_socket_proxy"]) {
+    assert(probedServices.includes(service), `${service} must be exported by docker_runtime_probe`)
+    assert(alertedAlternatives.includes(service), `${service} must be covered by AquilaContainerRestarted`)
+  }
+})
+
+test("front runtime metrics stay on the internal scrape path and off the public edge", () => {
+  const prometheus = read(prometheusPath)
+  const caddy = read(caddyPath)
+  const webVhost = caddy.slice(caddy.indexOf("http://{$WEB_DOMAIN:web.localhost} {"), caddy.indexOf("(front_surface_vhost) {"))
+  const frontJobStart = prometheus.indexOf("  - job_name: front\n")
+  const frontJobEnd = prometheus.indexOf("\n  - job_name:", frontJobStart + 1)
+  const frontJob = prometheus.slice(frontJobStart, frontJobEnd)
+
+  assert.notEqual(frontJobStart, -1, "front metrics scrape job is missing")
+  assert.notEqual(frontJobEnd, -1, "front metrics scrape job must end before the next job")
+  assert.match(frontJob, /metrics_path: \/api\/internal\/metrics/)
+  assert.match(frontJob, /authorization:\n\s+type: Bearer\n\s+credentials_file: \/run\/secrets\/web-metrics-token/)
+  assert.match(frontJob, /- targets:\n\s+- front_blue:3000\n\s+labels:\n\s+service: aquila-front\n\s+deploy_color: blue/)
+  assert.match(frontJob, /- targets:\n\s+- front_green:3000\n\s+labels:\n\s+service: aquila-front\n\s+deploy_color: green/)
+  assert.doesNotMatch(frontJob, /\n\s*scrape_interval:/)
+  assert.doesNotMatch(frontJob, /\n\s*bearer_token:/)
+  assert.doesNotMatch(frontJob, /\n\s*credentials:/)
+
+  assert.match(webVhost, /@denyFrontRuntimeMetrics path \/api\/internal\/metrics\n\s+handle @denyFrontRuntimeMetrics \{\n\s+respond 403\n\s+\}/)
+  assert(webVhost.indexOf("handle @denyFrontRuntimeMetrics") < webVhost.indexOf("# Blue/Green cutover"))
+})
+
+test("front runtime metrics scrape alerts only for running colors without current scrape evidence", () => {
+  const alerts = read(taskAlertsPath)
+  const expr = alertExpr(alerts, WEB_RUNTIME_SCRAPE_ALERT)
+
+  assert.equal(
+    collapsePromql(expr.text),
+    'label_replace(max by(service)(docker_container_running{job="docker_runtime_probe",service=~"front_(blue|green)"} == 1), "deploy_color", "$1", "service", "front_(blue|green)") unless on(deploy_color) max by(deploy_color)(up{job="front",service="aquila-front"} == 1)',
+  )
+  assert.match(alerts.slice(expr.end), /^\n\s{8}for: 3m(?:\n|$)/)
+  assert.match(alerts.slice(expr.end), /severity: warning/)
+
+  const promtoolTest = read(promtoolTestPath)
+  for (const caseName of ["front runtime scrape is healthy", "front blue scrape is down", "front blue scrape is absent", "front profile is off"]) {
+    assert.match(promtoolTest, new RegExp(`name: ${caseName}`))
+  }
+})
+
+test("cache-state alert uses the non-decaying home HIT contract", () => {
+  const alerts = read(taskAlertsPath)
+  const expr = alertExpr(alerts, CACHE_STATE_ALERT)
+
+  assert.equal(
+    collapseWhitespace(expr.text),
+    '( min by (route_class, expected_state)' +
+      ' ( aquila_public_edge_probe_cache_state_match{route_class="home",expected_state="HIT"} ) < 1' +
+      ' or absent(aquila_public_edge_probe_cache_state_match{route_class="home",expected_state="HIT"}) )',
+  )
+  assert.match(alerts.slice(expr.end), /^\n\s{8}for: 30m(?:\n|$)/)
+
+  // The promtool cases are skipped where promtool is absent, so nothing else notices if the file
+  // is deleted or unhooked from the rules it is supposed to cover.
+  const promtoolTest = read(promtoolTestPath)
+  assert.match(promtoolTest, /rule_files:\s*\n\s*-\s*\.\.\/\.\.\/deploy\/homeserver\/monitoring\/rules\/task-alerts\.yml/)
+  assert.match(promtoolTest, new RegExp(`alertname: ${CACHE_STATE_ALERT}`))
+})
+
+const invokesFrontRenderGate = (source) =>
+  source
+    .split("\n")
+    .some((line) => /^\s*(?:(?:-\s*)?run:\s*)?node\s+deploy\/homeserver\/front-render-gate\.mjs(?:\s|$)/.test(line))
+
+test("front-render audit only recognizes an executable node invocation", () => {
+  assert.equal(invokesFrontRenderGate("# node deploy/homeserver/front-render-gate.mjs"), false)
+  assert.equal(invokesFrontRenderGate("node deploy/homeserver/front-render-gate.mjs --check"), true)
+  assert.equal(invokesFrontRenderGate("run: node deploy/homeserver/front-render-gate.mjs --check"), true)
+  assert.equal(invokesFrontRenderGate(read(workflowPath)), false)
+})
+
+test("public-edge dashboard renders the bounded warm cache state contract without a zero fallback", () => {
+  const dashboard = JSON.parse(read(publicEdgeDashboardPath))
+  const panel = dashboard.panels.find(({ title }) => title === "Warm Cache State Contract")
+
+  assert(panel, "Warm Cache State Contract panel is missing")
+  assert.equal(
+    panel.targets[0].expr,
+    "min by (route_class, expected_state, observed_state) (aquila_public_edge_probe_cache_state_match)",
+  )
+  assert.equal(panel.targets[0].legendFormat, "{{route_class}} | expected {{expected_state}} | observed {{observed_state}}")
+  assert.equal(panel.description, "1=warm HIT match; 0=mismatch; no data=missing")
+  assert.doesNotMatch(panel.targets[0].expr, /\bvector\s*\(\s*0\s*\)/)
+})
+
+test("web runtime dashboard keeps only raw current producer signals", () => {
+  const dashboard = JSON.parse(read(webRuntimeDashboardPath))
+  const expectedPanels = [
+    [
+      "Web runtime scrape health",
+      "min by (deploy_color) (up{job=\"front\",service=\"aquila-front\"})",
+      "{{deploy_color}}",
+      "1=reachable scrape; 0=down; no data=missing.",
+    ],
+    [
+      "Web process uptime",
+      "max by (deploy_color) (aquila_web_process_uptime_seconds{job=\"front\",service=\"aquila-front\"})",
+      "{{deploy_color}}",
+      "Raw process uptime; no data=missing.",
+    ],
+    [
+      "SSR outcomes (cumulative)",
+      "sum by (deploy_color, route_class, result) (aquila_web_ssr_request_duration_seconds_count{job=\"front\",service=\"aquila-front\"})",
+      "{{deploy_color}} | {{route_class}} | {{result}}",
+      "Raw cumulative SSR observations since process start; no data=missing.",
+    ],
+    [
+      "Backend fetch outcomes (cumulative)",
+      "sum by (deploy_color, source, route_class, result) (aquila_web_backend_fetch_duration_seconds_count{job=\"front\",service=\"aquila-front\"})",
+      "{{deploy_color}} | {{source}} | {{route_class}} | {{result}}",
+      "Raw cumulative backend-fetch observations since process start; no data=missing.",
+    ],
+  ]
+
+  assert.equal(dashboard.uid, "blog-web-runtime")
+  assert.deepEqual(dashboard.templating.list, [])
+  assert.equal(dashboard.panels.length, expectedPanels.length)
+  for (const [title, expr, legendFormat, description] of expectedPanels) {
+    const panel = dashboard.panels.find((candidate) => candidate.title === title)
+    assert(panel, `${title} panel is missing`)
+    assert.equal(panel.targets[0].expr, expr)
+    assert.equal(panel.targets[0].legendFormat, legendFormat)
+    assert.equal(panel.description, description)
+    assert.doesNotMatch(panel.targets[0].expr, /\b(?:vector|rate|increase|histogram_quantile)\s*\(/)
+    assert.doesNotMatch(panel.targets[0].expr, /\bor\b/)
+  }
+})
+
+// One malformed expr makes Prometheus reject the whole file, and all 45 alerts in it go silent
+// while every dashboard still looks normal. Mirrors tools/test/cloud-media-alerts.test.sh.
+test("task alert rules parse", { skip: promtoolAvailable() ? false : "promtool is not installed" }, () => {
+  const result = spawnSync("promtool", ["check", "rules", taskAlertsPath], { encoding: "utf8" })
+
+  assert.equal(result.status, 0, `${result.stdout}\n${result.stderr}`)
+  assert.match(result.stdout, /SUCCESS/)
+})
+
+test(
+  "cache-state alert behaviour is pinned by promtool unit tests",
+  { skip: promtoolAvailable() ? false : "promtool is not installed" },
+  () => {
+    const result = runPromtoolTest(promtoolTestPath)
+
+    assert.equal(result.status, 0, `${result.stdout}\n${result.stderr}`)
+  },
+)
+
+test("docker_socket_proxy with POST=1 is isolated to autoheal_control and observe consumers use read-only docker_socket_read_proxy", () => {
+  const compose = read(composePath)
+  const promtailConfig = read(path.join(repoRoot, "deploy/homeserver/monitoring/promtail/promtail-config.yml"))
+
+  const serviceBlock = (name) => {
+    const marker = `\n  ${name}:\n`
+    const start = compose.indexOf(marker)
+    assert.notEqual(start, -1, `${name} service must exist in docker-compose.prod.yml`)
+    const rest = compose.slice(start + marker.length)
+    const nextMatch = rest.match(/\n(?:  [a-z0-9_]+:|networks:|volumes:)\n/)
+    return nextMatch ? rest.slice(0, nextMatch.index) : rest
+  }
+
+  const writeProxy = serviceBlock("docker_socket_proxy")
+  const autoheal = serviceBlock("autoheal")
+  const readProxy = serviceBlock("docker_socket_read_proxy")
+  const promtail = serviceBlock("promtail")
+  const runtimeProbe = serviceBlock("docker_runtime_probe")
+
+  assert.match(writeProxy, /POST:\s*"1"/)
+  assert.match(writeProxy, /networks:\s*\n\s*-\s*autoheal_control\b/)
+  assert.doesNotMatch(writeProxy, /-\s*observe\b/)
+
+  assert.match(autoheal, /networks:\s*\n\s*-\s*autoheal_control\b/)
+  assert.doesNotMatch(autoheal, /-\s*observe\b/)
+
+  assert.match(readProxy, /CONTAINERS:\s*"1"/)
+  assert.match(readProxy, /NETWORKS:\s*"1"/)
+  assert.match(readProxy, /POST:\s*"0"/)
+  assert.match(readProxy, /networks:\s*\n\s*-\s*observe\b/)
+  assert.match(readProxy, /\/var\/run\/docker\.sock:\/var\/run\/docker\.sock:ro/)
+
+  assert.doesNotMatch(promtail, /\/var\/run\/docker\.sock/)
+  assert.match(promtail, /promtail_sd_targets:\/promtail-sd:ro/)
+  assert.match(promtail, /-\s*docker_socket_read_proxy\b/)
+  assert.match(promtail, /-\s*docker_runtime_probe\b/)
+  assert.doesNotMatch(promtailConfig, /docker_sd_configs:/)
+  assert.match(promtailConfig, /file_sd_configs:/)
+  assert.match(promtailConfig, /-\s*\/promtail-sd\/docker-containers\.json\b/)
+  assert.doesNotMatch(promtailConfig, /unix:\/\/\/var\/run\/docker\.sock/)
+
+  assert.doesNotMatch(runtimeProbe, /\/var\/run\/docker\.sock/)
+  assert.match(runtimeProbe, /"--docker-url"/)
+  assert.match(runtimeProbe, /"http:\/\/docker_socket_read_proxy:2375"/)
+  assert.match(runtimeProbe, /"--promtail-targets-path"/)
+  assert.match(runtimeProbe, /"\/promtail-sd\/docker-containers\.json"/)
+  assert.match(runtimeProbe, /promtail_sd_targets:\/promtail-sd\b/)
+
+  const networksSection = compose.slice(compose.indexOf("\nnetworks:\n"))
+  assert.match(
+    networksSection,
+    /autoheal_control:\s*\n\s*name:\s*blog_home_autoheal_control\s*\n\s*internal:\s*true/,
+  )
+})
+
+test("Grafana restricts auth.proxy trust to GF_AUTH_PROXY_WHITELIST and resolves hostnames to IP before /run.sh", () => {
+  const compose = read(composePath)
+  const grafanaStart = compose.indexOf("\n  grafana:\n")
+  const lokiStart = compose.indexOf("\n  loki:\n", grafanaStart)
+  const grafanaBlock = compose.slice(grafanaStart, lokiStart)
+
+  assert.match(grafanaBlock, /GF_AUTH_PROXY_ENABLED:\s*"true"/)
+  assert.match(
+    grafanaBlock,
+    /GF_AUTH_PROXY_WHITELIST:\s*\$\{GF_AUTH_PROXY_WHITELIST:-caddy\}/,
+  )
+  assert.match(grafanaBlock, /getent hosts "\$\$trimmed"/)
+  assert.match(grafanaBlock, /export GF_AUTH_PROXY_WHITELIST="\$\$resolved"/)
+  assert.match(grafanaBlock, /exec \/run\.sh/)
+  assert.match(grafanaBlock, /depends_on:\s*\n\s*-\s*caddy\b/)
+})
+
+test("Prometheus disables lifecycle flag and Caddy denies /-/ management endpoints on Prometheus vhost", () => {
+  const compose = read(composePath)
+  const caddy = read(caddyPath)
+
+  const prometheusStart = compose.indexOf("\n  prometheus:\n")
+  const alertmanagerStart = compose.indexOf("\n  alertmanager:\n", prometheusStart)
+  const prometheusBlock = compose.slice(prometheusStart, alertmanagerStart)
+  assert.doesNotMatch(prometheusBlock, /--web\.enable-lifecycle/)
+
+  const promVhostStart = caddy.indexOf("http://{$PROMETHEUS_DOMAIN:prometheus.localhost} {")
+  const nextVhostStart = caddy.indexOf("http://caddy {", promVhostStart)
+  const promVhost = caddy.slice(promVhostStart, nextVhostStart)
+
+  assert.match(promVhost, /@denyPromManagement\s+path\s+\/-\/\*/)
+  assert.match(
+    promVhost,
+    /handle\s+@denyPromManagement\s*\{\s*\n\s*respond\s+403\s*\n\s*\}/,
+  )
+})
+
+test("Promtail relabel_configs and Logs Overview dashboard panels keep consistent source metadata labels", () => {
+  const promtailConfig = read(path.join(repoRoot, "deploy/homeserver/monitoring/promtail/promtail-config.yml"))
+  const logsDashboard = JSON.parse(
+    read(path.join(repoRoot, "deploy/homeserver/monitoring/grafana/dashboards/blog-logs-overview.json")),
+  )
+
+  assert.match(promtailConfig, /- target_label:\s*job\s*\n\s*replacement:\s*docker-containers\b/)
+  assert.match(promtailConfig, /- target_label:\s*env\s*\n\s*replacement:\s*production\b/)
+  assert.match(promtailConfig, /- target_label:\s*source\s*\n\s*replacement:\s*loki\b/)
+
+  const lokiPanels = logsDashboard.panels.filter((panel) => panel.datasource?.type === "loki")
+  assert(lokiPanels.length >= 4, "Expected at least 4 Loki panels in blog-logs-overview.json")
+  for (const panel of lokiPanels) {
+    assert.match(panel.targets[0].expr, /compose_project="blog_home",job="docker-containers"/)
+    if (panel.type === "logs") {
+      assert.equal(panel.options.showLabels, true)
+      assert.equal(panel.options.showCommonLabels, true)
+    }
+  }
+})
+
+

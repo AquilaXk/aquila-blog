@@ -1,0 +1,351 @@
+package com.back.global.system.adapter.web
+
+import com.back.boundedContexts.member.dto.AuthSessionMemberDto
+import com.back.boundedContexts.post.application.service.PostSearchEngineMirrorService
+import com.back.global.rsData.RsData
+import com.back.global.security.application.AuthSecurityEventDto
+import com.back.global.security.application.AuthSecurityEventService
+import com.back.global.security.domain.SecurityUser
+import com.back.global.storage.application.UploadedFileCleanupDiagnostics
+import com.back.global.storage.application.UploadedFileRetentionService
+import com.back.global.system.application.AdminDashboardSnapshot
+import com.back.global.system.application.AdminDashboardSnapshotService
+import com.back.global.system.application.AdminOperationService
+import com.back.global.system.application.AdminSystemHealthSnapshotService
+import com.back.global.system.application.SearchRuntimeControlQueryService
+import com.back.global.system.model.AdminOperationAction
+import com.back.global.system.model.AdminOperationResultCode
+import com.back.global.system.model.AdminOperationStatus
+import com.back.global.system.model.SearchRuntimeControlKey
+import com.back.global.system.model.SearchRuntimeControlValue
+import com.back.global.task.application.TaskQueueDiagnostics
+import com.back.global.task.application.TaskQueueDiagnosticsService
+import com.back.global.task.application.port.output.TaskDlqItemDto
+import com.back.global.task.application.port.output.TaskDlqReplayRepositoryPort
+import jakarta.validation.Valid
+import jakarta.validation.constraints.Max
+import jakarta.validation.constraints.Min
+import jakarta.validation.constraints.NotBlank
+import jakarta.validation.constraints.NotNull
+import jakarta.validation.constraints.Positive
+import jakarta.validation.constraints.Size
+import org.springframework.http.HttpHeaders
+import org.springframework.http.HttpStatus
+import org.springframework.http.ResponseEntity
+import org.springframework.security.core.annotation.AuthenticationPrincipal
+import org.springframework.transaction.annotation.Transactional
+import org.springframework.web.bind.annotation.GetMapping
+import org.springframework.web.bind.annotation.PostMapping
+import org.springframework.web.bind.annotation.RequestBody
+import org.springframework.web.bind.annotation.RequestMapping
+import org.springframework.web.bind.annotation.RequestParam
+import org.springframework.web.bind.annotation.ResponseStatus
+import org.springframework.web.bind.annotation.RestController
+import java.util.UUID
+
+/**
+ * ApiV1AdmSystemController는 글로벌 운영 API 요청을 처리하는 웹 어댑터입니다.
+ * 요청 파라미터를 검증하고 애플리케이션 계층 결과를 응답 규격으로 변환합니다.
+ *
+ * 참조 구현: felixmosh/bull-board (MIT) — Task queue diagnostics, DLQ inspector & replay
+ */
+@RestController
+@RequestMapping("/system/api/v1/adm")
+class ApiV1AdmSystemController(
+    private val authSecurityEventService: AuthSecurityEventService,
+    private val taskQueueDiagnosticsService: TaskQueueDiagnosticsService,
+    private val adminOperationService: AdminOperationService,
+    private val uploadedFileRetentionService: UploadedFileRetentionService,
+    private val searchRuntimeControlQueryService: SearchRuntimeControlQueryService,
+    private val postSearchEngineMirrorService: PostSearchEngineMirrorService,
+    private val adminSystemHealthSnapshotService: AdminSystemHealthSnapshotService,
+    private val adminDashboardSnapshotService: AdminDashboardSnapshotService,
+    private val taskDlqReplayRepository: TaskDlqReplayRepositoryPort,
+) {
+    data class AdminSystemBootstrapResBody(
+        val member: AuthSessionMemberDto,
+        val health: HealthResBody,
+        val dashboard: AdminDashboardSnapshot,
+    )
+
+    data class HealthChecks(
+        val db: String,
+        val redis: String,
+    )
+
+    data class HealthResBody(
+        val status: String,
+        val serverTime: String,
+        val uptimeMs: Long,
+        val version: String,
+        val checks: HealthChecks,
+    )
+
+    data class TaskDlqReplayOperationRequest(
+        @field:NotNull
+        val operationId: UUID,
+        @field:NotBlank
+        @field:Size(min = 1, max = 200)
+        val reason: String,
+        @field:Size(max = 120)
+        val taskType: String? = null,
+        @field:Min(1)
+        @field:Max(200)
+        val limit: Int = 50,
+        val resetRetryCount: Boolean = true,
+        @field:Size(max = 200)
+        val taskIds: List<@Positive Long>? = null,
+    )
+
+    data class TaskDlqListResBody(
+        val tasks: List<TaskDlqItemDto>,
+    )
+
+    data class AdminOperationResBody(
+        val operationId: UUID,
+        val actorId: Long,
+        val sessionRowId: Long?,
+        val action: AdminOperationAction,
+        val target: String,
+        val reason: String,
+        val status: AdminOperationStatus,
+        val resultCode: AdminOperationResultCode?,
+        val selectedCount: Int,
+        val replayedCount: Int,
+        val quarantinedCount: Int,
+        val createdAt: java.time.Instant,
+        val modifiedAt: java.time.Instant,
+        val controlKey: SearchRuntimeControlKey?,
+        val controlValue: SearchRuntimeControlValue?,
+        val controlVersion: Long?,
+    )
+
+    data class SearchPipelineForceControlRequest(
+        @field:NotNull
+        val operationId: UUID?,
+        @field:NotBlank
+        @field:Size(min = 1, max = 200)
+        val reason: String,
+        val forceControl: Boolean? = null,
+    )
+
+    data class SearchEngineMirrorForceDisableRequest(
+        @field:NotNull
+        val operationId: UUID?,
+        @field:NotBlank
+        @field:Size(min = 1, max = 200)
+        val reason: String,
+        val forceDisabled: Boolean = false,
+    )
+
+    data class SearchRuntimeControlStateResBody(
+        val controlKey: SearchRuntimeControlKey,
+        val controlValue: SearchRuntimeControlValue,
+        val version: Long,
+        val modifiedAt: java.time.Instant,
+    )
+
+    data class SearchRuntimeFlags(
+        val searchPipeline: SearchRuntimeControlStateResBody,
+        val searchPipelineForceControlEnabled: Boolean,
+        val searchEngineMirror: SearchRuntimeControlStateResBody,
+        val searchEngineMirrorForceDisabled: Boolean,
+        val searchEngineMirrorCircuitOpen: Boolean,
+        val searchEngineMirrorCircuitRemainingSeconds: Long,
+        val searchEngineMirrorConsecutiveFailures: Int,
+        val searchEngineMirrorFailureThreshold: Int,
+    )
+
+    @GetMapping("/bootstrap")
+    @Transactional(readOnly = true)
+    fun bootstrap(
+        @AuthenticationPrincipal securityUser: SecurityUser,
+    ): AdminSystemBootstrapResBody =
+        AdminSystemBootstrapResBody(
+            member = AuthSessionMemberDto(securityUser),
+            health = adminSystemHealthSnapshotService.getHealthSummary(),
+            dashboard = adminDashboardSnapshotService.getSnapshot(),
+        )
+
+    @GetMapping("/health")
+    @Transactional(readOnly = true)
+    fun health(
+        @RequestParam(defaultValue = "false") fresh: Boolean,
+    ): HealthResBody =
+        if (fresh) {
+            adminSystemHealthSnapshotService.getFreshHealthSummary()
+        } else {
+            adminSystemHealthSnapshotService.getHealthSummary()
+        }
+
+    @GetMapping("/grafana/auth-proxy")
+    @Transactional(readOnly = true)
+    fun grafanaAuthProxy(
+        @AuthenticationPrincipal securityUser: SecurityUser,
+    ): ResponseEntity<Void> =
+        ResponseEntity
+            .noContent()
+            .header("X-WEBAUTH-USER", securityUser.username)
+            .header("X-WEBAUTH-NAME", securityUser.nickname)
+            .header(HttpHeaders.CACHE_CONTROL, "private, no-store, max-age=0")
+            .header(HttpHeaders.PRAGMA, "no-cache")
+            .build()
+
+    @GetMapping("/tasks")
+    @Transactional(readOnly = true)
+    fun taskQueueDiagnostics(): TaskQueueDiagnostics = taskQueueDiagnosticsService.diagnoseQueue()
+
+    @GetMapping("/tasks/dlq")
+    @Transactional(readOnly = true)
+    fun listDlqTasks(
+        @RequestParam(required = false) taskType: String?,
+        @RequestParam(defaultValue = "50") limit: Int,
+    ): TaskDlqListResBody {
+        val safeLimit = limit.coerceIn(1, 100)
+        return TaskDlqListResBody(
+            tasks = taskDlqReplayRepository.findDlqTasks(taskType, safeLimit),
+        )
+    }
+
+    @GetMapping("/dashboard-snapshot")
+    @Transactional(readOnly = true)
+    fun dashboardSnapshot(): AdminDashboardSnapshot = adminDashboardSnapshotService.getSnapshot()
+
+    @GetMapping("/auth/security-events")
+    @Transactional(readOnly = true)
+    fun authSecurityEvents(
+        @RequestParam(defaultValue = "30") limit: Int,
+    ): List<AuthSecurityEventDto> = authSecurityEventService.getRecent(limit)
+
+    @PostMapping("/operations/task-dlq-replay")
+    @ResponseStatus(HttpStatus.ACCEPTED)
+    fun submitTaskDlqReplay(
+        @RequestBody @Valid reqBody: TaskDlqReplayOperationRequest,
+        @AuthenticationPrincipal securityUser: SecurityUser,
+    ): RsData<AdminOperationResBody> {
+        val result =
+            adminOperationService.submit(
+                AdminOperationService.DlqReplayCommand(
+                    operationId = reqBody.operationId,
+                    actorId = securityUser.id,
+                    sessionRowId = securityUser.sessionRowId,
+                    taskType = reqBody.taskType,
+                    limit = reqBody.limit,
+                    resetRetryCount = reqBody.resetRetryCount,
+                    reason = reqBody.reason,
+                    taskIds = reqBody.taskIds,
+                ),
+            )
+        return RsData(
+            "202-40",
+            "DLQ 재실행 작업을 접수했습니다.",
+            result.toResponse(),
+        )
+    }
+
+    @GetMapping("/operations/{operationId}")
+    fun getOperation(
+        @org.springframework.web.bind.annotation.PathVariable operationId: UUID,
+        @AuthenticationPrincipal securityUser: SecurityUser,
+    ): RsData<AdminOperationResBody> =
+        RsData(
+            "200-40",
+            "DLQ 재실행 작업 상태입니다.",
+            adminOperationService.get(operationId, securityUser.id).toResponse(),
+        )
+
+    private fun AdminOperationService.OperationResult.toResponse() =
+        AdminOperationResBody(
+            operationId,
+            actorId,
+            sessionRowId,
+            action,
+            target,
+            reason,
+            status,
+            resultCode,
+            selectedCount,
+            replayedCount,
+            quarantinedCount,
+            createdAt,
+            modifiedAt,
+            controlKey,
+            controlValue,
+            controlVersion,
+        )
+
+    @GetMapping("/search/runtime-flags")
+    @Transactional(readOnly = true)
+    fun getSearchRuntimeFlags(): SearchRuntimeFlags {
+        val runtimeSnapshot = searchRuntimeControlQueryService.runtimeSnapshot()
+        val mirrorCircuitStatus = postSearchEngineMirrorService.getCircuitStatus()
+        return SearchRuntimeFlags(
+            searchPipeline = runtimeSnapshot.searchPipeline.toResponse(),
+            searchPipelineForceControlEnabled = runtimeSnapshot.searchPipelineForceControlEnabled,
+            searchEngineMirror = runtimeSnapshot.searchEngineMirror.toResponse(),
+            searchEngineMirrorForceDisabled = runtimeSnapshot.searchEngineMirrorForceDisabled,
+            searchEngineMirrorCircuitOpen = mirrorCircuitStatus.open,
+            searchEngineMirrorCircuitRemainingSeconds = mirrorCircuitStatus.remainingSeconds,
+            searchEngineMirrorConsecutiveFailures = mirrorCircuitStatus.consecutiveFailures,
+            searchEngineMirrorFailureThreshold = mirrorCircuitStatus.failureThreshold,
+        )
+    }
+
+    @PostMapping("/search/pipeline/force-control")
+    @ResponseStatus(HttpStatus.ACCEPTED)
+    fun setSearchPipelineForceControl(
+        @RequestBody @Valid reqBody: SearchPipelineForceControlRequest,
+        @AuthenticationPrincipal securityUser: SecurityUser,
+    ): RsData<AdminOperationResBody> {
+        val result =
+            adminOperationService.submitPipelineForceControl(
+                AdminOperationService.SearchPipelineForceControlCommand(
+                    operationId = reqBody.operationId!!,
+                    actorId = securityUser.id,
+                    sessionRowId = securityUser.sessionRowId,
+                    forceControl = reqBody.forceControl,
+                    reason = reqBody.reason,
+                ),
+            )
+        return RsData(
+            "202-41",
+            "검색 파이프라인 force-control 작업을 접수했습니다.",
+            result.toResponse(),
+        )
+    }
+
+    @PostMapping("/search-engine/mirror/force-disable")
+    @ResponseStatus(HttpStatus.ACCEPTED)
+    fun setSearchEngineMirrorForceDisable(
+        @RequestBody @Valid reqBody: SearchEngineMirrorForceDisableRequest,
+        @AuthenticationPrincipal securityUser: SecurityUser,
+    ): RsData<AdminOperationResBody> {
+        val result =
+            adminOperationService.submitSearchEngineMirrorForceDisable(
+                AdminOperationService.SearchEngineMirrorForceDisableCommand(
+                    operationId = reqBody.operationId!!,
+                    actorId = securityUser.id,
+                    sessionRowId = securityUser.sessionRowId,
+                    forceDisabled = reqBody.forceDisabled,
+                    reason = reqBody.reason,
+                ),
+            )
+        return RsData(
+            "202-42",
+            "검색엔진 미러 force-disable 작업을 접수했습니다.",
+            result.toResponse(),
+        )
+    }
+
+    private fun SearchRuntimeControlQueryService.ControlStateSnapshot.toResponse() =
+        SearchRuntimeControlStateResBody(
+            controlKey = controlKey,
+            controlValue = controlValue,
+            version = version,
+            modifiedAt = modifiedAt,
+        )
+
+    @GetMapping("/storage/cleanup")
+    @Transactional(readOnly = true)
+    fun uploadedFileCleanupDiagnostics(): UploadedFileCleanupDiagnostics = uploadedFileRetentionService.diagnoseCleanup()
+}

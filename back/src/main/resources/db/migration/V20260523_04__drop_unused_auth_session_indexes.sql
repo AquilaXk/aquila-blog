@@ -1,0 +1,3 @@
+DROP INDEX IF EXISTS public.idx_auth_security_event_event_type_created_at;
+DROP INDEX IF EXISTS public.idx_auth_security_event_member_created_at;
+DROP INDEX IF EXISTS public.member_session_idx_member_session_active;

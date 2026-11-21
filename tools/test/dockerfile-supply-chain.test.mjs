@@ -1,0 +1,62 @@
+import assert from "node:assert/strict"
+import { readFileSync } from "node:fs"
+import path from "node:path"
+import test from "node:test"
+
+const repoRoot = path.resolve(import.meta.dirname, "../..")
+const backendDockerfilePath = path.join(repoRoot, "back/Dockerfile")
+const uncheckedJdkDownloadHost = ["download", "java", "net"].join(".")
+
+// Dockerfile keywords are case-insensitive. A case-sensitive split would treat a lowercase final
+// `from` as ordinary text and hand back an earlier stage, so a runtime stage missing USER or the
+// healthcheck client could still pass on the previous stage's lines.
+const runtimeStageOf = (dockerfile) => dockerfile.split(/^FROM\s+/im).at(-1)
+
+test("backend Dockerfile pins every external build stage image by digest", () => {
+  const dockerfile = readFileSync(backendDockerfilePath, "utf8")
+  const unpinnedFroms = [...dockerfile.matchAll(/^FROM\s+([^\s]+)(?:\s+AS\s+\S+)?$/gim)]
+    .map((match) => match[1])
+    .filter((image) => !image.includes("@sha256:"))
+
+  assert.deepEqual(unpinnedFroms, [])
+})
+
+test("backend Dockerfile does not pipe unchecked network downloads into build tools", () => {
+  const dockerfile = readFileSync(backendDockerfilePath, "utf8")
+
+  assert.doesNotMatch(dockerfile, /curl\b[\s\S]*\|\s*tar\b/)
+  assert.equal(dockerfile.includes(uncheckedJdkDownloadHost), false)
+})
+
+test("backend runtime image contains the compose healthcheck client", () => {
+  const dockerfile = readFileSync(backendDockerfilePath, "utf8")
+  const runtimeStage = runtimeStageOf(dockerfile)
+
+  assert.match(runtimeStage, /apt-get install -y --no-install-recommends wget\b/)
+})
+
+test("backend runtime image removes the inherited Pebble binary", () => {
+  const dockerfile = readFileSync(backendDockerfilePath, "utf8")
+  const runtimeStage = runtimeStageOf(dockerfile)
+  const strictRemoval = runtimeStage.match(/^\s*&& rm \/usr\/bin\/pebble \\$/m)
+  const nonRootUserIndex = runtimeStage.search(/^USER app$/m)
+
+  assert.notEqual(strictRemoval, null)
+  assert.notEqual(nonRootUserIndex, -1)
+  assert.ok(strictRemoval.index < nonRootUserIndex)
+})
+
+test("runtime stage extraction is not fooled by a lowercase final FROM", () => {
+  const dockerfile = [
+    "FROM base@sha256:aaa AS builder",
+    "RUN apk add --no-cache wget",
+    "USER app",
+    "from base@sha256:bbb",
+    'CMD ["node", "server.js"]',
+  ].join("\n")
+
+  const runtimeStage = runtimeStageOf(dockerfile)
+
+  assert.doesNotMatch(runtimeStage, /apk add --no-cache wget\b/)
+  assert.deepEqual([...runtimeStage.matchAll(/^USER\s+(\S+)/gim)], [])
+})

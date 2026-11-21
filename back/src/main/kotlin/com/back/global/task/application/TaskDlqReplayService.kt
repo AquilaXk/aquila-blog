@@ -1,0 +1,152 @@
+package com.back.global.task.application
+
+import com.back.global.task.application.port.output.TaskDlqReplayRepositoryPort
+import com.back.global.task.application.port.output.TaskQueueRepositoryPort
+import com.back.global.task.domain.Task
+import io.micrometer.core.instrument.MeterRegistry
+import org.springframework.stereotype.Service
+import org.springframework.transaction.annotation.Transactional
+import java.time.Clock
+import java.time.Instant
+
+data class TaskDlqReplayResult(
+    val taskType: String?,
+    val requestedLimit: Int,
+    val selectedCount: Int,
+    val replayedCount: Int,
+    val quarantinedCount: Int,
+    val resetRetryCount: Boolean,
+    val replayedTaskIds: List<Long>,
+)
+
+/**
+ * TaskDlqReplayService는 FAILED(DLQ) 태스크를 운영자가 재실행할 수 있게 한다.
+ * replay 시 상태를 PENDING으로 복구하고 nextRetryAt을 즉시(now)로 당겨 처리 큐에 재투입한다.
+ *
+ * 참조 구현: felixmosh/bull-board (MIT) — DLQ failed task selection and batch replay
+ */
+@Service
+class TaskDlqReplayService(
+    private val taskQueueRepository: TaskQueueRepositoryPort,
+    private val taskDlqReplayRepository: TaskDlqReplayRepositoryPort,
+    private val taskHandlerRegistry: TaskHandlerRegistry,
+    private val taskPayloadEnvelopeCodec: TaskPayloadEnvelopeCodec,
+    private val clock: Clock,
+    private val meterRegistry: MeterRegistry? = null,
+) {
+    @Transactional
+    fun replayFailedTasksWithLock(
+        taskType: String?,
+        limit: Int,
+        resetRetryCount: Boolean,
+    ): TaskDlqReplayResult = replayFailedTasksWithLock(taskType, limit, resetRetryCount, null)
+
+    @Transactional
+    fun replayFailedTasksWithLock(
+        taskType: String?,
+        limit: Int,
+        resetRetryCount: Boolean,
+        taskIds: List<Long>?,
+    ): TaskDlqReplayResult {
+        require(limit in 1..200) { "DLQ replay limit must be between 1 and 200" }
+        val safeLimit = limit
+        val normalizedTaskType = taskType?.trim()?.takeIf { it.isNotBlank() }
+        val now = Instant.now(clock)
+        val failedTasks =
+            if (!taskIds.isNullOrEmpty()) {
+                taskDlqReplayRepository
+                    .findFailedTasksByIdsWithLock(taskIds.distinct().take(200))
+                    .let { tasks ->
+                        if (normalizedTaskType == null) tasks else tasks.filter { it.taskType == normalizedTaskType }
+                    }.take(safeLimit)
+            } else if (normalizedTaskType == null) {
+                taskDlqReplayRepository.findFailedTasksWithLock(null, safeLimit)
+            } else {
+                taskDlqReplayRepository.findFailedTasksWithLock(normalizedTaskType, safeLimit)
+            }
+
+        if (failedTasks.isEmpty()) {
+            return TaskDlqReplayResult(
+                taskType = normalizedTaskType,
+                requestedLimit = safeLimit,
+                selectedCount = 0,
+                replayedCount = 0,
+                quarantinedCount = 0,
+                resetRetryCount = resetRetryCount,
+                replayedTaskIds = emptyList(),
+            )
+        }
+
+        val replayedIds = mutableListOf<Long>()
+        val modifiedTasks = ArrayList<Task>(failedTasks.size)
+        var quarantinedCount = 0
+        failedTasks.forEach { task ->
+            val entry = taskHandlerRegistry.getEntry(task.taskType)
+            if (entry == null) {
+                task.markAsQuarantined(TaskQuarantineReason.UNKNOWN_TASK_TYPE.name, now)
+                modifiedTasks.add(task)
+                quarantinedCount++
+                recordTaskQuarantine(task.taskType, TaskQuarantineReason.UNKNOWN_TASK_TYPE)
+                return@forEach
+            }
+            try {
+                taskPayloadEnvelopeCodec.decode(
+                    rawEnvelope = task.payload,
+                    storedMetadata =
+                        StoredTaskPayloadMetadata(
+                            uid = task.uid,
+                            aggregateType = task.aggregateType,
+                            aggregateId = task.aggregateId,
+                            taskType = task.taskType,
+                        ),
+                    entry = entry,
+                )
+            } catch (exception: TaskPayloadQuarantineException) {
+                task.markAsQuarantined(exception.reason.name, now)
+                modifiedTasks.add(task)
+                quarantinedCount++
+                recordTaskQuarantine(task.taskType, exception.reason)
+                return@forEach
+            }
+            task.replayFailed(now, resetRetryCount)
+            modifiedTasks.add(task)
+            replayedIds += task.id
+            val replayCounter =
+                meterRegistry
+                    ?.counter(
+                        "task.dlq.replay.count",
+                        "taskType",
+                        task.taskType.ifBlank { "unknown" },
+                    )
+            replayCounter?.increment()
+        }
+        if (modifiedTasks.isNotEmpty()) {
+            taskQueueRepository.saveAllTasks(modifiedTasks)
+        }
+
+        return TaskDlqReplayResult(
+            taskType = normalizedTaskType,
+            requestedLimit = safeLimit,
+            selectedCount = failedTasks.size,
+            replayedCount = replayedIds.size,
+            quarantinedCount = quarantinedCount,
+            resetRetryCount = resetRetryCount,
+            replayedTaskIds = replayedIds,
+        )
+    }
+
+    private fun recordTaskQuarantine(
+        taskType: String,
+        reason: TaskQuarantineReason,
+    ) {
+        val metricTaskType = taskHandlerRegistry.getEntry(taskType)?.taskType ?: "unregistered"
+        meterRegistry
+            ?.counter(
+                "task.payload.quarantine",
+                "taskType",
+                metricTaskType,
+                "reason",
+                reason.name,
+            )?.increment()
+    }
+}

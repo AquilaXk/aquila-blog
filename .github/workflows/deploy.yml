@@ -1,0 +1,2600 @@
+name: Deploy to Home Server
+
+on:
+  workflow_call: {}
+  repository_dispatch:
+    types:
+      - web_frontend_image_ready
+  workflow_dispatch:
+    inputs:
+      force_backend_deploy:
+        description: "Build and deploy the backend image even when changed-file detection would skip it."
+        required: false
+        default: true
+        type: boolean
+      allow_deploy_without_ci_success:
+        description: "DANGEROUS: Skip verifying a successful CI run for this SHA before manual deploy."
+        required: false
+        default: false
+        type: boolean
+      allow_deploy_without_security_success:
+        description: "DANGEROUS: Skip verifying a successful Security run for this SHA before deploy."
+        required: false
+        default: false
+        type: boolean
+
+concurrency:
+  group: ${{ github.event_name == 'repository_dispatch' && format('homeserver-deploy-dispatch-{0}', github.run_id) || 'homeserver-deploy-main' }}
+  queue: max
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
+  HOME_TAILSCALE_HOST: ${{ vars.HOME_TAILSCALE_HOST }}
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  triggerGuard:
+    runs-on: ubuntu-latest
+    outputs:
+      security_caller_admission: ${{ steps.security_caller_admission.outputs.result }}
+      dispatch_admission: ${{ steps.dispatch_admission.outputs.result }}
+    steps:
+      - name: Admit automatic Security caller
+        id: security_caller_admission
+        if: github.event_name != 'workflow_dispatch' && github.event_name != 'repository_dispatch'
+        env:
+          CALLER_WORKFLOW_REF: ${{ github.workflow_ref }}
+          EXPECTED_CALLER_WORKFLOW_REF: AquilaXk/aquila-blog/.github/workflows/security.yml@refs/heads/main
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ "${CALLER_WORKFLOW_REF}" != "${EXPECTED_CALLER_WORKFLOW_REF}" ] || \
+            [ "${GITHUB_REF}" != "refs/heads/main" ]; then
+            echo "automatic deploy rejected: expected the exact Security main caller" >&2
+            exit 1
+          fi
+          echo "result=proceed" >> "${GITHUB_OUTPUT}"
+
+      - name: Admit Web image-ready dispatch
+        id: dispatch_admission
+        if: github.event_name == 'repository_dispatch'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO_SYNC_APP_BOT_LOGIN: ${{ vars.REPO_SYNC_APP_BOT_LOGIN }}
+          WEB_FRONTEND_SCHEMA_VERSION: ${{ github.event.client_payload.schema_version || '' }}
+          WEB_FRONTEND_DISPATCH_SENDER: ${{ github.event.sender.login || '' }}
+          WEB_FRONTEND_SOURCE_REPOSITORY: ${{ github.event.client_payload.source_repository || '' }}
+          WEB_FRONTEND_SOURCE_SHA: ${{ github.event.client_payload.source_sha || '' }}
+          WEB_FRONTEND_IMAGE_REF: ${{ github.event.client_payload.image_ref || '' }}
+          WEB_FRONTEND_IMAGE_DIGEST: ${{ github.event.client_payload.image_digest || '' }}
+          WEB_FRONTEND_TARGET_REPOSITORY: ${{ github.event.client_payload.target_repository || '' }}
+          WEB_FRONTEND_TARGET_SHA: ${{ github.event.client_payload.target_sha || '' }}
+          WEB_FRONTEND_DELIVERY_ID: ${{ github.event.client_payload.delivery_id || '' }}
+          WEB_FRONTEND_PRODUCER_RUN_ID: ${{ github.event.client_payload.producer_run_id || '' }}
+          WEB_FRONTEND_PRODUCER_RUN_ATTEMPT: ${{ github.event.client_payload.producer_run_attempt || '' }}
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          fail_dispatch() {
+            echo "Web image-ready dispatch rejected: $1" >&2
+            exit 1
+          }
+
+          [ "${WEB_FRONTEND_SCHEMA_VERSION}" = "1" ] || fail_dispatch "unsupported schema version"
+          [ -n "${REPO_SYNC_APP_BOT_LOGIN}" ] && \
+            [ "${WEB_FRONTEND_DISPATCH_SENDER}" = "${REPO_SYNC_APP_BOT_LOGIN}" ] || \
+            fail_dispatch "sender is not the configured Web App"
+          [ "${WEB_FRONTEND_SOURCE_REPOSITORY}" = "AquilaXk/aquila-blog-web" ] || \
+            fail_dispatch "source repository mismatch"
+          [ "${WEB_FRONTEND_TARGET_REPOSITORY}" = "${GITHUB_REPOSITORY}" ] || \
+            fail_dispatch "target repository mismatch"
+          [[ "${WEB_FRONTEND_SOURCE_SHA}" =~ ^[0-9a-f]{40}$ ]] || fail_dispatch "invalid source sha"
+          [[ "${WEB_FRONTEND_TARGET_SHA}" =~ ^[0-9a-f]{40}$ ]] || fail_dispatch "invalid target sha"
+          [ "${WEB_FRONTEND_TARGET_SHA}" = "${GITHUB_SHA}" ] || fail_dispatch "event target sha mismatch"
+          [[ "${WEB_FRONTEND_IMAGE_DIGEST}" =~ ^sha256:[0-9a-f]{64}$ ]] || fail_dispatch "invalid image digest"
+          [ "${WEB_FRONTEND_IMAGE_REF}" = "ghcr.io/aquilaxk/aquila-blog-web-front@${WEB_FRONTEND_IMAGE_DIGEST}" ] || \
+            fail_dispatch "image ref does not match the immutable digest"
+          [[ "${WEB_FRONTEND_DELIVERY_ID}" =~ ^[0-9a-f]{64}$ ]] || fail_dispatch "invalid delivery id"
+          [[ "${WEB_FRONTEND_PRODUCER_RUN_ID}" =~ ^[1-9][0-9]*$ ]] || fail_dispatch "invalid producer run id"
+          [[ "${WEB_FRONTEND_PRODUCER_RUN_ATTEMPT}" =~ ^[1-9][0-9]*$ ]] || fail_dispatch "invalid producer run attempt"
+
+          EXPECTED_DELIVERY_ID="$(
+            printf '%s\n' \
+              "schema_version=${WEB_FRONTEND_SCHEMA_VERSION}" \
+              "source_repository=${WEB_FRONTEND_SOURCE_REPOSITORY}" \
+              "source_sha=${WEB_FRONTEND_SOURCE_SHA}" \
+              "image_digest=${WEB_FRONTEND_IMAGE_DIGEST}" \
+              "target_repository=${WEB_FRONTEND_TARGET_REPOSITORY}" \
+              "target_sha=${WEB_FRONTEND_TARGET_SHA}" \
+              | sha256sum | awk '{print $1}'
+          )"
+          [ "${WEB_FRONTEND_DELIVERY_ID}" = "${EXPECTED_DELIVERY_ID}" ] || fail_dispatch "delivery id mismatch"
+
+          WEB_CURRENT_MAIN_SHA="$(gh api "repos/${WEB_FRONTEND_SOURCE_REPOSITORY}/commits/main" --jq '.sha')" || \
+            fail_dispatch "Web main lookup failed"
+          PLATFORM_CURRENT_MAIN_SHA="$(gh api "repos/${GITHUB_REPOSITORY}/commits/main" --jq '.sha')" || \
+            fail_dispatch "Platform main lookup failed"
+          [[ "${WEB_CURRENT_MAIN_SHA}" =~ ^[0-9a-f]{40}$ ]] || fail_dispatch "invalid current Web main sha"
+          [[ "${PLATFORM_CURRENT_MAIN_SHA}" =~ ^[0-9a-f]{40}$ ]] || fail_dispatch "invalid current Platform main sha"
+
+          ADMISSION_RESULT="proceed"
+          ADMISSION_REASON="exact-current-identity"
+          if [ "${WEB_FRONTEND_SOURCE_SHA}" != "${WEB_CURRENT_MAIN_SHA}" ]; then
+            ADMISSION_RESULT="noop"
+            ADMISSION_REASON="stale-web-source"
+          elif [ "${WEB_FRONTEND_TARGET_SHA}" != "${PLATFORM_CURRENT_MAIN_SHA}" ]; then
+            ADMISSION_RESULT="noop"
+            ADMISSION_REASON="stale-platform-target"
+          fi
+
+          echo "result=${ADMISSION_RESULT}" >> "${GITHUB_OUTPUT}"
+          {
+            echo "## Web image-ready admission"
+            echo "- result: ${ADMISSION_RESULT}"
+            echo "- reason: ${ADMISSION_REASON}"
+            echo "- delivery id: ${WEB_FRONTEND_DELIVERY_ID}"
+            echo "- source: ${WEB_FRONTEND_SOURCE_REPOSITORY}@${WEB_FRONTEND_SOURCE_SHA}"
+            echo "- target: ${WEB_FRONTEND_TARGET_REPOSITORY}@${WEB_FRONTEND_TARGET_SHA}"
+            echo "- image digest: ${WEB_FRONTEND_IMAGE_DIGEST}"
+            echo "- producer run: ${WEB_FRONTEND_PRODUCER_RUN_ID} attempt ${WEB_FRONTEND_PRODUCER_RUN_ATTEMPT}"
+          } >> "${GITHUB_STEP_SUMMARY}"
+
+  calculateTag:
+    needs:
+      - triggerGuard
+    permissions:
+      contents: read
+      actions: read
+    runs-on: ubuntu-latest
+    if: >
+      needs.triggerGuard.result == 'success' && (
+        (
+        needs.triggerGuard.outputs.security_caller_admission == 'proceed' &&
+        github.ref == 'refs/heads/main'
+      ) ||
+      (
+        github.event_name == 'workflow_dispatch' &&
+        github.ref == 'refs/heads/main'
+      ) ||
+      (
+        github.event_name == 'repository_dispatch' &&
+        github.event.action == 'web_frontend_image_ready' &&
+        needs.triggerGuard.outputs.dispatch_admission == 'proceed'
+      )
+      )
+    outputs:
+      image_tag: ${{ steps.meta.outputs.image_tag }}
+      image_name: ${{ steps.meta.outputs.image_name }}
+      image_ref: ${{ steps.meta.outputs.image_ref }}
+      deploy_sha: ${{ steps.meta.outputs.deploy_sha }}
+      backend_deploy: ${{ steps.meta.outputs.backend_deploy }}
+      front_deploy: ${{ steps.meta.outputs.front_deploy }}
+      front_image_ref: ${{ steps.meta.outputs.front_image_ref }}
+      front_source_sha: ${{ steps.meta.outputs.front_source_sha }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+
+      - name: Require successful CI for deployment SHA
+        if: >
+          needs.triggerGuard.outputs.security_caller_admission == 'proceed' ||
+          github.event_name == 'workflow_dispatch' ||
+          github.event_name == 'repository_dispatch'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          DEPLOY_SHA: ${{ github.sha }}
+          ALLOW_DEPLOY_WITHOUT_CI_SUCCESS: ${{ github.event.inputs.allow_deploy_without_ci_success || 'false' }}
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          if [ "${ALLOW_DEPLOY_WITHOUT_CI_SUCCESS}" = "true" ]; then
+            echo "WARNING: skipping CI success gate for workflow_dispatch (allow_deploy_without_ci_success=true) deploy_sha=${DEPLOY_SHA}" >&2
+            exit 0
+          fi
+
+          if [ -z "${DEPLOY_SHA}" ]; then
+            echo "deploy sha is empty; cannot verify CI success" >&2
+            exit 1
+          fi
+
+          for ATTEMPT in $(seq 1 250); do
+            RUN_STATES="$(
+              gh api \
+                "repos/${GITHUB_REPOSITORY}/actions/workflows/ci.yml/runs?head_sha=${DEPLOY_SHA}&per_page=50" \
+                --paginate \
+                --jq '.workflow_runs[] | select(.event == "push" and .head_branch == "main") | if (.status == "completed" and .conclusion == "success") then "success:\(.id)" elif .status != "completed" then "active:\(.id)" elif .status == "completed" then "terminal:\(.id)" else empty end'
+            )" || {
+              echo "CI workflow API lookup failed for deploy_sha=${DEPLOY_SHA}" >&2
+              exit 1
+            }
+
+            SUCCESS_RUN_ID="$(printf '%s\n' "${RUN_STATES}" | sed -n 's/^success://p' | head -n 1)"
+            if [ -n "${SUCCESS_RUN_ID}" ]; then
+              echo "workflow_dispatch CI success gate passed: deploy_sha=${DEPLOY_SHA} ci_run_id=${SUCCESS_RUN_ID}"
+              exit 0
+            fi
+            if printf '%s\n' "${RUN_STATES}" | grep -qx 'terminal:.*' && ! printf '%s\n' "${RUN_STATES}" | grep -qx 'active:.*'; then
+              echo "workflow_dispatch blocked: matching CI push run failed for deploy_sha=${DEPLOY_SHA}" >&2
+              exit 1
+            fi
+            if [ "${ATTEMPT}" -lt 250 ]; then sleep 60; fi
+          done
+
+          echo "workflow_dispatch blocked: timed out waiting for successful CI push run for deploy_sha=${DEPLOY_SHA}" >&2
+          exit 1
+
+      - name: Require successful Security for deploy SHA
+        if: github.event_name != 'repository_dispatch'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          DEPLOY_SHA: ${{ github.sha }}
+          SECURITY_CALLER_ADMISSION: ${{ needs.triggerGuard.outputs.security_caller_admission }}
+          ALLOW_DEPLOY_WITHOUT_SECURITY_SUCCESS: ${{ github.event.inputs.allow_deploy_without_security_success || 'false' }}
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          if [ "${SECURITY_CALLER_ADMISSION}" = "proceed" ]; then
+            echo "Security gate satisfied by the exact same-SHA caller DAG: deploy_sha=${DEPLOY_SHA}"
+            exit 0
+          fi
+
+          if [ "${ALLOW_DEPLOY_WITHOUT_SECURITY_SUCCESS}" = "true" ]; then
+            echo "WARNING: skipping Security success gate (allow_deploy_without_security_success=true) deploy_sha=${DEPLOY_SHA}" >&2
+            exit 0
+          fi
+
+          if [ -z "${DEPLOY_SHA}" ]; then
+            echo "deploy sha is empty; cannot verify Security success" >&2
+            exit 1
+          fi
+
+          for ATTEMPT in $(seq 1 250); do
+            RUN_STATES="$(
+              gh api \
+                "repos/${GITHUB_REPOSITORY}/actions/workflows/security.yml/runs?head_sha=${DEPLOY_SHA}&per_page=50" \
+                --paginate \
+                --jq '.workflow_runs[] | select(.event == "push" and .head_branch == "main") | if (.status == "completed" and .conclusion == "success") then "success:\(.id)" elif .status != "completed" then "active:\(.id)" elif .status == "completed" then "terminal:\(.id)" else empty end'
+            )" || {
+              echo "Security workflow API lookup failed for deploy_sha=${DEPLOY_SHA}" >&2
+              exit 1
+            }
+
+            SUCCESS_RUN_ID="$(printf '%s\n' "${RUN_STATES}" | sed -n 's/^success://p' | head -n 1)"
+            if [ -n "${SUCCESS_RUN_ID}" ]; then
+              echo "Security success gate passed: deploy_sha=${DEPLOY_SHA} security_run_id=${SUCCESS_RUN_ID}"
+              exit 0
+            fi
+            if printf '%s\n' "${RUN_STATES}" | grep -qx 'terminal:.*' && ! printf '%s\n' "${RUN_STATES}" | grep -qx 'active:.*'; then
+              echo "deploy blocked: matching Security push run failed for deploy_sha=${DEPLOY_SHA}" >&2
+              exit 1
+            fi
+            if [ "${ATTEMPT}" -lt 250 ]; then sleep 60; fi
+          done
+
+          echo "deploy blocked: timed out waiting for successful Security push run for deploy_sha=${DEPLOY_SHA}" >&2
+          exit 1
+
+      - name: Require successful automatic Security delivery for dispatch SHA
+        if: github.event_name == 'repository_dispatch'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          DEPLOY_SHA: ${{ github.sha }}
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          if [ -z "${DEPLOY_SHA}" ]; then
+            echo "deploy sha is empty; cannot verify automatic Security delivery" >&2
+            exit 1
+          fi
+
+          for ATTEMPT in $(seq 1 250); do
+            RUN_STATES="$(
+              gh api \
+                "repos/${GITHUB_REPOSITORY}/actions/workflows/security.yml/runs?head_sha=${DEPLOY_SHA}&per_page=50" \
+                --paginate \
+                --jq '.workflow_runs[] | select(.event == "push" and .head_branch == "main") | if (.status == "completed" and .conclusion == "success") then "success:\(.id)" elif .status != "completed" then "active:\(.id)" elif .status == "completed" then "terminal:\(.id)" else empty end'
+            )" || {
+              echo "automatic Security delivery API lookup failed for deploy_sha=${DEPLOY_SHA}" >&2
+              exit 1
+            }
+
+            SUCCESS_RUN_ID="$(printf '%s\n' "${RUN_STATES}" | sed -n 's/^success://p' | head -n 1)"
+            if [ -n "${SUCCESS_RUN_ID}" ]; then
+              echo "automatic Security delivery gate passed: deploy_sha=${DEPLOY_SHA} security_run_id=${SUCCESS_RUN_ID}"
+              exit 0
+            fi
+            if printf '%s\n' "${RUN_STATES}" | grep -qx 'terminal:.*' && ! printf '%s\n' "${RUN_STATES}" | grep -qx 'active:.*'; then
+              echo "repository dispatch blocked: exact-SHA Security delivery did not succeed for deploy_sha=${DEPLOY_SHA}" >&2
+              exit 1
+            fi
+            if [ "${ATTEMPT}" -lt 250 ]; then sleep 60; fi
+          done
+
+          echo "repository dispatch blocked: timed out waiting for successful automatic Security delivery for deploy_sha=${DEPLOY_SHA}" >&2
+          exit 1
+
+      - name: Calculate deploy targets and image tags
+        id: meta
+        env:
+          DEPLOY_SHA_INPUT: ${{ github.sha }}
+          FORCE_BACKEND_DEPLOY_INPUT: ${{ github.event.inputs.force_backend_deploy || 'false' }}
+          WEB_FRONTEND_SOURCE_SHA: ${{ github.event.client_payload.source_sha || '' }}
+          WEB_FRONTEND_IMAGE_REF: ${{ github.event.client_payload.image_ref || '' }}
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          OWNER_LC="$(echo "${GITHUB_REPOSITORY_OWNER}" | tr '[:upper:]' '[:lower:]')"
+          REPO_NAME="$(basename "${GITHUB_REPOSITORY}")"
+          DEPLOY_SHA="${DEPLOY_SHA_INPUT:-}"
+          if [ -z "${DEPLOY_SHA}" ]; then
+            echo "deploy sha is empty" >&2
+            exit 1
+          fi
+
+          IMAGE_NAME="ghcr.io/${OWNER_LC}/${REPO_NAME}-back"
+          IMAGE_TAG="sha-${DEPLOY_SHA}"
+          IMAGE_REF="${IMAGE_NAME}:${IMAGE_TAG}"
+          BACKEND_DEPLOY="false"
+          FRONT_DEPLOY="false"
+          FRONT_IMAGE_REF=""
+          FRONT_SOURCE_SHA=""
+          CHANGE_SOURCE="first-parent-diff"
+          BACKEND_DEPLOY_PATHS_PATTERN='^(restore-privacy-gate\.sh|back/|deploy/homeserver/|deploy/env/|tools/env/|\.github/workflows/deploy\.yml|\.github/workflows/ci\.yml|\.github/workflows/reusable-backend-quality\.yml)'
+          STALE_DEPLOY_BLOCK_PATHS_PATTERN='^(restore-privacy-gate\.sh|back/|deploy/homeserver/|deploy/env/|tools/env/|tools/guards/|tools/ci/|tools/security/native-image-evidence\.mjs|\.github/security/vulnerability-exceptions\.yml|\.github/workflows/deploy\.yml|\.github/workflows/ci\.yml|\.github/workflows/reusable-backend-quality\.yml|\.github/workflows/security\.yml)'
+
+          if [ "${GITHUB_EVENT_NAME}" = "repository_dispatch" ]; then
+            FRONT_DEPLOY="true"
+            FRONT_IMAGE_REF="${WEB_FRONTEND_IMAGE_REF}"
+            FRONT_SOURCE_SHA="${WEB_FRONTEND_SOURCE_SHA}"
+            CHANGE_SOURCE="web-frontend-image-ready"
+            {
+              echo "image_tag=${IMAGE_TAG}"
+              echo "image_name=${IMAGE_NAME}"
+              echo "image_ref=${IMAGE_REF}"
+              echo "deploy_sha=${DEPLOY_SHA}"
+              echo "backend_deploy=false"
+              echo "front_deploy=true"
+              echo "front_image_ref=${FRONT_IMAGE_REF}"
+              echo "front_source_sha=${FRONT_SOURCE_SHA}"
+            } >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          CHANGED_FILES=""
+          if [ "${GITHUB_EVENT_NAME}" != "workflow_dispatch" ]; then
+            REMOTE_MAIN_SHA="$(git ls-remote --exit-code origin refs/heads/main | awk '{print $1}')"
+            if [ -z "${REMOTE_MAIN_SHA}" ]; then
+              echo "origin/main sha lookup failed" >&2
+              exit 1
+            fi
+            git fetch --no-tags --prune origin "+refs/heads/main:refs/remotes/origin/main"
+            FETCHED_MAIN_SHA="$(git rev-parse refs/remotes/origin/main)"
+            if [ "${FETCHED_MAIN_SHA}" != "${REMOTE_MAIN_SHA}" ]; then
+              echo "origin/main sha changed during stale check: remote=${REMOTE_MAIN_SHA} fetched=${FETCHED_MAIN_SHA}" >&2
+              exit 1
+            fi
+            if ! git merge-base --is-ancestor "${DEPLOY_SHA}" "${REMOTE_MAIN_SHA}"; then
+              echo "deploy sha is not reachable from origin/main: deploy_sha=${DEPLOY_SHA} origin_main=${REMOTE_MAIN_SHA}" >&2
+              exit 1
+            fi
+            if [ "${DEPLOY_SHA}" != "${REMOTE_MAIN_SHA}" ]; then
+              STALE_CHANGED_FILES="$(git diff --name-only "${DEPLOY_SHA}" "${REMOTE_MAIN_SHA}" 2>/dev/null || true)"
+              if echo "${STALE_CHANGED_FILES}" | grep -Eq "${STALE_DEPLOY_BLOCK_PATHS_PATTERN}"; then
+                echo "stale deploy blocked by backend-impacting newer main changes: deploy_sha=${DEPLOY_SHA} origin_main=${REMOTE_MAIN_SHA}" >&2
+                echo "${STALE_CHANGED_FILES}" >&2
+                exit 1
+              fi
+              echo "stale automatic caller allowed after backend-neutral newer main changes: deploy_sha=${DEPLOY_SHA} origin_main=${REMOTE_MAIN_SHA}"
+              CHANGE_SOURCE="${CHANGE_SOURCE}+path-aware-stale-neutral"
+            fi
+          fi
+          CHANGED_FILES="$(git diff --name-only "${DEPLOY_SHA}^1" "${DEPLOY_SHA}" 2>/dev/null || true)"
+          if [ -z "${CHANGED_FILES}" ]; then
+            CHANGE_SOURCE="merge-diff-tree"
+            CHANGED_FILES="$(git diff-tree --no-commit-id --name-only -r -m "${DEPLOY_SHA}" || true)"
+          fi
+          if [ -z "${CHANGED_FILES}" ]; then
+            BACKEND_DEPLOY="true"
+            CHANGE_SOURCE="fail-open:no-changed-files"
+          else
+            if echo "${CHANGED_FILES}" | grep -Eq "${BACKEND_DEPLOY_PATHS_PATTERN}"; then
+              BACKEND_DEPLOY="true"
+            fi
+          fi
+
+          if [ "${FORCE_BACKEND_DEPLOY_INPUT}" = "true" ]; then
+            BACKEND_DEPLOY="true"
+            CHANGE_SOURCE="${CHANGE_SOURCE}+manual-force-backend"
+          fi
+
+          echo "deploy_target_source=${CHANGE_SOURCE}"
+
+          {
+            echo "image_tag=${IMAGE_TAG}"
+            echo "image_name=${IMAGE_NAME}"
+            echo "image_ref=${IMAGE_REF}"
+            echo "deploy_sha=${DEPLOY_SHA}"
+            echo "backend_deploy=${BACKEND_DEPLOY}"
+            echo "front_deploy=${FRONT_DEPLOY}"
+            echo "front_image_ref=${FRONT_IMAGE_REF}"
+            echo "front_source_sha=${FRONT_SOURCE_SHA}"
+          } >> "$GITHUB_OUTPUT"
+
+          {
+            echo "## Deploy Boundary"
+            echo "- backend deploy: homeserver blue/green"
+            echo "- backend_deploy: ${BACKEND_DEPLOY}"
+            if [ "${BACKEND_DEPLOY}" = "true" ]; then
+              echo "- backend result: backend deploy pipeline continues"
+            else
+              echo "- backend result: homeserver deploy skipped because backend/deploy paths did not change"
+            fi
+            echo "- front deploy: skipped; only a Web image digest dispatch may deploy front"
+            echo "- decision source: ${CHANGE_SOURCE}"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  validateBackendDeployEnvironment:
+    runs-on: ubuntu-latest
+    needs: calculateTag
+    if: needs.calculateTag.outputs.backend_deploy == 'true'
+    timeout-minutes: 5
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ needs.calculateTag.outputs.deploy_sha }}
+
+      - name: Verify required secrets
+        env:
+          TS_OAUTH_CLIENT_ID: ${{ secrets.TS_OAUTH_CLIENT_ID }}
+          TS_OAUTH_SECRET: ${{ secrets.TS_OAUTH_SECRET }}
+          HOME_SSH_USER: ${{ secrets.HOME_SSH_USER }}
+          HOME_APP_DIR: ${{ secrets.HOME_APP_DIR }}
+          HOME_SSH_KEY: ${{ secrets.HOME_SSH_KEY || secrets.HOME_SSH_PRIVATE_KEY }}
+          HOME_KNOWN_HOSTS: ${{ secrets.HOME_KNOWN_HOSTS }}
+          HOME_SERVER_ENV: ${{ secrets.HOME_SERVER_ENV }}
+          HOME_GHCR_USERNAME: ${{ secrets.HOME_GHCR_USERNAME }}
+          HOME_GHCR_TOKEN: ${{ secrets.HOME_GHCR_TOKEN }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          required=(
+            TS_OAUTH_CLIENT_ID
+            TS_OAUTH_SECRET
+            HOME_SSH_USER
+            HOME_APP_DIR
+            HOME_TAILSCALE_HOST
+            HOME_SSH_KEY
+            HOME_KNOWN_HOSTS
+            HOME_GHCR_USERNAME
+            HOME_GHCR_TOKEN
+            HOME_SERVER_ENV
+          )
+
+          for key in "${required[@]}"; do
+            value="${!key:-}"
+            if [ -z "$value" ]; then
+              echo "$key missing"
+              exit 1
+            fi
+            echo "$key present"
+          done
+
+          if [[ ! "${HOME_TAILSCALE_HOST}" =~ ^[a-z0-9]([a-z0-9-]*[a-z0-9])?\.[a-z0-9]([a-z0-9-]*[a-z0-9])?\.ts\.net$ ]]; then
+            echo "HOME_TAILSCALE_HOST must be a full MagicDNS FQDN ending in .ts.net." >&2
+            exit 1
+          fi
+
+      - name: Validate HOME_SERVER_ENV contract
+        env:
+          HOME_APP_DIR: ${{ secrets.HOME_APP_DIR }}
+          HOME_SERVER_ENV: ${{ secrets.HOME_SERVER_ENV }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          home_server_env_file="${RUNNER_TEMP}/home-server.env"
+          HOME_RESTORE_PRIVACY_GATE_SCRIPT="${HOME_APP_DIR%/}/restore-privacy-gate.sh"
+          {
+            printf '%s\n' "${HOME_SERVER_ENV}"
+            printf 'AQUILA_RESTORE_PRIVACY_GATE_SCRIPT=%s\n' "${HOME_RESTORE_PRIVACY_GATE_SCRIPT}"
+          } > "${home_server_env_file}"
+          node tools/env/validate-env.mjs --target home-server-source --file "${home_server_env_file}"
+
+  buildAndPush:
+    runs-on: ubuntu-latest
+    needs:
+      - calculateTag
+      - validateBackendDeployEnvironment
+    if: >
+      needs.calculateTag.outputs.backend_deploy == 'true' &&
+      needs.validateBackendDeployEnvironment.result == 'success'
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      packages: write
+      attestations: write
+      id-token: write
+    outputs:
+      back_image_ref: ${{ steps.backend_image.outputs.back_image_ref }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ needs.calculateTag.outputs.deploy_sha }}
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@37fe631027851001ddb9b187196cc803df7f5f0e # v4
+
+      - name: Login to GHCR
+        uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push backend image
+        id: build_backend_image
+        uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7
+        with:
+          context: ./back
+          file: ./back/Dockerfile
+          push: true
+          tags: ${{ needs.calculateTag.outputs.image_ref }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Export backend digest image ref
+        id: backend_image
+        env:
+          IMAGE_NAME: ${{ needs.calculateTag.outputs.image_name }}
+          BACKEND_IMAGE_DIGEST: ${{ steps.build_backend_image.outputs.digest }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ ! "${BACKEND_IMAGE_DIGEST}" =~ ^sha256:[a-f0-9]{64}$ ]]; then
+            echo "backend image digest must be immutable lowercase sha256" >&2
+            exit 1
+          fi
+          echo "back_image_ref=${IMAGE_NAME}@${BACKEND_IMAGE_DIGEST}" >> "$GITHUB_OUTPUT"
+          echo "backend image ref: ${IMAGE_NAME}@${BACKEND_IMAGE_DIGEST}" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Install Trivy for backend image evidence
+        env:
+          TRIVY_VERSION: "0.72.0"
+          TRIVY_SHA256: "bbb64b9695866ce4a7a8f5c9592002c5961cab378577fa3f8a040df362b9b2ea"
+        run: |
+          set -euo pipefail
+          curl -fsSL --retry 8 --retry-all-errors --retry-max-time 180 -o /tmp/trivy.tgz "https://github.com/aquasecurity/trivy/releases/download/v${TRIVY_VERSION}/trivy_${TRIVY_VERSION}_Linux-64bit.tar.gz"
+          printf '%s  %s\n' "${TRIVY_SHA256}" /tmp/trivy.tgz | sha256sum --check -
+          tar -xzf /tmp/trivy.tgz -C /tmp trivy
+          sudo mv /tmp/trivy /usr/local/bin/trivy
+
+      - name: Pull and scan immutable backend image
+        env:
+          IMAGE_REF: ${{ steps.backend_image.outputs.back_image_ref }}
+        run: |
+          set -euo pipefail
+          docker pull "${IMAGE_REF}"
+          trivy image --severity HIGH,CRITICAL \
+            --format cosign-vuln --output "${RUNNER_TEMP}/backend-image-vulnerability.json" "${IMAGE_REF}"
+          node tools/guards/check-vulnerability-exceptions.mjs --filter-trivy-cosign "${RUNNER_TEMP}/backend-image-vulnerability.json" --expected-artifact "${IMAGE_REF}"
+          trivy image \
+            --format spdx-json --output "${RUNNER_TEMP}/backend-image.spdx.json" "${IMAGE_REF}"
+
+      - name: Attest backend image provenance
+        uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4.0.0
+        with:
+          subject-name: ghcr.io/aquilaxk/aquila-blog-back
+          subject-digest: ${{ steps.build_backend_image.outputs.digest }}
+          push-to-registry: true
+
+      - name: Attest backend image SPDX SBOM
+        uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4.0.0
+        with:
+          subject-name: ghcr.io/aquilaxk/aquila-blog-back
+          subject-digest: ${{ steps.build_backend_image.outputs.digest }}
+          predicate-type: https://spdx.dev/Document/v2.3
+          predicate-path: ${{ runner.temp }}/backend-image.spdx.json
+          push-to-registry: true
+
+      - name: Attest backend image vulnerability scan
+        uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4.0.0
+        with:
+          subject-name: ghcr.io/aquilaxk/aquila-blog-back
+          subject-digest: ${{ steps.build_backend_image.outputs.digest }}
+          predicate-type: https://cosign.sigstore.dev/attestation/vuln/v1
+          predicate-path: ${{ runner.temp }}/backend-image-vulnerability.json
+          push-to-registry: true
+
+      - name: Verify backend native image attestations
+        env:
+          GH_TOKEN: ${{ github.token }}
+          IMAGE_REF: ${{ steps.backend_image.outputs.back_image_ref }}
+          SOURCE_REPOSITORY: AquilaXk/aquila-blog
+          SOURCE_SHA: ${{ needs.calculateTag.outputs.deploy_sha }}
+          IMAGE_SUBJECT: ghcr.io/aquilaxk/aquila-blog-back
+          IMAGE_DIGEST: ${{ steps.build_backend_image.outputs.digest }}
+          EXPECTED_BUILD_TRIGGER: ${{ github.event_name }}
+          SIGNER_WORKFLOW: https://github.com/AquilaXk/aquila-blog/.github/workflows/deploy.yml@refs/heads/main
+          EXPECTED_RUN_URI: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}/attempts/${{ github.run_attempt }}
+        run: |
+          set -euo pipefail
+          gh attestation verify "oci://${IMAGE_REF}" \
+            --repo "AquilaXk/aquila-blog" \
+            --source-digest "${SOURCE_SHA}" \
+            --source-ref "refs/heads/main" \
+            --signer-workflow "AquilaXk/aquila-blog/.github/workflows/deploy.yml" \
+            --signer-digest "${SOURCE_SHA}" \
+            --deny-self-hosted-runners \
+            --predicate-type "https://slsa.dev/provenance/v1" \
+            --format json > "${RUNNER_TEMP}/backend-image-provenance.json"
+          gh attestation verify "oci://${IMAGE_REF}" \
+            --repo "AquilaXk/aquila-blog" \
+            --source-digest "${SOURCE_SHA}" \
+            --source-ref "refs/heads/main" \
+            --signer-workflow "AquilaXk/aquila-blog/.github/workflows/deploy.yml" \
+            --signer-digest "${SOURCE_SHA}" \
+            --deny-self-hosted-runners \
+            --predicate-type "https://spdx.dev/Document/v2.3" \
+            --format json > "${RUNNER_TEMP}/backend-image-spdx.json"
+          gh attestation verify "oci://${IMAGE_REF}" \
+            --repo "AquilaXk/aquila-blog" \
+            --source-digest "${SOURCE_SHA}" \
+            --source-ref "refs/heads/main" \
+            --signer-workflow "AquilaXk/aquila-blog/.github/workflows/deploy.yml" \
+            --signer-digest "${SOURCE_SHA}" \
+            --deny-self-hosted-runners \
+            --predicate-type "https://cosign.sigstore.dev/attestation/vuln/v1" \
+            --format json > "${RUNNER_TEMP}/backend-image-vulnerability-attestation.json"
+          node tools/security/native-image-evidence.mjs verify-attestation-set \
+            "${RUNNER_TEMP}/backend-image-provenance.json" \
+            "${RUNNER_TEMP}/backend-image-spdx.json" \
+            "${RUNNER_TEMP}/backend-image-vulnerability-attestation.json"
+          {
+            echo "## Backend native image evidence"
+            echo "- policy: aquila-native-image-evidence-v1"
+            echo "- source SHA: ${SOURCE_SHA}"
+            echo "- image digest: ${IMAGE_DIGEST}"
+            echo "- predicates: https://slsa.dev/provenance/v1, https://spdx.dev/Document/v2.3, https://cosign.sigstore.dev/attestation/vuln/v1"
+            echo "- signer workflow: ${SIGNER_WORKFLOW}"
+            echo "- run: ${EXPECTED_RUN_URI}"
+          } >> "${GITHUB_STEP_SUMMARY}"
+
+  blueGreenDeploy:
+    runs-on: ubuntu-latest
+    needs:
+      - calculateTag
+      - buildAndPush
+    if: >
+      needs.calculateTag.outputs.backend_deploy == 'true' &&
+      needs.buildAndPush.result == 'success'
+    timeout-minutes: 75
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ needs.calculateTag.outputs.deploy_sha }}
+
+      - name: Resolve Tailscale OAuth tags
+        shell: bash
+        run: |
+          set -euo pipefail
+          resolved_tags="${{ vars.TS_OAUTH_TAGS || secrets.TS_OAUTH_TAGS || 'tag:ci' }}"
+          echo "Using Tailscale OAuth tags: ${resolved_tags}"
+
+      - name: Connect to Tailscale
+        uses: tailscale/github-action@780049a30b6ff5c378a9e7b389d15ece7a204888 # v4.1.3
+        with:
+          oauth-client-id: ${{ secrets.TS_OAUTH_CLIENT_ID }}
+          oauth-secret: ${{ secrets.TS_OAUTH_SECRET }}
+          tags: ${{ vars.TS_OAUTH_TAGS || secrets.TS_OAUTH_TAGS || 'tag:ci' }}
+
+      - name: Diagnose Tailscale Route to Home SSH
+        env:
+          HOME_SSH_PORT: ${{ secrets.HOME_SSH_PORT || '22' }}
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          echo "diagnose target: ${HOME_TAILSCALE_HOST}:${HOME_SSH_PORT}"
+          tailscale status
+
+          echo "tailscale ping test"
+          if ! tailscale ping -c 3 "${HOME_TAILSCALE_HOST}"; then
+            echo "tailscale ping did not establish direct path (DERP-only or transient). Continue and rely on TCP SSH connectivity test."
+          fi
+
+          echo "tcp connectivity test"
+          if command -v nc >/dev/null 2>&1; then
+            timeout 10 nc -zv "${HOME_TAILSCALE_HOST}" "${HOME_SSH_PORT}"
+          else
+            # Positional arguments expand in the child shell, not this shell.
+            # shellcheck disable=SC2016
+            timeout 10 bash -c 'cat < /dev/null > "/dev/tcp/$1/$2"' bash "${HOME_TAILSCALE_HOST}" "${HOME_SSH_PORT}"
+            echo "tcp open: ${HOME_TAILSCALE_HOST}:${HOME_SSH_PORT}"
+          fi
+
+      - name: Configure SSH key
+        env:
+          HOME_SSH_KEY: ${{ secrets.HOME_SSH_KEY || secrets.HOME_SSH_PRIVATE_KEY }}
+          HOME_KNOWN_HOSTS: ${{ secrets.HOME_KNOWN_HOSTS }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          SSH_DIR="${RUNNER_TEMP}/ssh"
+          rm -rf "$SSH_DIR"
+          mkdir -p "$SSH_DIR"
+          chmod 700 "$SSH_DIR"
+
+          printf '%s\n' "${HOME_SSH_KEY}" > "$SSH_DIR/home_key"
+          chmod 600 "$SSH_DIR/home_key"
+          printf '%s\n' "${HOME_KNOWN_HOSTS}" > "$SSH_DIR/known_hosts"
+          if [ ! -s "$SSH_DIR/known_hosts" ]; then
+            echo "HOME_KNOWN_HOSTS is required for production deploy" >&2
+            exit 1
+          fi
+          chmod 600 "$SSH_DIR/known_hosts"
+          echo "SSH_DIR=$SSH_DIR" >> "$GITHUB_ENV"
+
+      - name: Deploy over SSH (pull image + blue/green switch)
+        env:
+          HOME_SSH_USER: ${{ secrets.HOME_SSH_USER }}
+          HOME_SSH_PORT: ${{ secrets.HOME_SSH_PORT }}
+          HOME_APP_DIR: ${{ secrets.HOME_APP_DIR }}
+          HOME_SERVER_ENV: ${{ secrets.HOME_SERVER_ENV }}
+          HOME_BACK_IMAGE: ${{ needs.buildAndPush.outputs.back_image_ref }}
+          HOME_DEPLOY_SHA: ${{ needs.calculateTag.outputs.deploy_sha }}
+          HOME_GHCR_USERNAME: ${{ secrets.HOME_GHCR_USERNAME }}
+          HOME_GHCR_TOKEN: ${{ secrets.HOME_GHCR_TOKEN }}
+        run: |
+          set -euo pipefail
+          PORT="${HOME_SSH_PORT:-22}"
+          HOME_RESTORE_PRIVACY_GATE_SCRIPT="${HOME_APP_DIR%/}/restore-privacy-gate.sh"
+          HOME_APP_DIR_B64="$(printf '%s' "${HOME_APP_DIR}" | base64 | tr -d '\n')"
+          LOCAL_ENV_FILE="${RUNNER_TEMP}/home-server.env"
+          LOCAL_REMOTE_VARS_FILE="${RUNNER_TEMP}/home-remote-vars.env"
+          printf '%s\n' "${HOME_SERVER_ENV}" > "${LOCAL_ENV_FILE}"
+          chmod 600 "${LOCAL_ENV_FILE}"
+          {
+            printf 'HOME_BACK_IMAGE=%q\n' "${HOME_BACK_IMAGE}"
+            printf 'HOME_DEPLOY_SHA=%q\n' "${HOME_DEPLOY_SHA}"
+            printf 'HOME_GHCR_USERNAME=%q\n' "${HOME_GHCR_USERNAME}"
+            printf 'HOME_GHCR_TOKEN=%q\n' "${HOME_GHCR_TOKEN}"
+            printf 'HOME_RESTORE_PRIVACY_GATE_SCRIPT=%q\n' "${HOME_RESTORE_PRIVACY_GATE_SCRIPT}"
+          } > "${LOCAL_REMOTE_VARS_FILE}"
+          chmod 600 "${LOCAL_REMOTE_VARS_FILE}"
+
+          REMOTE_TMP_DIR="$(ssh -i "$SSH_DIR/home_key" -o UserKnownHostsFile="$SSH_DIR/known_hosts" -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes -o ConnectTimeout=15 -p "$PORT" "$HOME_SSH_USER@$HOME_TAILSCALE_HOST" "umask 077 && mktemp -d /tmp/aquila-deploy.XXXXXX")"
+          case "${REMOTE_TMP_DIR}" in
+            /tmp/aquila-deploy.*) ;;
+            *)
+              echo "unexpected remote tmp dir: ${REMOTE_TMP_DIR}" >&2
+              exit 1
+              ;;
+          esac
+          cleanup_remote_tmp_from_runner() {
+            if [ -n "${REMOTE_TMP_DIR:-}" ]; then
+              ssh -i "$SSH_DIR/home_key" -o UserKnownHostsFile="$SSH_DIR/known_hosts" -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes -o ConnectTimeout=15 -p "$PORT" "$HOME_SSH_USER@$HOME_TAILSCALE_HOST" "rm -rf -- ${REMOTE_TMP_DIR}" || true
+            fi
+          }
+          trap cleanup_remote_tmp_from_runner EXIT
+
+          scp -i "$SSH_DIR/home_key" -o UserKnownHostsFile="$SSH_DIR/known_hosts" -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes -P "$PORT" \
+            "${LOCAL_ENV_FILE}" "${LOCAL_REMOTE_VARS_FILE}" \
+            "$HOME_SSH_USER@$HOME_TAILSCALE_HOST:${REMOTE_TMP_DIR}/"
+
+          ssh -i "$SSH_DIR/home_key" -o UserKnownHostsFile="$SSH_DIR/known_hosts" -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes -o ConnectTimeout=15 -p "$PORT" "$HOME_SSH_USER@$HOME_TAILSCALE_HOST" \
+            "umask 077 && cat > '${REMOTE_TMP_DIR}/deploy.sh' && HOME_APP_DIR_B64='${HOME_APP_DIR_B64}' REMOTE_TMP_DIR='${REMOTE_TMP_DIR}' bash '${REMOTE_TMP_DIR}/deploy.sh' </dev/null" <<'REMOTE'
+          set -euo pipefail
+
+          decode_b64() {
+            if printf '' | base64 --decode >/dev/null 2>&1; then
+              printf '%s' "$1" | base64 --decode
+            else
+              printf '%s' "$1" | base64 -d
+            fi
+          }
+
+          HOME_APP_DIR="$(decode_b64 "${HOME_APP_DIR_B64:-}")"
+          REMOTE_ENV_FILE="${REMOTE_TMP_DIR}/home-server.env"
+          REMOTE_VARS_FILE="${REMOTE_TMP_DIR}/home-remote-vars.env"
+
+          DEPLOY_COMPLETED="false"
+          ROLLBACK_IN_PROGRESS="false"
+          ROLLBACK_RUNTIME_SPLIT_ENABLED="false"
+          RUNTIME_ENV_MATERIALIZED="false"
+          PRE_DEPLOY_ENV_CAPTURED="false"
+          PRE_DEPLOY_ENV_CONTENT=""
+          BACKUP_DIR=""
+
+          rollback_from_backup_if_needed() {
+            return 0
+          }
+
+          cleanup_remote_tmp() {
+            if [ -n "${REMOTE_TMP_DIR:-}" ] && [ -d "${REMOTE_TMP_DIR}" ]; then
+              rm -rf "${REMOTE_TMP_DIR}" || true
+            fi
+          }
+
+          on_exit() {
+            local status="$?"
+            cleanup_remote_tmp
+            if [ "${status}" -ne 0 ]; then
+              rollback_from_backup_if_needed "unexpected_exit_status_${status}"
+            fi
+          }
+
+          trap on_exit EXIT
+
+          HOME_SERVER_ENV="$(cat "${REMOTE_ENV_FILE}")"
+          # shellcheck disable=SC1090
+          . "${REMOTE_VARS_FILE}"
+          export HOME_SERVER_ENV
+
+          upsert_env_key() {
+            local key="$1"
+            local value="$2"
+            local file="$3"
+            [ -z "${value}" ] && return 0
+
+            if grep -qE "^${key}=" "${file}"; then
+              grep -vE "^${key}=" "${file}" > "${file}.tmp"
+              printf '%s=%s\n' "${key}" "${value}" >> "${file}.tmp"
+              mv "${file}.tmp" "${file}"
+            else
+              printf '%s=%s\n' "${key}" "${value}" >> "${file}"
+            fi
+          }
+
+          remove_env_key() {
+            local key="$1"
+            local file="$2"
+
+            [[ "${key}" =~ ^[A-Za-z_][A-Za-z0-9_]*$ ]] || return 1
+            awk -v key="${key}" '$0 !~ "^[[:space:]]*(export[[:space:]]+)?" key "[[:space:]]*=" { print }' "${file}" > "${file}.tmp"
+            mv "${file}.tmp" "${file}"
+          }
+
+          restart_external_backup_legacy_minio_if_needed() {
+            local marker="deploy/homeserver/.external-minio-migration-stopped"
+            local migrated_minio_dir=""
+            local cid
+            local line
+            if [ ! -f "${marker}" ]; then
+              return 0
+            fi
+            while IFS= read -r line; do
+              [ -n "${line}" ] || continue
+              case "${line}" in
+                minio_dir=*)
+                  migrated_minio_dir="${line#minio_dir=}"
+                  continue
+                  ;;
+                cid=*)
+                  cid="${line#cid=}"
+                  ;;
+                *)
+                  cid="${line}"
+                  ;;
+              esac
+              echo "restarting legacy minio container before rollback: ${cid}" >&2
+              docker start "${cid}" >/dev/null 2>&1 || true
+            done < "${marker}"
+            case "${migrated_minio_dir}" in
+              "")
+                ;;
+              /mnt/aquila-blog-data/minio)
+                echo "keeping migrated MinIO copy for manual reconciliation after rollback: ${migrated_minio_dir}" >&2
+                ;;
+              *)
+                echo "keeping unexpected migrated MinIO path from marker: ${migrated_minio_dir}" >&2
+                ;;
+            esac
+            rm -f "${marker}"
+          }
+
+          cd "${HOME_APP_DIR}"
+
+          if [ -z "${HOME_DEPLOY_SHA:-}" ]; then
+            echo "HOME_DEPLOY_SHA is empty. abort deploy." >&2
+            exit 1
+          fi
+
+          resolve_active_prod_db_name() {
+            local value
+            value="$(awk -F= '$1 == "custom.prod.dbName" || $1 == "CUSTOM_PROD_DBNAME" { print substr($0, index($0, "=") + 1) }' deploy/homeserver/.env.prod 2>/dev/null | tail -n 1 | tr -d '\r')"
+            if [ -n "${value}" ]; then printf '%s\n' "${value}"; return; fi
+            value="$(awk -F= '$1 == "DB_BASE_NAME" { print substr($0, index($0, "=") + 1) }' deploy/homeserver/.env.prod 2>/dev/null | tail -n 1 | tr -d '\r')"
+            printf '%s_prod\n' "${value:-blog}"
+          }
+
+          preflight_profile_workspace_cutover_source_floor() {
+            local db_name table_exists marker_sha baseline_marker marker_present target_root_sha metadata_file tmp_meta
+            db_name="$(resolve_active_prod_db_name)"
+            table_exists="$(docker compose --env-file deploy/homeserver/.env.prod -f deploy/homeserver/docker-compose.prod.yml exec -T db_1 psql -U postgres -d "${db_name}" -At -v ON_ERROR_STOP=1 -c "SELECT to_regclass('public.platform_schema_cutover') IS NOT NULL" 2>/dev/null | tr -d '\r' | tail -n 1)" || {
+              echo "profile workspace cutover preflight query failed" >&2
+              return 1
+            }
+            [ "${table_exists}" = "f" ] && return 0
+            [ "${table_exists}" = "t" ] || { echo "profile workspace cutover preflight catalog result is malformed" >&2; return 1; }
+            marker_sha="$(docker compose --env-file deploy/homeserver/.env.prod -f deploy/homeserver/docker-compose.prod.yml exec -T db_1 psql -U postgres -d "${db_name}" -At -v ON_ERROR_STOP=1 -c "SELECT COALESCE((SELECT source_sha FROM public.platform_schema_cutover WHERE cutover_id = 'profile-workspace-legacy-attrs'), '')" 2>/dev/null | tr -d '\r' | tail -n 1)" || {
+              echo "profile workspace cutover marker query failed" >&2
+              return 1
+            }
+            [ -z "${marker_sha}" ] && return 0
+            [[ "${marker_sha}" =~ ^[0-9a-f]{40}$ && "${HOME_DEPLOY_SHA}" =~ ^[0-9a-f]{40}$ ]] || {
+              echo "profile workspace cutover preflight SHA is malformed" >&2
+              return 1
+            }
+            marker_present="true"
+            git cat-file -e "${marker_sha}^{commit}" 2>/dev/null || git fetch origin "${marker_sha}" --depth 1 2>/dev/null || marker_present="false"
+            if [ "${marker_present}" = "true" ] && git cat-file -e "${marker_sha}^{commit}" 2>/dev/null; then
+              if ! git merge-base --is-ancestor "${marker_sha}" "${HOME_DEPLOY_SHA}"; then
+                if git merge-base "${marker_sha}" "${HOME_DEPLOY_SHA}" >/dev/null 2>&1; then
+                  echo "profile workspace cutover blocks a pre-cutover backend deploy" >&2
+                  return 1
+                fi
+                marker_present="false"
+              fi
+            else
+              marker_present="false"
+            fi
+            if [ "${marker_present}" = "false" ]; then
+              target_root_sha="$(git rev-list --max-parents=0 "${HOME_DEPLOY_SHA}" | tail -n 1)"
+              [[ "${target_root_sha}" =~ ^[0-9a-f]{40}$ ]] || {
+                echo "profile workspace cutover reset root SHA is unavailable" >&2
+                return 1
+              }
+              git merge-base --is-ancestor "${target_root_sha}" "${HOME_DEPLOY_SHA}" || {
+                echo "profile workspace cutover reset root SHA is not an ancestor of deploy SHA" >&2
+                return 1
+              }
+              if ! printf '%s\n' \
+                "UPDATE public.platform_schema_cutover SET source_sha = :'target_root_sha' WHERE cutover_id = 'profile-workspace-legacy-attrs' AND source_sha = :'expected_sha';" \
+                | docker compose --env-file deploy/homeserver/.env.prod -f deploy/homeserver/docker-compose.prod.yml exec -T db_1 psql -U postgres -d "${db_name}" -At -v ON_ERROR_STOP=1 -v expected_sha="${marker_sha}" -v target_root_sha="${target_root_sha}" -f - >/dev/null; then
+                echo "profile workspace cutover marker re-anchor failed" >&2
+                return 1
+              fi
+              for metadata_file in deploy/homeserver/.deploy-baseline/metadata.env deploy/homeserver/.deploy-baseline.pending/metadata.env; do
+                if [ -f "${metadata_file}" ]; then
+                  tmp_meta="$(mktemp "${metadata_file}.tmp.XXXXXX")"
+                  awk -F= -v root_sha="${target_root_sha}" '
+                    $1 == "deploy_sha" { print "deploy_sha=" root_sha; next }
+                    $1 == "profile_workspace_cutover_sha" { print "profile_workspace_cutover_sha=" root_sha; next }
+                    { print }
+                  ' "${metadata_file}" > "${tmp_meta}" && chmod 600 "${tmp_meta}" && mv "${tmp_meta}" "${metadata_file}" || {
+                    rm -f "${tmp_meta}"
+                    echo "profile workspace cutover baseline metadata re-anchor failed" >&2
+                    return 1
+                  }
+                fi
+              done
+              echo "profile workspace cutover re-anchored after history reset: ${marker_sha} -> ${target_root_sha}"
+              marker_sha="${target_root_sha}"
+            fi
+            baseline_marker="$(awk -F= '$1 == "profile_workspace_cutover_sha" { print substr($0, index($0, "=") + 1) }' deploy/homeserver/.deploy-baseline/metadata.env 2>/dev/null | tail -n 1)"
+            if [ "${baseline_marker}" != "${marker_sha}" ]; then
+              PROFILE_WORKSPACE_CUTOVER_SHA="${marker_sha}" ./deploy/homeserver/record_deploy_baseline.sh --publish-pending || {
+                echo "profile workspace cutover has no compatible baseline or recoverable pending baseline" >&2
+                return 1
+              }
+            fi
+          }
+
+          git fetch origin main --prune
+          if ! git cat-file -e "${HOME_DEPLOY_SHA}^{commit}" 2>/dev/null; then
+            git fetch origin "${HOME_DEPLOY_SHA}" --depth 1 || true
+          fi
+          if ! git cat-file -e "${HOME_DEPLOY_SHA}^{commit}" 2>/dev/null || ! git merge-base --is-ancestor "${HOME_DEPLOY_SHA}" "origin/main"; then
+            echo "deploy sha is unavailable or unreachable from origin/main" >&2
+            exit 1
+          fi
+          if ! preflight_profile_workspace_cutover_source_floor; then
+            exit 1
+          fi
+
+          umask 077
+          if [ ! -f deploy/homeserver/create_deploy_backup.sh ]; then
+            echo "deploy backup script missing before checkout: deploy/homeserver/create_deploy_backup.sh" >&2
+            exit 1
+          fi
+          chmod +x deploy/homeserver/create_deploy_backup.sh
+          BACKUP_DIR="$(./deploy/homeserver/create_deploy_backup.sh)"
+          echo "backup created (pre-checkout): ${BACKUP_DIR}"
+          BACKUP_FLYWAY_SCHEMA_VERSION="$(
+            awk -F= '$1 == "flyway_schema_version" { value = substr($0, index($0, "=") + 1); gsub(/\r/, "", value); print value }' \
+              "${BACKUP_DIR}/metadata.env" 2>/dev/null | tail -n 1
+          )"
+          if [ -z "${BACKUP_FLYWAY_SCHEMA_VERSION}" ]; then
+            BACKUP_FLYWAY_SCHEMA_VERSION="unavailable"
+          fi
+          echo "backup Flyway schema identity: ${BACKUP_FLYWAY_SCHEMA_VERSION}"
+          # The script's own fallback notice goes to stderr and its stdout is the backup
+          # path, so the annotation is raised here instead: a run that keeps falling back
+          # would silently pin rollback to the drifting working tree.
+          if grep -qx 'restore_source=worktree' "${BACKUP_DIR}/metadata.env" 2>/dev/null; then
+            echo "::warning title=Rollback restore point fell back to the working tree::no successful-deploy baseline was found at deploy/homeserver/.deploy-baseline; a rollback would restore the server working tree instead of the last verified deploy"
+          fi
+
+          git fetch origin main --prune
+          if ! git cat-file -e "${HOME_DEPLOY_SHA}^{commit}" 2>/dev/null; then
+            git fetch origin "${HOME_DEPLOY_SHA}" --depth 1 || true
+          fi
+          if ! git cat-file -e "${HOME_DEPLOY_SHA}^{commit}" 2>/dev/null; then
+            echo "deploy sha not found in remote repository: ${HOME_DEPLOY_SHA}" >&2
+            exit 1
+          fi
+          if ! git merge-base --is-ancestor "${HOME_DEPLOY_SHA}" "origin/main"; then
+            echo "deploy sha is not reachable from origin/main: ${HOME_DEPLOY_SHA}" >&2
+            exit 1
+          fi
+
+          git checkout --force "${HOME_DEPLOY_SHA}"
+
+          mkdir -p deploy/homeserver
+
+          chmod +x \
+            restore-privacy-gate.sh \
+            deploy/homeserver/create_deploy_backup.sh \
+            deploy/homeserver/create_external_backup.sh \
+            deploy/homeserver/prune_external_backups.sh \
+            deploy/homeserver/blue_green_deploy.sh \
+            deploy/homeserver/minio_service_identity.sh \
+            deploy/homeserver/pgroonga_precheck.sh \
+            deploy/homeserver/post_precheck_env_guard.sh \
+            deploy/homeserver/rollback_last_deploy.sh \
+            deploy/homeserver/record_deploy_baseline.sh \
+            deploy/homeserver/steady_state_guard.sh \
+            deploy/homeserver/install_steady_state_guard_cron.sh \
+            deploy/homeserver/install_external_backup_timer.sh
+
+          restore_backup_files_minimally() {
+            local backup_dir="$1"
+            if [ -z "${backup_dir:-}" ] || [ ! -d "${backup_dir}" ]; then
+              return 1
+            fi
+
+            for file in docker-compose.prod.yml .active_backend; do
+              if [ -f "${backup_dir}/${file}" ]; then
+                cp "${backup_dir}/${file}" "deploy/homeserver/${file}"
+              fi
+            done
+
+            if [ -d "${backup_dir}/caddy" ]; then
+              rm -rf deploy/homeserver/caddy
+              cp -R "${backup_dir}/caddy" deploy/homeserver/caddy
+            elif [ -f "${backup_dir}/Caddyfile" ]; then
+              mkdir -p deploy/homeserver/caddy
+              cp "${backup_dir}/Caddyfile" deploy/homeserver/caddy/Caddyfile
+            fi
+
+            if [ -d "${backup_dir}/monitoring" ]; then
+              rm -rf deploy/homeserver/monitoring
+              cp -R "${backup_dir}/monitoring" deploy/homeserver/monitoring
+            elif [ -f "${backup_dir}/metadata.env" ]; then
+              rollback_mon_sha="$(awk -F= '$1 == "baseline_deploy_sha" { print substr($0, index($0, "=") + 1) }' "${backup_dir}/metadata.env" | tr -d '\r' | tail -n 1)"
+              if [ -z "${rollback_mon_sha}" ]; then
+                rollback_mon_sha="$(awk -F= '$1 == "git_head" { print substr($0, index($0, "=") + 1) }' "${backup_dir}/metadata.env" | tr -d '\r' | tail -n 1)"
+              fi
+              if printf '%s' "${rollback_mon_sha}" | grep -qE '^[0-9a-f]{40}$' && git cat-file -e "${rollback_mon_sha}:deploy/homeserver/monitoring" 2>/dev/null; then
+                rm -rf deploy/homeserver/monitoring
+                git archive "${rollback_mon_sha}" deploy/homeserver/monitoring | tar -x
+              fi
+            fi
+          }
+
+          run_backup_rollback() {
+            local reason="${1:-unexpected_exit}"
+            if [ -z "${BACKUP_DIR:-}" ] || [ ! -d "${BACKUP_DIR}" ]; then
+              return 0
+            fi
+
+            echo "rollback from backup: ${BACKUP_DIR} (reason=${reason})" >&2
+
+            if ! RUNTIME_SPLIT_ENABLED="${ROLLBACK_RUNTIME_SPLIT_ENABLED}" \
+              ./deploy/homeserver/rollback_last_deploy.sh --check-profile-workspace-compatibility "${BACKUP_DIR}"; then
+              echo "rollback blocked by profile workspace cutover compatibility: ${BACKUP_DIR}" >&2
+              return 1
+            fi
+
+            if ! restore_backup_files_minimally "${BACKUP_DIR}"; then
+              echo "minimal backup restore failed before rollback script: ${BACKUP_DIR}" >&2
+            fi
+
+            local rollback_status=0
+            if ! RUNTIME_SPLIT_ENABLED="${ROLLBACK_RUNTIME_SPLIT_ENABLED}" \
+              ./deploy/homeserver/rollback_last_deploy.sh "${BACKUP_DIR}"; then
+              echo "rollback script failed after minimal backup restore: ${BACKUP_DIR} (reason=${reason})" >&2
+              rollback_status=1
+            fi
+            if [ "${rollback_status}" -eq 0 ]; then
+              restart_external_backup_legacy_minio_if_needed
+            fi
+            return "${rollback_status}"
+          }
+
+          rollback_from_backup_if_needed() {
+            local reason="${1:-unexpected_exit}"
+            if [ "${DEPLOY_COMPLETED}" = "true" ] || [ "${ROLLBACK_IN_PROGRESS}" = "true" ]; then
+              return 0
+            fi
+            if [ "${RUNTIME_ENV_MATERIALIZED}" != "true" ]; then
+              return 0
+            fi
+            if [ -n "${BACKUP_DIR:-}" ] && [ -d "${BACKUP_DIR}" ]; then
+              ROLLBACK_IN_PROGRESS="true"
+              run_backup_rollback "${reason}"
+            fi
+          }
+
+          ./deploy/homeserver/prune_external_backups.sh --dry-run
+          ./deploy/homeserver/prune_external_backups.sh
+          EXTERNAL_BACKUP_DIR="$(./deploy/homeserver/create_external_backup.sh)"
+          echo "external backup created (pre-env-mutation): ${EXTERNAL_BACKUP_DIR}"
+          ./deploy/homeserver/prune_external_backups.sh --dry-run
+          ./deploy/homeserver/prune_external_backups.sh
+
+          if [ -f deploy/homeserver/.env.prod ]; then
+            PRE_DEPLOY_ENV_CONTENT="$(cat deploy/homeserver/.env.prod)"
+            PRE_DEPLOY_ENV_CAPTURED="true"
+          fi
+
+          if [ -n "${HOME_SERVER_ENV:-}" ]; then
+            printf '%s\n' "${HOME_SERVER_ENV}" > deploy/homeserver/.env.prod
+            remove_env_key "LEGACY_API_DOMAIN" "deploy/homeserver/.env.prod"
+          elif [ ! -f deploy/homeserver/.env.prod ]; then
+            cp deploy/homeserver/.env.prod.example deploy/homeserver/.env.prod
+            echo "deploy/homeserver/.env.prod created from example. Fill required values." >&2
+            exit 1
+          fi
+
+          upsert_env_key "AQUILA_RESTORE_PRIVACY_GATE_SCRIPT" "${HOME_RESTORE_PRIVACY_GATE_SCRIPT}" "deploy/homeserver/.env.prod"
+
+          require_privacy_freeze_value() {
+            local key="$1"
+            local actual="$2"
+            local expected="$3"
+            if [ "${actual:-${expected}}" != "${expected}" ]; then
+              echo "privacy freeze flag must stay ${expected}: ${key}=${actual}" >&2
+              exit 1
+            fi
+          }
+
+          # prod에서 sql.init 경로가 켜지면 부팅 실패(DO $$ 분리/DDL 충돌)로 이어질 수 있다.
+          # HOME_SERVER_ENV 드리프트가 있어도 배포 직전에 안전값으로 강제한다.
+          remove_env_key "SPRING_SQL_INIT_SCHEMA_LOCATIONS" "deploy/homeserver/.env.prod"
+          remove_env_key "SPRING_SQL_INIT_DATA_LOCATIONS" "deploy/homeserver/.env.prod"
+          remove_env_key "SPRING_SQL_INIT_CONTINUE_ON_ERROR" "deploy/homeserver/.env.prod"
+          upsert_env_key "SPRING_SQL_INIT_MODE" "never" "deploy/homeserver/.env.prod"
+
+          # Live auth cookies are scoped to the front/back shared suffix (AuthCookieDomainPolicy).
+          # Since #1575 the public web host and the public API origin are the same host
+          # (blog.aquilaxk.site, API served by path), so that shared suffix IS the web host and the
+          # apex and www hosts - which belong to a different service - can never receive this blog's
+          # session cookies.
+          #
+          # The values must move together, so they are derived from a single switch:
+          # CUSTOM_PROD_BACKURL in HOME_SERVER_ENV, compared by HOST. Repository changes alone
+          # never flip the live domain - the owner flips it by updating the secret, and this block
+          # follows in the same deploy. The same table lives in deploy/env/env.contract.json
+          # (cookieDomainScope.topologies) and a test pins them together.
+          #
+          # Comparing by host, not by raw URL: a trailing slash or an uppercase label would otherwise
+          # drop into the abort branch and block a deploy the env contract just accepted.
+          #
+          # An undeclared host is already rejected on the runner by the contract's cookieDomainScope
+          # ("has no declared prod site topology"), before this remote script has touched anything.
+          # The abort below is the second line only.
+          #
+          # Key parsing must not be narrower than tools/env/validate-env.mjs parseEnvText, otherwise a
+          # value the contract accepts (leading spaces, `export ` prefix) would fail only at deploy.
+          read_prod_env_value() {
+            awk -v key="$1" '
+              match($0, "^[[:space:]]*(export[[:space:]]+)?" key "[[:space:]]*=") {
+                value = substr($0, RSTART + RLENGTH)
+                gsub(/\r/, "", value)
+                sub(/^[[:space:]]+/, "", value)
+                sub(/[[:space:]]+$/, "", value)
+                if (value ~ /^".*"$/ || value ~ /^'\''.*'\''$/) value = substr(value, 2, length(value) - 2)
+                print value
+              }
+            ' deploy/homeserver/.env.prod | tail -n 1
+          }
+
+          # Must parse the host the same way tools/env/validate-env.mjs does (new URL().hostname),
+          # or a value the contract accepts dies only at deploy time. Order matters: strip the path
+          # first (a path may contain '@'), then userinfo, then the port - userinfo can itself
+          # contain ':' (user:pass@host), so stripping the port first would truncate inside it.
+          PROD_SITE_BACK_URL_RAW="$(read_prod_env_value CUSTOM_PROD_BACKURL)"
+          PROD_SITE_BACK_HOST="${PROD_SITE_BACK_URL_RAW#*://}"
+          PROD_SITE_BACK_HOST="${PROD_SITE_BACK_HOST%%/*}"
+          PROD_SITE_BACK_HOST="${PROD_SITE_BACK_HOST##*@}"
+          PROD_SITE_BACK_HOST="${PROD_SITE_BACK_HOST%%:*}"
+          PROD_SITE_BACK_HOST="$(printf '%s' "${PROD_SITE_BACK_HOST}" | tr '[:upper:]' '[:lower:]')"
+          case "${PROD_SITE_BACK_HOST}" in
+            blog.aquilaxk.site)
+              # Same-origin topology (#1575): the public API is served from the web host by path,
+              # so the front/back shared suffix is the web host itself.
+              PROD_SITE_COOKIE_DOMAIN="blog.aquilaxk.site"
+              PROD_SITE_FRONT_URL="https://blog.aquilaxk.site"
+              PROD_SITE_WEB_DOMAIN="blog.aquilaxk.site"
+              PROD_SITE_BACK_URL="https://blog.aquilaxk.site"
+              PROD_SITE_PUBLIC_EDGE_PROBE_BASE_URL="https://blog.aquilaxk.site"
+              PROD_SITE_ADMIN_EMBED_ORIGINS="https://blog.aquilaxk.site"
+              PROD_SITE_REVALIDATE_URL="https://blog.aquilaxk.site/api/revalidate"
+              ;;
+            *)
+              echo "unsupported CUSTOM_PROD_BACKURL host for the prod site contract: '${PROD_SITE_BACK_HOST}'" >&2
+              exit 1
+              ;;
+          esac
+
+          upsert_env_key "CUSTOM_PROD_COOKIEDOMAIN" "${PROD_SITE_COOKIE_DOMAIN}" "deploy/homeserver/.env.prod"
+          upsert_env_key "CUSTOM_PROD_FRONTURL" "${PROD_SITE_FRONT_URL}" "deploy/homeserver/.env.prod"
+          # The switch key writes itself back in canonical form. The case above matched on the host
+          # alone, so a trailing slash or an uppercase label reaches the containers normalised.
+          upsert_env_key "CUSTOM_PROD_BACKURL" "${PROD_SITE_BACK_URL}" "deploy/homeserver/.env.prod"
+          # Caddy web vhost address (#1538). The only supported topology always pins it.
+          upsert_env_key "WEB_DOMAIN" "${PROD_SITE_WEB_DOMAIN}" "deploy/homeserver/.env.prod"
+          # front 서버 사이드가 backend를 부르는 주소(#1539). 색깔에 묶인 값은 backend cutover마다
+          # 깨지고, back_read/back_admin은 런타임 모드 밖 요청을 503으로 막는다. 라우트 분리를
+          # 소유한 Caddy 내부 주소만 두 조건을 모두 만족하므로 여기서 고정한다. 오너 시크릿에 남은
+          # 옛 색깔 값이 살아남으면 front는 healthy를 보고하면서 프록시만 죽는다.
+          upsert_env_key "BACKEND_INTERNAL_URL" "http://caddy" "deploy/homeserver/.env.prod"
+          # The public edge probe must keep watching the host that is actually serving traffic.
+          # Pinning it to the post-transition host while DNS still points elsewhere (#1538) would
+          # fire PublicEdgeRouteDown for the whole transition window and monitor nothing real.
+          upsert_env_key "PUBLIC_EDGE_PROBE_BASE_URL" "${PROD_SITE_PUBLIC_EDGE_PROBE_BASE_URL}" "deploy/homeserver/.env.prod"
+          # Caddy feeds this into `Content-Security-Policy: frame-ancestors`. Left on the old host it
+          # both blocks the new admin UI's iframes and keeps granting embed rights to the other
+          # service on the apex/www hosts.
+          upsert_env_key "ADMIN_EMBED_ORIGINS" "${PROD_SITE_ADMIN_EMBED_ORIGINS}" "deploy/homeserver/.env.prod"
+          # backend -> front ISR revalidation. Optional by contract: an empty value means the feature
+          # is off, so only the host is corrected and a disabled setup is never switched on here.
+          EXISTING_REVALIDATE_URL="$(read_prod_env_value CUSTOM__REVALIDATE__URL)"
+          if [ -n "${EXISTING_REVALIDATE_URL}" ]; then
+            upsert_env_key "CUSTOM__REVALIDATE__URL" "${PROD_SITE_REVALIDATE_URL}" "deploy/homeserver/.env.prod"
+          fi
+
+          if [ -z "${HOME_BACK_IMAGE:-}" ]; then
+            echo "HOME_BACK_IMAGE is empty. abort deploy to avoid stale image rollout." >&2
+            exit 1
+          fi
+          STAGED_BACK_IMAGE="${HOME_BACK_IMAGE}"
+          echo "staged deploy image in shell env only: ${STAGED_BACK_IMAGE}"
+
+          extract_env_value_from_text() {
+            local key="$1"
+            local text="$2"
+            printf '%s\n' "${text}" | awk -v key="$key" '
+              match($0, "^[[:space:]]*(export[[:space:]]+)?" key "[[:space:]]*=") {
+                value=substr($0, RSTART + RLENGTH)
+                gsub(/\r/, "", value)
+                sub(/^[[:space:]]+/, "", value)
+                sub(/[[:space:]]+$/, "", value)
+                if (value ~ /^".*"$/ || value ~ /^'\''.*'\''$/) value = substr(value, 2, length(value) - 2)
+                print value
+              }
+            ' | tail -n 1
+          }
+
+          extract_env_value() {
+            local key="$1"
+            extract_env_value_from_text "${key}" "$(cat deploy/homeserver/.env.prod)"
+          }
+
+          preserve_pre_deploy_runtime_image_env_keys() {
+            if [ "${PRE_DEPLOY_ENV_CAPTURED}" != "true" ]; then
+              return 0
+            fi
+
+            local key previous current
+            for key in \
+              AUTOHEAL_IMAGE \
+              DOCKER_SOCKET_PROXY_IMAGE \
+              CLOUDFLARED_IMAGE \
+              CADDY_IMAGE \
+              UPTIME_KUMA_IMAGE \
+              PROMETHEUS_IMAGE \
+              ALERTMANAGER_IMAGE \
+              POSTGRES_EXPORTER_IMAGE \
+              GRAFANA_IMAGE \
+              LOKI_IMAGE \
+              PROMTAIL_IMAGE \
+              FRONT_BLUE_IMAGE \
+              FRONT_GREEN_IMAGE \
+              BACK_BLUE_IMAGE \
+              BACK_GREEN_IMAGE \
+              BACK_READ_IMAGE \
+              BACK_ADMIN_IMAGE \
+              BACK_WORKER_IMAGE \
+              NODE_RUNTIME_IMAGE \
+              DB_IMAGE \
+              REDIS_IMAGE \
+              MINIO_IMAGE
+            do
+              previous="$(extract_env_value_from_text "${key}" "${PRE_DEPLOY_ENV_CONTENT}")"
+              current="$(extract_env_value "${key}")"
+              # HOME_SERVER_ENV wins whenever the secret pins the key. That is the only
+              # operator lever to replace a stale digest already written on the server,
+              # so preserve must never restore the pre-deploy value over it (#1407).
+              if [ -n "${current}" ]; then
+                if [ -n "${previous}" ] && [ "${current}" != "${previous}" ]; then
+                  echo "HOME_SERVER_ENV overrides ${key} from pre-deploy env: ${previous} -> ${current}"
+                fi
+                continue
+              fi
+              if [ -n "${previous}" ]; then
+                upsert_env_key "${key}" "${previous}" "deploy/homeserver/.env.prod"
+                echo "preserved ${key} from pre-deploy env after HOME_SERVER_ENV overwrite"
+              fi
+            done
+          }
+
+          resolve_local_repo_digest() {
+            local image_ref="$1"
+            docker image inspect --format '{{index .RepoDigests 0}}' "${image_ref}" 2>/dev/null | head -n 1 | tr -d '\r'
+          }
+
+          resolve_repo_digest_with_pull_fallback() {
+            local image_ref="$1"
+            local digest
+            digest="$(resolve_local_repo_digest "${image_ref}" || true)"
+            if [ -n "${digest}" ]; then
+              printf '%s' "${digest}"
+              return 0
+            fi
+
+            echo "local digest missing for ${image_ref}; pulling fallback image before deploy compose evaluation"
+            docker pull "${image_ref}" >/dev/null || return 1
+            digest="$(resolve_local_repo_digest "${image_ref}" || true)"
+            if [ -z "${digest}" ]; then
+              echo "fallback image pull did not provide repo digest: ${image_ref}" >&2
+              return 1
+            fi
+            printf '%s' "${digest}"
+          }
+
+          ensure_image_key_from_local_digest() {
+            local key="$1"
+            local fallback_image="$2"
+            local value
+            value="$(extract_env_value "${key}")"
+            if [ -n "${value}" ]; then
+              return 0
+            fi
+
+            local digest
+            if ! digest="$(resolve_repo_digest_with_pull_fallback "${fallback_image}")"; then
+              echo "required image env key is missing and digest lookup failed: ${key} (fallback=${fallback_image})" >&2
+              return 1
+            fi
+
+            upsert_env_key "${key}" "${digest}" "deploy/homeserver/.env.prod"
+            echo "auto-filled ${key} from local digest (${fallback_image} -> ${digest})"
+            return 0
+          }
+
+          preserve_pre_deploy_runtime_image_env_keys
+
+          require_nonempty_env_key() {
+            local key="$1"
+            local value
+            value="$(extract_env_value "${key}")"
+            if [ -z "${value}" ]; then
+              echo "required env key is missing or empty: ${key}" >&2
+              exit 1
+            fi
+          }
+
+          require_pinned_image_key() {
+            local key="$1"
+            local value
+            value="$(extract_env_value "${key}")"
+            require_pinned_image_value "${key}" "${value}"
+          }
+
+          require_digest_image_key() {
+            local key="$1"
+            local value
+            value="$(extract_env_value "${key}")"
+            require_digest_image_value "${key}" "${value}"
+          }
+
+          require_pinned_image_value() {
+            local key="$1"
+            local value="$2"
+            if [ -z "${value}" ]; then
+              echo "required image env key is missing: ${key}" >&2
+              exit 1
+            fi
+            if [[ "${value}" == *":latest" ]]; then
+              echo "latest tag is not allowed for ${key}: ${value}" >&2
+              exit 1
+            fi
+            if [[ "${value}" != *@sha256:* && "${value}" != *:* ]]; then
+              echo "image must have tag or digest for ${key}: ${value}" >&2
+              exit 1
+            fi
+          }
+
+          require_digest_image_value() {
+            local key="$1"
+            local value="$2"
+            if [ -z "${value}" ]; then
+              echo "required image value is missing: ${key}" >&2
+              exit 1
+            fi
+            if [[ "${value}" == *":latest" || "${value}" == *":latest@"* ]]; then
+              echo "latest tag is not allowed for ${key}: ${value}" >&2
+              exit 1
+            fi
+            if [[ ! "${value}" =~ ^[^[:space:]@]+@sha256:[a-fA-F0-9]{64}$ ]]; then
+              echo "image must be pinned by sha256 digest for ${key}: ${value}" >&2
+              exit 1
+            fi
+          }
+
+          require_nonempty_env_key "CF_TUNNEL_TOKEN"
+          require_digest_image_value "STAGED_BACK_IMAGE" "${STAGED_BACK_IMAGE}"
+          ensure_image_key_from_local_digest "CLOUDFLARED_IMAGE" "cloudflare/cloudflared:latest"
+          ensure_image_key_from_local_digest "AUTOHEAL_IMAGE" "willfarrell/autoheal:latest"
+          ensure_image_key_from_local_digest "DOCKER_SOCKET_PROXY_IMAGE" "tecnativa/docker-socket-proxy:0.3.0"
+          ensure_image_key_from_local_digest "CADDY_IMAGE" "caddy:2.8-alpine"
+          ensure_image_key_from_local_digest "UPTIME_KUMA_IMAGE" "louislam/uptime-kuma:1"
+          ensure_image_key_from_local_digest "PROMETHEUS_IMAGE" "prom/prometheus:v2.54.1"
+          ensure_image_key_from_local_digest "ALERTMANAGER_IMAGE" "prom/alertmanager:v0.27.0"
+          ensure_image_key_from_local_digest "POSTGRES_EXPORTER_IMAGE" "quay.io/prometheuscommunity/postgres-exporter:v0.20.1"
+          ensure_image_key_from_local_digest "GRAFANA_IMAGE" "grafana/grafana:11.2.2"
+          ensure_image_key_from_local_digest "LOKI_IMAGE" "grafana/loki:3.0.0"
+          ensure_image_key_from_local_digest "PROMTAIL_IMAGE" "grafana/promtail:3.0.0"
+          ensure_image_key_from_local_digest "NODE_RUNTIME_IMAGE" "node:20-alpine"
+          ensure_image_key_from_local_digest "DB_IMAGE" "jangka512/pgj:latest"
+          ensure_image_key_from_local_digest "REDIS_IMAGE" "redis:7-alpine"
+          require_digest_image_key "CLOUDFLARED_IMAGE"
+          require_digest_image_key "AUTOHEAL_IMAGE"
+          require_digest_image_key "DOCKER_SOCKET_PROXY_IMAGE"
+          require_digest_image_key "CADDY_IMAGE"
+          require_digest_image_key "UPTIME_KUMA_IMAGE"
+          require_digest_image_key "PROMETHEUS_IMAGE"
+          require_digest_image_key "ALERTMANAGER_IMAGE"
+          require_digest_image_key "POSTGRES_EXPORTER_IMAGE"
+          require_digest_image_key "GRAFANA_IMAGE"
+          require_digest_image_key "LOKI_IMAGE"
+          require_digest_image_key "PROMTAIL_IMAGE"
+          require_digest_image_key "NODE_RUNTIME_IMAGE"
+          require_digest_image_key "DB_IMAGE"
+          require_digest_image_key "REDIS_IMAGE"
+          require_digest_image_key "MINIO_IMAGE"
+          require_digest_image_key "MINIO_MC_IMAGE"
+
+          # The application identity must exist before any backend is recreated with it.
+          # Starting only MinIO leaves the currently active backend untouched; once prepare
+          # succeeds, every subsequent failure can safely roll back with the current identity.
+          RUNTIME_ENV_MATERIALIZED="true"
+          if ! docker compose --env-file deploy/homeserver/.env.prod -f deploy/homeserver/docker-compose.prod.yml up -d minio_1; then
+            echo "failed to start MinIO for service identity preparation" >&2
+            exit 1
+          fi
+          if ! "./deploy/homeserver/minio_service_identity.sh" prepare "deploy/homeserver/.env.prod" "blog_home_data"; then
+            echo "failed to prepare MinIO application identity" >&2
+            exit 1
+          fi
+
+          if ! STAGED_BACK_IMAGE="${STAGED_BACK_IMAGE}" ./deploy/homeserver/pgroonga_precheck.sh; then
+            exit 1
+          fi
+
+          if ! STAGED_BACK_IMAGE="${STAGED_BACK_IMAGE}" ./deploy/homeserver/post_precheck_env_guard.sh; then
+            exit 1
+          fi
+
+          if [ -z "${HOME_GHCR_USERNAME:-}" ] || [ -z "${HOME_GHCR_TOKEN:-}" ]; then
+            echo "HOME_GHCR_USERNAME and HOME_GHCR_TOKEN are required for private GHCR deploy" >&2
+            exit 1
+          fi
+          echo "${HOME_GHCR_TOKEN}" | docker login ghcr.io -u "${HOME_GHCR_USERNAME}" --password-stdin
+
+          RUNTIME_SPLIT_ENABLED_VALUE="$(extract_env_value "RUNTIME_SPLIT_ENABLED")"
+          RUNTIME_SPLIT_STAGE_VALUE="$(extract_env_value "RUNTIME_SPLIT_STAGE")"
+          if [ -z "${RUNTIME_SPLIT_ENABLED_VALUE}" ]; then
+            RUNTIME_SPLIT_ENABLED_VALUE="false"
+          fi
+          if [ -z "${RUNTIME_SPLIT_STAGE_VALUE}" ]; then
+            RUNTIME_SPLIT_STAGE_VALUE="A"
+          fi
+          ROLLBACK_RUNTIME_SPLIT_ENABLED="${RUNTIME_SPLIT_ENABLED_VALUE}"
+          echo "runtime split from HOME_SERVER_ENV: enabled=${RUNTIME_SPLIT_ENABLED_VALUE} stage=${RUNTIME_SPLIT_STAGE_VALUE}"
+
+          ensure_monitoring_bind_mount_permissions() {
+            find deploy/homeserver/monitoring -type d -exec chmod 0755 {} + 2>/dev/null || true
+            find deploy/homeserver/monitoring -type f -exec chmod 0644 {} + 2>/dev/null || true
+          }
+
+          emit_post_deploy_diagnostics() {
+            backend_container_id_any_state() {
+              local backend="$1"
+              docker ps -aq \
+                --filter "label=com.docker.compose.project=blog_home" \
+                --filter "label=com.docker.compose.service=${backend}" | head -n 1
+            }
+
+            echo "[post-deploy-diagnostic] compose ps"
+            docker compose --env-file deploy/homeserver/.env.prod -f deploy/homeserver/docker-compose.prod.yml ps || true
+            echo "[post-deploy-diagnostic] compose ps -a back_blue/back_green"
+            docker compose --env-file deploy/homeserver/.env.prod -f deploy/homeserver/docker-compose.prod.yml ps -a back_blue back_green || true
+            echo "[post-deploy-diagnostic] caddy logs"
+            docker compose --env-file deploy/homeserver/.env.prod -f deploy/homeserver/docker-compose.prod.yml logs --no-color --tail=120 caddy || true
+            echo "[post-deploy-diagnostic] cloudflared logs"
+            docker compose --env-file deploy/homeserver/.env.prod -f deploy/homeserver/docker-compose.prod.yml logs --no-color --tail=120 cloudflared || true
+            for backend in back_blue back_green; do
+              echo "[post-deploy-diagnostic] backend=${backend}"
+              cid="$(backend_container_id_any_state "${backend}")"
+              if [ -n "${cid}" ]; then
+                docker inspect --format "${backend} image={{.Config.Image}} status={{.State.Status}} health={{if .State.Health}}{{.State.Health.Status}}{{else}}none{{end}} restart={{.RestartCount}} exit={{.State.ExitCode}} oom={{.State.OOMKilled}} started={{.State.StartedAt}} finished={{.State.FinishedAt}}" "${cid}" || true
+              else
+                echo "${backend} container=none"
+              fi
+              docker compose --env-file deploy/homeserver/.env.prod -f deploy/homeserver/docker-compose.prod.yml logs --no-color --tail=160 "${backend}" || true
+            done
+          }
+
+          rollback_and_exit() {
+            local reason="$1"
+            ROLLBACK_IN_PROGRESS="true"
+            echo "deploy verification failed: ${reason}" >&2
+            emit_post_deploy_diagnostics
+            if [ -n "${BACKUP_DIR:-}" ] && [ -d "${BACKUP_DIR}" ]; then
+              ROLLBACK_RUNTIME_SPLIT_ENABLED="${RUNTIME_SPLIT_ENABLED_VALUE}"
+              run_backup_rollback "${reason}"
+            fi
+            exit 1
+          }
+
+          ensure_monitoring_bind_mount_permissions
+
+          RUNTIME_ENV_MATERIALIZED="true"
+          if ! HOME_DEPLOY_SHA="${HOME_DEPLOY_SHA}" STAGED_BACK_IMAGE="${STAGED_BACK_IMAGE}" BACKUP_FLYWAY_SCHEMA_VERSION="${BACKUP_FLYWAY_SCHEMA_VERSION}" RUNTIME_SPLIT_ENABLED="${RUNTIME_SPLIT_ENABLED_VALUE}" RUNTIME_SPLIT_STAGE="${RUNTIME_SPLIT_STAGE_VALUE}" HEALTHCHECK_PATH=/actuator/health/readiness HEALTHCHECK_LOG_EVERY_N_TRIES=1 CANDIDATE_HEALTHCHECK_RETRIES=450 ./deploy/homeserver/blue_green_deploy.sh; then
+            rollback_and_exit "blue_green_deploy_failed"
+          fi
+
+          # Every post-deploy check below targets the public web host. Since #1596 retired the
+          # host-based API vhost address, that host is the only public front door this deploy has,
+          # so an absent WEB_DOMAIN means there is nothing left to verify - fail closed instead of
+          # reporting a green deploy nobody checked.
+          WEB_DOMAIN="$(read_prod_env_value WEB_DOMAIN)"
+          if [ -z "${WEB_DOMAIN}" ]; then
+            rollback_and_exit "missing_web_domain"
+          fi
+
+          ACTIVE_BACKEND="$(cat deploy/homeserver/.active_backend 2>/dev/null || true)"
+          if [ "${ACTIVE_BACKEND}" != "back_blue" ] && [ "${ACTIVE_BACKEND}" != "back_green" ]; then
+            rollback_and_exit "invalid_active_backend"
+          fi
+
+          if ! docker compose --env-file deploy/homeserver/.env.prod -f deploy/homeserver/docker-compose.prod.yml ps --status running --services | grep -qx "${ACTIVE_BACKEND}"; then
+            rollback_and_exit "active_backend_not_running"
+          fi
+
+          ACTIVE_BACKEND_CONTAINER_ID="$(docker compose --env-file deploy/homeserver/.env.prod -f deploy/homeserver/docker-compose.prod.yml ps -q "${ACTIVE_BACKEND}" | head -n 1)"
+          ACTIVE_BACKEND_IMAGE="$(docker inspect --format '{{.Config.Image}}' "${ACTIVE_BACKEND_CONTAINER_ID}" 2>/dev/null | tr -d '\r')"
+          case "${ACTIVE_BACKEND}" in
+            back_blue) ACTIVE_BACKEND_IMAGE_KEY="BACK_BLUE_IMAGE" ;;
+            back_green) ACTIVE_BACKEND_IMAGE_KEY="BACK_GREEN_IMAGE" ;;
+            *)
+              rollback_and_exit "invalid_active_backend_image_key"
+              ;;
+          esac
+          EXPECTED_BACK_IMAGE="$(extract_env_value "${ACTIVE_BACKEND_IMAGE_KEY}")"
+          echo "post-deploy image verify: active_backend=${ACTIVE_BACKEND}, expected_image=${EXPECTED_BACK_IMAGE}, active_image=${ACTIVE_BACKEND_IMAGE:-none}"
+          if [ -z "${ACTIVE_BACKEND_CONTAINER_ID}" ] || [ -z "${ACTIVE_BACKEND_IMAGE}" ] || [ "${ACTIVE_BACKEND_IMAGE}" != "${EXPECTED_BACK_IMAGE}" ]; then
+            rollback_and_exit "active_backend_image_mismatch"
+          fi
+
+          if [ "${ACTIVE_BACKEND}" = "back_blue" ]; then
+            INACTIVE_BACKEND="back_green"
+          else
+            INACTIVE_BACKEND="back_blue"
+          fi
+
+          # runtime-split routes the edge at back_read/back_admin through Caddyfile env
+          # placeholders, so a literal blue/green awk reads an empty upstream on a healthy
+          # split edge and rolls the deploy back for drift that does not exist (#1418).
+          # Both sides of the comparison go through the shared placeholder-aware probe.
+          if ! EXPECTED_UPSTREAM="$(RUNTIME_SPLIT_ENABLED="${RUNTIME_SPLIT_ENABLED_VALUE}" bash ./deploy/homeserver/caddy_upstream_probe.sh expected "${ACTIVE_BACKEND}")"; then
+            rollback_and_exit "caddy_upstream_expectation_unresolved"
+          fi
+          MOUNTED_UPSTREAM="$(RUNTIME_SPLIT_ENABLED="${RUNTIME_SPLIT_ENABLED_VALUE}" bash ./deploy/homeserver/caddy_upstream_probe.sh mounted || true)"
+          HAS_LEGACY_BACK_ACTIVE="false"
+          if docker compose --env-file deploy/homeserver/.env.prod -f deploy/homeserver/docker-compose.prod.yml exec -T caddy sh -lc "grep -Eq 'back[-_]active:8080' /etc/caddy/Caddyfile"; then
+            HAS_LEGACY_BACK_ACTIVE="true"
+          fi
+
+          echo "post-deploy upstream verify: active_backend=${ACTIVE_BACKEND}, expected=${EXPECTED_UPSTREAM}, mounted=${MOUNTED_UPSTREAM:-none}, legacy_back_active=${HAS_LEGACY_BACK_ACTIVE}"
+          if [ -z "${MOUNTED_UPSTREAM}" ] || [ "${MOUNTED_UPSTREAM}" != "${EXPECTED_UPSTREAM}" ] || [ "${HAS_LEGACY_BACK_ACTIVE}" = "true" ]; then
+            rollback_and_exit "caddy_upstream_mismatch"
+          fi
+
+          if docker compose --env-file deploy/homeserver/.env.prod -f deploy/homeserver/docker-compose.prod.yml ps --status running --services | grep -qx "${INACTIVE_BACKEND}"; then
+            rollback_and_exit "inactive_backend_still_running"
+          fi
+
+          # Internal edge routing gate (#1591), probed through the edge network with a Host header
+          # instead of public HTTPS. It answers a different question than the public smoke below:
+          # this one proves Caddy still routes the backend prefixes on the web host even when DNS,
+          # Cloudflare, or the tunnel is the thing that is broken, so a routing regression is not
+          # reported as an outage of something else. Dropping a prefix from the web vhost's
+          # @backendApi matcher would otherwise leave CD green while every public API call 404s
+          # from Next.js - visible only in a browser.
+          #
+          # Unconditional since #1596: the pre-cutover skip existed because WEB_DOMAIN had no DNS
+          # record yet, and this host-header form never depended on DNS in the first place.
+          #
+          # The status code alone is not enough. A Host that matches no vhost gets `200` with an
+          # EMPTY body from Caddy, not 404 (measured: `Host: api.aquilaxk.site` against this
+          # config -> 200, 0 bytes). So if WEB_DOMAIN and the Caddyfile ever disagree, a
+          # status-only probe passes while nothing is routed. Both probed paths return a JSON
+          # body, so a non-zero body length is what separates "routed to the backend" from
+          # "matched nothing".
+          for web_api_probe_path in "/actuator/health/readiness" "/post/api/v1/posts/feed?page=1&pageSize=1&sort=CREATED_AT"; do
+            WEB_API_PROBE="$(docker run --rm --network blog_home_edge curlimages/curl:8.7.1 -s -o /dev/null -w "%{http_code} %{size_download}" "http://caddy:80${web_api_probe_path}" -H "Host: ${WEB_DOMAIN}" || true)"
+            WEB_API_CODE="${WEB_API_PROBE%% *}"
+            WEB_API_BYTES="${WEB_API_PROBE##* }"
+            echo "post-deploy web-host api route: host=${WEB_DOMAIN} path=${web_api_probe_path} status=${WEB_API_CODE:-none} bytes=${WEB_API_BYTES:-none}"
+            if ! echo "${WEB_API_CODE}" | grep -Eq '^2[0-9][0-9]$'; then
+              rollback_and_exit "web_host_api_route_failed"
+            fi
+            if ! echo "${WEB_API_BYTES}" | grep -Eq '^[1-9][0-9]*$'; then
+              rollback_and_exit "web_host_api_route_empty_body"
+            fi
+          done
+
+          wait_public_api_health() {
+            local web_domain="$1"
+            local attempts="${DEPLOY_PUBLIC_API_ATTEMPTS:-12}"
+            local connect_timeout="${DEPLOY_PUBLIC_API_CONNECT_TIMEOUT_SECONDS:-5}"
+            local max_time="${DEPLOY_PUBLIC_API_MAX_TIME_SECONDS:-15}"
+            local sleep_seconds="${DEPLOY_PUBLIC_API_SLEEP_SECONDS:-5}"
+            local restarted=0
+            local code
+
+            for attempt in $(seq 1 "${attempts}"); do
+              code="$(curl -sS --connect-timeout "${connect_timeout}" -m "${max_time}" -o /dev/null -w "%{http_code}" "https://${web_domain}/actuator/health/readiness" || true)"
+              echo "post-deploy public-api health attempt=${attempt}/${attempts} status=${code}"
+              if [[ "${code}" =~ ^2[0-9][0-9]$ ]]; then
+                return 0
+              fi
+
+              if [ "${code}" = "000" ] && [ "${restarted}" -eq 0 ] && [ "${attempt}" -ge 3 ]; then
+                echo "public-api timeout detected; restarting cloudflared once"
+                docker compose --env-file deploy/homeserver/.env.prod -f deploy/homeserver/docker-compose.prod.yml restart cloudflared || true
+                restarted=1
+                sleep 8
+              fi
+
+              sleep "${sleep_seconds}"
+            done
+
+            echo "post-deploy public-api healthcheck failed for https://${web_domain}/actuator/health/readiness" >&2
+            docker compose --env-file deploy/homeserver/.env.prod -f deploy/homeserver/docker-compose.prod.yml logs --no-color --tail=120 cloudflared >&2 || true
+            return 1
+          }
+
+          # Public HTTPS gate. Unlike the host-header probe above this one crosses DNS, Cloudflare
+          # and the tunnel, so it is the check that fails when the site is down for real visitors.
+          if ! wait_public_api_health "${WEB_DOMAIN}"; then
+            rollback_and_exit "public_api_healthcheck_failed"
+          fi
+
+          header_value_from_file() {
+            local headers_file="$1"
+            local header_name="$2"
+            awk -v header_name="${header_name}" '
+              BEGIN { target = tolower(header_name) }
+              {
+                line = $0
+                sub(/\r$/, "", line)
+                separator = index(line, ":")
+                if (separator == 0) {
+                  next
+                }
+                name = tolower(substr(line, 1, separator - 1))
+                if (name == target) {
+                  value = substr(line, separator + 1)
+                  sub(/^[[:space:]]+/, "", value)
+                  print value
+                  exit
+                }
+              }
+            ' "${headers_file}"
+          }
+
+          assert_header_contains() {
+            local label="$1"
+            local headers_file="$2"
+            local header_name="$3"
+            local expected_fragment="$4"
+            local value
+            value="$(header_value_from_file "${headers_file}" "${header_name}")"
+            if [ -z "${value}" ] || [[ "${value,,}" != *"${expected_fragment,,}"* ]]; then
+              echo "[security-header-smoke] FAIL ${label}: missing ${header_name} containing '${expected_fragment}'" >&2
+              return 1
+            fi
+          }
+
+          assert_live_security_headers() {
+            local label="$1"
+            local url="$2"
+            local status_pattern="$3"
+            local cache_policy="${4:-default}"
+            local headers_file
+            local code=""
+            local smoke_attempt
+            headers_file="$(mktemp)"
+
+            for smoke_attempt in 1 2; do
+              : > "${headers_file}"
+              code="$(
+                curl -sS \
+                  --connect-timeout "${DEPLOY_SECURITY_HEADER_CONNECT_TIMEOUT_SECONDS:-10}" \
+                  -m "${DEPLOY_SECURITY_HEADER_MAX_TIME_SECONDS:-20}" \
+                  -D "${headers_file}" \
+                  -o /dev/null \
+                  -w "%{http_code}" \
+                  "${url}" || true
+              )"
+              if [ "${code}" != "000" ] || [ "${smoke_attempt}" -eq 2 ]; then
+                break
+              fi
+              sleep 1
+            done
+            echo "[security-header-smoke] ${label} status=${code} url=${url}"
+            if ! [[ "${code}" =~ ${status_pattern} ]]; then
+              echo "[security-header-smoke] FAIL ${label}: unexpected status=${code} url=${url}" >&2
+              rm -f "${headers_file}"
+              return 1
+            fi
+
+            assert_header_contains "${label}" "${headers_file}" "strict-transport-security" "max-age=31536000" || {
+              rm -f "${headers_file}"
+              return 1
+            }
+            assert_header_contains "${label}" "${headers_file}" "x-content-type-options" "nosniff" || {
+              rm -f "${headers_file}"
+              return 1
+            }
+            assert_header_contains "${label}" "${headers_file}" "x-frame-options" "deny" || {
+              rm -f "${headers_file}"
+              return 1
+            }
+            assert_header_contains "${label}" "${headers_file}" "referrer-policy" "strict-origin-when-cross-origin" || {
+              rm -f "${headers_file}"
+              return 1
+            }
+            assert_header_contains "${label}" "${headers_file}" "permissions-policy" "camera=()" || {
+              rm -f "${headers_file}"
+              return 1
+            }
+            if [ "${cache_policy}" = "no-store" ]; then
+              assert_header_contains "${label}" "${headers_file}" "cache-control" "no-store" || {
+                rm -f "${headers_file}"
+                return 1
+              }
+            fi
+
+            rm -f "${headers_file}"
+          }
+
+          if ! assert_live_security_headers \
+            "public-feed" \
+            "https://${WEB_DOMAIN}/post/api/v1/posts/feed?page=1&pageSize=1&sort=CREATED_AT" \
+            '^200$'; then
+            rollback_and_exit "public_feed_security_header_smoke_failed"
+          fi
+
+          if ! assert_live_security_headers \
+            "protected-auth-me" \
+            "https://${WEB_DOMAIN}/member/api/v1/auth/me" \
+            '^401$' \
+            "no-store"; then
+            rollback_and_exit "protected_auth_security_header_smoke_failed"
+          fi
+
+          run_canary_ratio_check() {
+            local label="$1"
+            local url="$2"
+            local attempts="${DEPLOY_CANARY_ATTEMPTS:-10}"
+            local min_success_percent="${DEPLOY_CANARY_MIN_SUCCESS_PERCENT:-90}"
+            local connect_timeout="${DEPLOY_CANARY_CONNECT_TIMEOUT_SECONDS:-10}"
+            local max_time="${DEPLOY_CANARY_MAX_TIME_SECONDS:-20}"
+            local retry_delay="${DEPLOY_CANARY_RETRY_DELAY_SECONDS:-1}"
+            local inter_attempt_delay="${DEPLOY_CANARY_INTER_ATTEMPT_DELAY_SECONDS:-0.3}"
+
+            local success=0
+            local code
+            for attempt in $(seq 1 "${attempts}"); do
+              code="$(
+                curl -sS \
+                  --connect-timeout "${connect_timeout}" \
+                  -m "${max_time}" \
+                  -o /dev/null \
+                  -w "%{http_code}" \
+                  "${url}" || true
+              )"
+              if [ "${code}" = "000" ]; then
+                sleep "${retry_delay}"
+                code="$(
+                  curl -sS \
+                    --connect-timeout "${connect_timeout}" \
+                    -m "${max_time}" \
+                    -o /dev/null \
+                    -w "%{http_code}" \
+                    "${url}" || true
+                )"
+              fi
+              echo "[post-deploy-canary] ${label} attempt=${attempt}/${attempts} status=${code}"
+              if [ "${code}" = "200" ]; then
+                success=$((success + 1))
+              fi
+              if [ "${attempt}" -lt "${attempts}" ]; then
+                sleep "${inter_attempt_delay}"
+              fi
+            done
+
+            local success_percent
+            success_percent="$(awk -v s="${success}" -v a="${attempts}" 'BEGIN { printf "%.1f", (a == 0 ? 0 : (s * 100.0) / a) }')"
+            local required_success
+            required_success=$(( (attempts * min_success_percent + 99) / 100 ))
+
+            echo "[post-deploy-canary] ${label} success=${success}/${attempts} (${success_percent}%), threshold=${min_success_percent}%"
+            [ "${success}" -ge "${required_success}" ]
+          }
+
+          extract_canary_post_id() {
+            local feed_url="$1"
+            local connect_timeout="${DEPLOY_CANARY_CONNECT_TIMEOUT_SECONDS:-10}"
+            local max_time="${DEPLOY_CANARY_MAX_TIME_SECONDS:-20}"
+            local body=""
+            local extract_attempt
+            for extract_attempt in 1 2; do
+              body="$(
+                curl -sS \
+                  --connect-timeout "${connect_timeout}" \
+                  -m "${max_time}" \
+                  "${feed_url}" || true
+              )"
+              if [ -n "${body}" ] || [ "${extract_attempt}" -eq 2 ]; then
+                break
+              fi
+              sleep 1
+            done
+            [ -z "${body}" ] && return 1
+
+            local post_id=""
+            if command -v python3 >/dev/null 2>&1; then
+              post_id="$(
+                printf '%s' "${body}" | python3 -c 'import json,sys; payload=json.load(sys.stdin); data=payload.get("data") or {}; content=data.get("content") or []; value=content[0].get("id") if content and isinstance(content[0], dict) else None; print(value if isinstance(value, int) else "")' 2>/dev/null || true
+              )"
+            fi
+
+            if [ -z "${post_id}" ]; then
+              post_id="$(printf '%s' "${body}" | grep -oE '"id":[0-9]+' | head -n 1 | cut -d: -f2 || true)"
+            fi
+
+            [ -n "${post_id}" ] && printf '%s' "${post_id}"
+          }
+
+          FEED_URL="https://${WEB_DOMAIN}/post/api/v1/posts/feed?page=1&pageSize=30&sort=CREATED_AT"
+          EXPLORE_URL="https://${WEB_DOMAIN}/post/api/v1/posts/explore?kw=&tag=&sort=CREATED_AT&page=1&pageSize=30"
+
+          if ! run_canary_ratio_check "feed" "${FEED_URL}"; then
+            rollback_and_exit "post_public_read_canary_feed_failed"
+          fi
+
+          if ! run_canary_ratio_check "explore" "${EXPLORE_URL}"; then
+            rollback_and_exit "post_public_read_canary_explore_failed"
+          fi
+
+          DETAIL_POST_ID="$(extract_canary_post_id "${FEED_URL}" || true)"
+          if [ -z "${DETAIL_POST_ID}" ]; then
+            rollback_and_exit "post_public_read_canary_missing_post_id"
+          fi
+          DETAIL_URL="https://${WEB_DOMAIN}/post/api/v1/posts/${DETAIL_POST_ID}"
+
+          if ! run_canary_ratio_check "detail(${DETAIL_POST_ID})" "${DETAIL_URL}"; then
+            rollback_and_exit "post_public_read_canary_detail_failed"
+          fi
+
+          if ! "./deploy/homeserver/minio_service_identity.sh" audit "deploy/homeserver/.env.prod" "blog_home_data"; then
+            rollback_and_exit "minio_service_identity_audit_failed"
+          fi
+          if ! "./deploy/homeserver/minio_service_identity.sh" finalize "deploy/homeserver/.env.prod" "blog_home_data"; then
+            rollback_and_exit "minio_service_identity_finalize_failed"
+          fi
+
+          PROFILE_WORKSPACE_BASELINE_MARKER_SHA="$(docker compose --env-file deploy/homeserver/.env.prod -f deploy/homeserver/docker-compose.prod.yml exec -T db_1 psql -U postgres -d "$(resolve_active_prod_db_name)" -Atq -v ON_ERROR_STOP=1 -c "SELECT COALESCE((SELECT source_sha FROM public.platform_schema_cutover WHERE cutover_id = 'profile-workspace-legacy-attrs'), '')" 2>/dev/null | tr -d '\r')" || rollback_and_exit "profile_workspace_cutover_marker_read_failed"
+          if [ -z "${PROFILE_WORKSPACE_BASELINE_MARKER_SHA}" ]; then
+            PROFILE_WORKSPACE_BASELINE_MARKER_SHA="${HOME_DEPLOY_SHA}"
+          fi
+          if [[ ! "${PROFILE_WORKSPACE_BASELINE_MARKER_SHA}" =~ ^[0-9a-f]{40}$ ]] || ! git merge-base --is-ancestor "${PROFILE_WORKSPACE_BASELINE_MARKER_SHA}" "${HOME_DEPLOY_SHA}"; then
+            rollback_and_exit "profile_workspace_cutover_marker_incompatible"
+          fi
+
+          if ! DEPLOY_BASELINE_SHA="${HOME_DEPLOY_SHA}" PROFILE_WORKSPACE_CUTOVER_SHA="${PROFILE_WORKSPACE_BASELINE_MARKER_SHA}" ./deploy/homeserver/record_deploy_baseline.sh --stage-pending; then
+            rollback_and_exit "profile_workspace_baseline_stage_failed"
+          fi
+
+          if ! docker compose --env-file deploy/homeserver/.env.prod -f deploy/homeserver/docker-compose.prod.yml exec -T db_1 psql -U postgres -d "$(resolve_active_prod_db_name)" -Atq -v ON_ERROR_STOP=1 -v cutover_sha="${HOME_DEPLOY_SHA}" -v expected_marker_sha="${PROFILE_WORKSPACE_BASELINE_MARKER_SHA}" -f - < deploy/homeserver/sql/retire_profile_workspace_legacy.sql >/dev/null 2>&1; then
+            rollback_and_exit "profile_workspace_legacy_retirement_failed"
+          fi
+
+          DEPLOY_COMPLETED="true"
+          rm -f deploy/homeserver/.external-minio-migration-stopped
+
+          # Publish only the exact baseline staged before retirement. DEPLOY_COMPLETED
+          # prevents a post-commit publication failure from crossing the cutover marker.
+          if DEPLOY_BASELINE_DIR="$(PROFILE_WORKSPACE_CUTOVER_SHA="${PROFILE_WORKSPACE_BASELINE_MARKER_SHA}" ./deploy/homeserver/record_deploy_baseline.sh --publish-pending)"; then
+            echo "deploy baseline recorded: ${DEPLOY_BASELINE_DIR}"
+          else
+            # On stdout, not stderr, so the runner parses it as a workflow annotation:
+            # a silently repeated failure leaves rollback pinned to an ever-older point.
+            echo "::warning title=Deploy baseline not recorded::healthy deploy remains active, but the next deploy and rollback are blocked until a marker-compatible baseline is recorded"
+          fi
+
+          cleanup_remote_tmp
+          trap - EXIT
+          REMOTE
+          REMOTE_TMP_DIR=""
+          trap - EXIT
+
+  # Epic #1535 Locked Decision 2 후반부(#1539): Web 워크플로는 GHCR push까지만 소유하고,
+  # 홈서버 배포는 Platform이 한다. 이 job은 front를 빌드하거나 검증하지 않는다 - 이미 push된
+  # digest를 받아 홈서버 blue/green으로 올릴 뿐이다.
+  #
+  # backend job과 분리된 이유: 트리거가 독립이다(front만 바뀌면 backend는 재배포되지 않는다).
+  # 그러면서 needs로 직렬화하는 이유: 두 배포가 같은 홈서버 checkout과 .env.prod, Caddyfile을
+  # 만지고, front SSR은 BACKEND_INTERNAL_URL로 backend에 의존한다. backend가 먼저 성공해야
+  # front를 그 위에 올린다. backend가 스킵된 run에서는 front만 단독으로 돈다.
+  frontBlueGreenDeploy:
+    runs-on: ubuntu-latest
+    concurrency:
+      group: ${{ github.event_name == 'repository_dispatch' && 'homeserver-deploy-main' || format('homeserver-deploy-front-{0}', github.run_id) }}
+      queue: max
+    needs:
+      - calculateTag
+      - blueGreenDeploy
+    # blueGreenDeploy는 `always()`가 없으므로 의존 job(buildAndPush)이 실패하면 **실행되지 않은 채
+    # result가 skipped**가 된다. 그래서 skipped를 전제 충족으로 읽으면 backend 빌드가 깨진 커밋에서
+    # front가 구 backend 위로 cutover된다. 정상 skip(backend를 애초에 배포하지 않는 커밋)과
+    # 사고 skip을 구분하는 신호는 result가 아니라 calculateTag의 backend_deploy 판정이다.
+    if: >
+      !cancelled() &&
+      needs.calculateTag.result == 'success' &&
+      needs.calculateTag.outputs.front_deploy == 'true' &&
+      (needs.calculateTag.outputs.backend_deploy != 'true' || needs.blueGreenDeploy.result == 'success')
+    timeout-minutes: 60
+    permissions:
+      contents: read
+      packages: read
+      attestations: read
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ needs.calculateTag.outputs.deploy_sha }}
+
+      - name: Verify dispatch freshness after queue
+        id: freshness
+        if: github.event_name == 'repository_dispatch'
+        env:
+          FRONT_SOURCE_SHA: ${{ needs.calculateTag.outputs.front_source_sha }}
+          DEPLOY_SHA: ${{ needs.calculateTag.outputs.deploy_sha }}
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          PLATFORM_CURRENT_MAIN_SHA="unavailable"
+          write_freshness_summary() {
+            local result="$1"
+            local reason="$2"
+            {
+              echo "## Web dispatch queue freshness"
+              echo "- result: ${result}"
+              echo "- reason: ${reason}"
+              echo "- source Web SHA: ${FRONT_SOURCE_SHA}"
+              echo "- current Web SHA: ${WEB_FRONTEND_CURRENT_MAIN_SHA}"
+              echo "- deploy Platform SHA: ${DEPLOY_SHA}"
+              echo "- current Platform SHA: ${PLATFORM_CURRENT_MAIN_SHA}"
+            } >> "${GITHUB_STEP_SUMMARY}"
+          }
+
+          if ! WEB_FRONTEND_CURRENT_MAIN_SHA="$(gh api "repos/AquilaXk/aquila-blog-web/commits/main" --jq '.sha')"; then
+            echo "front dispatch Web main sha lookup failed" >&2
+            exit 1
+          fi
+          if [[ ! "${WEB_FRONTEND_CURRENT_MAIN_SHA}" =~ ^[0-9a-f]{40}$ ]]; then
+            echo "front dispatch current Web main sha is invalid" >&2
+            exit 1
+          fi
+          if [ "${FRONT_SOURCE_SHA}" != "${WEB_FRONTEND_CURRENT_MAIN_SHA}" ]; then
+            echo "front dispatch no-op: source sha is stale: source=${FRONT_SOURCE_SHA} current_main=${WEB_FRONTEND_CURRENT_MAIN_SHA}"
+            echo "result=noop" >> "${GITHUB_OUTPUT}"
+            write_freshness_summary "noop" "stale-web-source"
+            exit 0
+          fi
+
+          STALE_DEPLOY_BLOCK_PATHS_PATTERN='^(restore-privacy-gate\.sh|back/|deploy/homeserver/|deploy/env/|tools/env/|tools/guards/|tools/ci/|tools/security/native-image-evidence\.mjs|\.github/security/vulnerability-exceptions\.yml|\.github/workflows/deploy\.yml|\.github/workflows/ci\.yml|\.github/workflows/reusable-backend-quality\.yml|\.github/workflows/security\.yml)'
+          REMOTE_MAIN_SHA="$(git ls-remote --exit-code origin refs/heads/main | awk '{print $1}')"
+          if [[ ! "${REMOTE_MAIN_SHA}" =~ ^[0-9a-f]{40}$ ]]; then
+            echo "front dispatch origin/main sha lookup failed" >&2
+            exit 1
+          fi
+          PLATFORM_CURRENT_MAIN_SHA="${REMOTE_MAIN_SHA}"
+          git fetch --no-tags --prune origin "+refs/heads/main:refs/remotes/origin/main"
+          FETCHED_MAIN_SHA="$(git rev-parse refs/remotes/origin/main)"
+          if [ "${FETCHED_MAIN_SHA}" != "${REMOTE_MAIN_SHA}" ]; then
+            echo "front dispatch origin/main sha changed during stale check: remote=${REMOTE_MAIN_SHA} fetched=${FETCHED_MAIN_SHA}" >&2
+            exit 1
+          fi
+          if ! git merge-base --is-ancestor "${DEPLOY_SHA}" "${REMOTE_MAIN_SHA}"; then
+            echo "front dispatch deploy sha is not reachable from origin/main: deploy_sha=${DEPLOY_SHA} origin_main=${REMOTE_MAIN_SHA}" >&2
+            exit 1
+          fi
+          if [ "${DEPLOY_SHA}" != "${REMOTE_MAIN_SHA}" ]; then
+            STALE_CHANGED_FILES="$(git diff --name-only "${DEPLOY_SHA}" "${REMOTE_MAIN_SHA}")"
+            if grep -Eq "${STALE_DEPLOY_BLOCK_PATHS_PATTERN}" <<< "${STALE_CHANGED_FILES}"; then
+              echo "front dispatch no-op after deployment-impacting newer main changes: deploy_sha=${DEPLOY_SHA} origin_main=${REMOTE_MAIN_SHA}"
+              echo "result=noop" >> "${GITHUB_OUTPUT}"
+              write_freshness_summary "noop" "newer-platform-deployment-change"
+              exit 0
+            else
+              STALE_PATH_MATCH_STATUS=$?
+              if [ "${STALE_PATH_MATCH_STATUS}" -ne 1 ]; then
+                echo "front dispatch stale path matcher failed: status=${STALE_PATH_MATCH_STATUS}" >&2
+                exit 1
+              fi
+            fi
+            echo "front dispatch allowed after backend-neutral newer main changes: deploy_sha=${DEPLOY_SHA} origin_main=${REMOTE_MAIN_SHA}"
+          fi
+          echo "result=proceed" >> "${GITHUB_OUTPUT}"
+          write_freshness_summary "proceed" "current"
+
+      - name: Login to GHCR for Web native admission
+        if: github.event_name == 'repository_dispatch' && steps.freshness.outputs.result == 'proceed'
+        uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ github.token }}
+
+      - name: Verify Web native image attestations
+        if: github.event_name == 'repository_dispatch' && steps.freshness.outputs.result == 'proceed'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          IMAGE_REF: ${{ needs.calculateTag.outputs.front_image_ref }}
+          SOURCE_REPOSITORY: AquilaXk/aquila-blog-web
+          SOURCE_SHA: ${{ needs.calculateTag.outputs.front_source_sha }}
+          IMAGE_SUBJECT: ghcr.io/aquilaxk/aquila-blog-web-front
+          IMAGE_DIGEST: ${{ github.event.client_payload.image_digest }}
+          EXPECTED_BUILD_TRIGGER: push
+          SIGNER_WORKFLOW: https://github.com/AquilaXk/aquila-blog-web/.github/workflows/frontend-image.yml@refs/heads/main
+          EXPECTED_RUN_URI: https://github.com/AquilaXk/aquila-blog-web/actions/runs/${{ github.event.client_payload.producer_run_id }}/attempts/${{ github.event.client_payload.producer_run_attempt }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          gh attestation verify "oci://${IMAGE_REF}" \
+            --repo "AquilaXk/aquila-blog-web" \
+            --source-digest "${SOURCE_SHA}" \
+            --source-ref "refs/heads/main" \
+            --signer-workflow "AquilaXk/aquila-blog-web/.github/workflows/frontend-image.yml" \
+            --signer-digest "${SOURCE_SHA}" \
+            --deny-self-hosted-runners \
+            --predicate-type "https://slsa.dev/provenance/v1" \
+            --format json > "${RUNNER_TEMP}/web-image-provenance.json"
+          gh attestation verify "oci://${IMAGE_REF}" \
+            --repo "AquilaXk/aquila-blog-web" \
+            --source-digest "${SOURCE_SHA}" \
+            --source-ref "refs/heads/main" \
+            --signer-workflow "AquilaXk/aquila-blog-web/.github/workflows/frontend-image.yml" \
+            --signer-digest "${SOURCE_SHA}" \
+            --deny-self-hosted-runners \
+            --predicate-type "https://spdx.dev/Document/v2.3" \
+            --format json > "${RUNNER_TEMP}/web-image-spdx.json"
+          gh attestation verify "oci://${IMAGE_REF}" \
+            --repo "AquilaXk/aquila-blog-web" \
+            --source-digest "${SOURCE_SHA}" \
+            --source-ref "refs/heads/main" \
+            --signer-workflow "AquilaXk/aquila-blog-web/.github/workflows/frontend-image.yml" \
+            --signer-digest "${SOURCE_SHA}" \
+            --deny-self-hosted-runners \
+            --predicate-type "https://cosign.sigstore.dev/attestation/vuln/v1" \
+            --format json > "${RUNNER_TEMP}/web-image-vulnerability-attestation.json"
+          node tools/security/native-image-evidence.mjs verify-attestation-set \
+            "${RUNNER_TEMP}/web-image-provenance.json" \
+            "${RUNNER_TEMP}/web-image-spdx.json" \
+            "${RUNNER_TEMP}/web-image-vulnerability-attestation.json"
+          {
+            echo "## Web native image evidence"
+            echo "- policy: aquila-native-image-evidence-v1"
+            echo "- source: ${SOURCE_REPOSITORY}@${SOURCE_SHA}"
+            echo "- image digest: ${IMAGE_DIGEST}"
+            echo "- predicates: https://slsa.dev/provenance/v1, https://spdx.dev/Document/v2.3, https://cosign.sigstore.dev/attestation/vuln/v1"
+            echo "- signer workflow: ${SIGNER_WORKFLOW}"
+            echo "- run: ${EXPECTED_RUN_URI}"
+          } >> "${GITHUB_STEP_SUMMARY}"
+
+      - name: Verify required secrets
+        if: github.event_name != 'repository_dispatch' || steps.freshness.outputs.result == 'proceed'
+        env:
+          TS_OAUTH_CLIENT_ID: ${{ secrets.TS_OAUTH_CLIENT_ID }}
+          TS_OAUTH_SECRET: ${{ secrets.TS_OAUTH_SECRET }}
+          HOME_SSH_USER: ${{ secrets.HOME_SSH_USER }}
+          HOME_APP_DIR: ${{ secrets.HOME_APP_DIR }}
+          HOME_SSH_KEY: ${{ secrets.HOME_SSH_KEY || secrets.HOME_SSH_PRIVATE_KEY }}
+          HOME_KNOWN_HOSTS: ${{ secrets.HOME_KNOWN_HOSTS }}
+          HOME_GHCR_USERNAME: ${{ secrets.HOME_GHCR_USERNAME }}
+          HOME_GHCR_TOKEN: ${{ secrets.HOME_GHCR_TOKEN }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          required=(
+            TS_OAUTH_CLIENT_ID
+            TS_OAUTH_SECRET
+            HOME_SSH_USER
+            HOME_APP_DIR
+            HOME_TAILSCALE_HOST
+            HOME_SSH_KEY
+            HOME_KNOWN_HOSTS
+            HOME_GHCR_USERNAME
+            HOME_GHCR_TOKEN
+          )
+
+          for key in "${required[@]}"; do
+            value="${!key:-}"
+            if [ -z "$value" ]; then
+              echo "$key missing"
+              exit 1
+            fi
+            echo "$key present"
+          done
+
+          if [[ ! "${HOME_TAILSCALE_HOST}" =~ ^[a-z0-9]([a-z0-9-]*[a-z0-9])?\.[a-z0-9]([a-z0-9-]*[a-z0-9])?\.ts\.net$ ]]; then
+            echo "HOME_TAILSCALE_HOST must be a full MagicDNS FQDN ending in .ts.net." >&2
+            exit 1
+          fi
+
+      - name: Connect to Tailscale
+        if: github.event_name != 'repository_dispatch' || steps.freshness.outputs.result == 'proceed'
+        uses: tailscale/github-action@780049a30b6ff5c378a9e7b389d15ece7a204888 # v4.1.3
+        with:
+          oauth-client-id: ${{ secrets.TS_OAUTH_CLIENT_ID }}
+          oauth-secret: ${{ secrets.TS_OAUTH_SECRET }}
+          tags: ${{ vars.TS_OAUTH_TAGS || secrets.TS_OAUTH_TAGS || 'tag:ci' }}
+
+      - name: Configure SSH key
+        if: github.event_name != 'repository_dispatch' || steps.freshness.outputs.result == 'proceed'
+        env:
+          HOME_SSH_KEY: ${{ secrets.HOME_SSH_KEY || secrets.HOME_SSH_PRIVATE_KEY }}
+          HOME_KNOWN_HOSTS: ${{ secrets.HOME_KNOWN_HOSTS }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          SSH_DIR="${RUNNER_TEMP}/ssh"
+          rm -rf "$SSH_DIR"
+          mkdir -p "$SSH_DIR"
+          chmod 700 "$SSH_DIR"
+
+          printf '%s\n' "${HOME_SSH_KEY}" > "$SSH_DIR/home_key"
+          chmod 600 "$SSH_DIR/home_key"
+          printf '%s\n' "${HOME_KNOWN_HOSTS}" > "$SSH_DIR/known_hosts"
+          if [ ! -s "$SSH_DIR/known_hosts" ]; then
+            echo "HOME_KNOWN_HOSTS is required for production deploy" >&2
+            exit 1
+          fi
+          chmod 600 "$SSH_DIR/known_hosts"
+          echo "SSH_DIR=$SSH_DIR" >> "$GITHUB_ENV"
+
+      - name: Deploy front over SSH (pull image + blue/green switch)
+        id: front-deploy
+        if: github.event_name != 'repository_dispatch' || steps.freshness.outputs.result == 'proceed'
+        env:
+          HOME_SSH_USER: ${{ secrets.HOME_SSH_USER }}
+          HOME_SSH_PORT: ${{ secrets.HOME_SSH_PORT }}
+          HOME_APP_DIR: ${{ secrets.HOME_APP_DIR }}
+          HOME_FRONT_IMAGE: ${{ needs.calculateTag.outputs.front_image_ref }}
+          HOME_FRONT_BUILD_SHA: ${{ needs.calculateTag.outputs.front_source_sha }}
+          HOME_DEPLOY_SHA: ${{ needs.calculateTag.outputs.deploy_sha }}
+          HOME_GHCR_USERNAME: ${{ secrets.HOME_GHCR_USERNAME }}
+          HOME_GHCR_TOKEN: ${{ secrets.HOME_GHCR_TOKEN }}
+        run: |
+          set -euo pipefail
+          PORT="${HOME_SSH_PORT:-22}"
+          HOME_APP_DIR_B64="$(printf '%s' "${HOME_APP_DIR}" | base64 | tr -d '\n')"
+          LOCAL_REMOTE_VARS_FILE="${RUNNER_TEMP}/home-front-vars.env"
+          FRONT_DEPLOY_LOG="${RUNNER_TEMP}/front-deploy.log"
+          {
+            printf 'HOME_FRONT_IMAGE=%q\n' "${HOME_FRONT_IMAGE}"
+            printf 'HOME_FRONT_BUILD_SHA=%q\n' "${HOME_FRONT_BUILD_SHA}"
+            printf 'HOME_DEPLOY_SHA=%q\n' "${HOME_DEPLOY_SHA}"
+            printf 'HOME_GHCR_USERNAME=%q\n' "${HOME_GHCR_USERNAME}"
+            printf 'HOME_GHCR_TOKEN=%q\n' "${HOME_GHCR_TOKEN}"
+          } > "${LOCAL_REMOTE_VARS_FILE}"
+          chmod 600 "${LOCAL_REMOTE_VARS_FILE}"
+
+          # 시도한 대상은 결과보다 먼저 적는다. ssh 파이프라인이 실패하면 아래 결과 블록에
+          # 도달하지 못하는데, 그때가 바로 "무엇을 배포하려 했는지"가 가장 필요한 순간이다.
+          {
+            echo "## Deploy Boundary (front)"
+            echo "- front image: \`${HOME_FRONT_IMAGE}\`"
+            echo "- front build sha: ${HOME_FRONT_BUILD_SHA}"
+            echo "- deploy sha: ${HOME_DEPLOY_SHA}"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+          REMOTE_TMP_DIR="$(ssh -i "$SSH_DIR/home_key" -o UserKnownHostsFile="$SSH_DIR/known_hosts" -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes -o ConnectTimeout=15 -p "$PORT" "$HOME_SSH_USER@$HOME_TAILSCALE_HOST" "umask 077 && mktemp -d /tmp/aquila-front-deploy.XXXXXX")"
+          case "${REMOTE_TMP_DIR}" in
+            /tmp/aquila-front-deploy.*) ;;
+            *)
+              echo "unexpected remote tmp dir: ${REMOTE_TMP_DIR}" >&2
+              exit 1
+              ;;
+          esac
+          cleanup_remote_tmp_from_runner() {
+            if [ -n "${REMOTE_TMP_DIR:-}" ]; then
+              ssh -i "$SSH_DIR/home_key" -o UserKnownHostsFile="$SSH_DIR/known_hosts" -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes -o ConnectTimeout=15 -p "$PORT" "$HOME_SSH_USER@$HOME_TAILSCALE_HOST" "rm -rf -- ${REMOTE_TMP_DIR}" || true
+            fi
+          }
+          trap cleanup_remote_tmp_from_runner EXIT
+
+          scp -i "$SSH_DIR/home_key" -o UserKnownHostsFile="$SSH_DIR/known_hosts" -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes -P "$PORT" \
+            "${LOCAL_REMOTE_VARS_FILE}" \
+            "$HOME_SSH_USER@$HOME_TAILSCALE_HOST:${REMOTE_TMP_DIR}/"
+
+          ssh -i "$SSH_DIR/home_key" -o UserKnownHostsFile="$SSH_DIR/known_hosts" -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes -o ConnectTimeout=15 -p "$PORT" "$HOME_SSH_USER@$HOME_TAILSCALE_HOST" \
+            "umask 077 && cat > '${REMOTE_TMP_DIR}/front-deploy.sh' && HOME_APP_DIR_B64='${HOME_APP_DIR_B64}' REMOTE_TMP_DIR='${REMOTE_TMP_DIR}' bash '${REMOTE_TMP_DIR}/front-deploy.sh' </dev/null" <<'REMOTE' | tee "${FRONT_DEPLOY_LOG}"
+          set -euo pipefail
+
+          decode_b64() {
+            if printf '' | base64 --decode >/dev/null 2>&1; then
+              printf '%s' "$1" | base64 --decode
+            else
+              printf '%s' "$1" | base64 -d
+            fi
+          }
+
+          HOME_APP_DIR="$(decode_b64 "${HOME_APP_DIR_B64:-}")"
+          REMOTE_VARS_FILE="${REMOTE_TMP_DIR}/home-front-vars.env"
+
+          cleanup_remote_tmp() {
+            if [ -n "${REMOTE_TMP_DIR:-}" ] && [ -d "${REMOTE_TMP_DIR}" ]; then
+              rm -rf "${REMOTE_TMP_DIR}" || true
+            fi
+          }
+          trap cleanup_remote_tmp EXIT
+
+          # shellcheck disable=SC1090
+          . "${REMOTE_VARS_FILE}"
+
+          cd "${HOME_APP_DIR}"
+
+          if [ -z "${HOME_DEPLOY_SHA:-}" ]; then
+            echo "HOME_DEPLOY_SHA is empty. abort front deploy." >&2
+            exit 1
+          fi
+          if [ -z "${HOME_FRONT_IMAGE:-}" ]; then
+            echo "HOME_FRONT_IMAGE is empty. abort front deploy to avoid a stale front rollout." >&2
+            exit 1
+          fi
+          # `repo:latest@sha256:<64hex>`는 아래 digest 정규식을 **통과한다**(`[^[:space:]@]+`가
+          # `repo:latest`를 그대로 먹는다). 그래서 이 case는 사문이 아니라 그 형태를 잡는
+          # 유일한 장치다. 순수 `repo:latest`는 두 검사 모두에 걸린다.
+          case "${HOME_FRONT_IMAGE}" in
+            *":latest" | *":latest@"*)
+              echo "latest tag is not allowed for HOME_FRONT_IMAGE: ${HOME_FRONT_IMAGE}" >&2
+              exit 1
+              ;;
+          esac
+          if ! printf '%s' "${HOME_FRONT_IMAGE}" | grep -Eq '^[^[:space:]@]+@sha256:[a-fA-F0-9]{64}$'; then
+            echo "front image must be pinned by sha256 digest: ${HOME_FRONT_IMAGE}" >&2
+            exit 1
+          fi
+          if ! printf '%s' "${HOME_FRONT_BUILD_SHA:-}" | grep -Eq '^[0-9a-f]{40}$'; then
+            echo "HOME_FRONT_BUILD_SHA must be the 40-hex commit the front image was built from: '${HOME_FRONT_BUILD_SHA:-}'" >&2
+            exit 1
+          fi
+
+          umask 077
+          git fetch origin main --prune
+          if ! git cat-file -e "${HOME_DEPLOY_SHA}^{commit}" 2>/dev/null; then
+            git fetch origin "${HOME_DEPLOY_SHA}" --depth 1 || true
+          fi
+          if ! git cat-file -e "${HOME_DEPLOY_SHA}^{commit}" 2>/dev/null; then
+            echo "deploy sha not found in remote repository: ${HOME_DEPLOY_SHA}" >&2
+            exit 1
+          fi
+          if ! git merge-base --is-ancestor "${HOME_DEPLOY_SHA}" "origin/main"; then
+            echo "deploy sha is not reachable from origin/main: ${HOME_DEPLOY_SHA}" >&2
+            exit 1
+          fi
+
+          resolve_active_prod_db_name() {
+            local value
+            value="$(awk -F= '$1 == "custom.prod.dbName" || $1 == "CUSTOM_PROD_DBNAME" { print substr($0, index($0, "=") + 1) }' deploy/homeserver/.env.prod 2>/dev/null | tail -n 1 | tr -d '\r')"
+            if [ -n "${value}" ]; then printf '%s\n' "${value}"; return; fi
+            value="$(awk -F= '$1 == "DB_BASE_NAME" { print substr($0, index($0, "=") + 1) }' deploy/homeserver/.env.prod 2>/dev/null | tail -n 1 | tr -d '\r')"
+            printf '%s_prod\n' "${value:-blog}"
+          }
+
+          preflight_profile_workspace_cutover_source_floor() {
+            local db_name table_exists marker_sha marker_present target_root_sha metadata_file tmp_meta
+            db_name="$(resolve_active_prod_db_name)"
+            table_exists="$(docker compose --env-file deploy/homeserver/.env.prod -f deploy/homeserver/docker-compose.prod.yml exec -T db_1 psql -U postgres -d "${db_name}" -At -v ON_ERROR_STOP=1 -c "SELECT to_regclass('public.platform_schema_cutover') IS NOT NULL" 2>/dev/null | tr -d '\r' | tail -n 1)" || {
+              echo "profile workspace cutover front preflight query failed" >&2
+              return 1
+            }
+            [ "${table_exists}" = "f" ] && return 0
+            [ "${table_exists}" = "t" ] || { echo "profile workspace cutover front preflight catalog result is malformed" >&2; return 1; }
+            marker_sha="$(docker compose --env-file deploy/homeserver/.env.prod -f deploy/homeserver/docker-compose.prod.yml exec -T db_1 psql -U postgres -d "${db_name}" -At -v ON_ERROR_STOP=1 -c "SELECT COALESCE((SELECT source_sha FROM public.platform_schema_cutover WHERE cutover_id = 'profile-workspace-legacy-attrs'), '')" 2>/dev/null | tr -d '\r' | tail -n 1)" || {
+              echo "profile workspace cutover front marker query failed" >&2
+              return 1
+            }
+            [ -z "${marker_sha}" ] && return 0
+            [[ "${marker_sha}" =~ ^[0-9a-f]{40}$ ]] || { echo "profile workspace cutover front marker is malformed" >&2; return 1; }
+            marker_present="true"
+            git cat-file -e "${marker_sha}^{commit}" 2>/dev/null || git fetch origin "${marker_sha}" --depth 1 2>/dev/null || marker_present="false"
+            if [ "${marker_present}" = "true" ] && git cat-file -e "${marker_sha}^{commit}" 2>/dev/null; then
+              if ! git merge-base --is-ancestor "${marker_sha}" "${HOME_DEPLOY_SHA}"; then
+                if git merge-base "${marker_sha}" "${HOME_DEPLOY_SHA}" >/dev/null 2>&1; then
+                  echo "profile workspace cutover blocks a pre-cutover front deploy" >&2
+                  return 1
+                fi
+                marker_present="false"
+              fi
+            else
+              marker_present="false"
+            fi
+            if [ "${marker_present}" = "false" ]; then
+              target_root_sha="$(git rev-list --max-parents=0 "${HOME_DEPLOY_SHA}" | tail -n 1)"
+              [[ "${target_root_sha}" =~ ^[0-9a-f]{40}$ ]] || {
+                echo "profile workspace cutover front reset root SHA is unavailable" >&2
+                return 1
+              }
+              git merge-base --is-ancestor "${target_root_sha}" "${HOME_DEPLOY_SHA}" || {
+                echo "profile workspace cutover front reset root SHA is not an ancestor of deploy SHA" >&2
+                return 1
+              }
+              if ! printf '%s\n' \
+                "UPDATE public.platform_schema_cutover SET source_sha = :'target_root_sha' WHERE cutover_id = 'profile-workspace-legacy-attrs' AND source_sha = :'expected_sha';" \
+                | docker compose --env-file deploy/homeserver/.env.prod -f deploy/homeserver/docker-compose.prod.yml exec -T db_1 psql -U postgres -d "${db_name}" -At -v ON_ERROR_STOP=1 -v expected_sha="${marker_sha}" -v target_root_sha="${target_root_sha}" -f - >/dev/null; then
+                echo "profile workspace cutover front marker re-anchor failed" >&2
+                return 1
+              fi
+              for metadata_file in deploy/homeserver/.deploy-baseline/metadata.env deploy/homeserver/.deploy-baseline.pending/metadata.env; do
+                if [ -f "${metadata_file}" ]; then
+                  tmp_meta="$(mktemp "${metadata_file}.tmp.XXXXXX")"
+                  awk -F= -v root_sha="${target_root_sha}" '
+                    $1 == "deploy_sha" { print "deploy_sha=" root_sha; next }
+                    $1 == "profile_workspace_cutover_sha" { print "profile_workspace_cutover_sha=" root_sha; next }
+                    { print }
+                  ' "${metadata_file}" > "${tmp_meta}" && chmod 600 "${tmp_meta}" && mv "${tmp_meta}" "${metadata_file}" || {
+                    rm -f "${tmp_meta}"
+                    echo "profile workspace cutover baseline metadata re-anchor failed" >&2
+                    return 1
+                  }
+                fi
+              done
+              echo "profile workspace cutover front re-anchored after history reset: ${marker_sha} -> ${target_root_sha}"
+            fi
+          }
+
+          if ! preflight_profile_workspace_cutover_source_floor; then
+            exit 1
+          fi
+          git checkout --force "${HOME_DEPLOY_SHA}"
+
+          chmod +x \
+            deploy/homeserver/blue_green_deploy.sh \
+            deploy/homeserver/materialize_service_env.sh
+
+          # front rollout은 .env.prod를 다시 만들지 않는다. 도메인 파생 계약은 backend 배포가
+          # 소유하고, 여기서 그 블록을 복제하면 두 벌이 서로 어긋난다. 마지막 backend 배포가
+          # 남긴 파일이 없으면 배포할 수 있는 상태가 아니므로 멈춘다.
+          if [ ! -f deploy/homeserver/.env.prod ]; then
+            echo "deploy/homeserver/.env.prod is missing; run a backend deploy before the first front deploy" >&2
+            exit 1
+          fi
+
+          if [ -z "${HOME_GHCR_USERNAME:-}" ] || [ -z "${HOME_GHCR_TOKEN:-}" ]; then
+            echo "HOME_GHCR_USERNAME and HOME_GHCR_TOKEN are required for private GHCR deploy" >&2
+            exit 1
+          fi
+          echo "${HOME_GHCR_TOKEN}" | docker login ghcr.io -u "${HOME_GHCR_USERNAME}" --password-stdin
+
+          DEPLOY_TARGET=front \
+            STAGED_FRONT_IMAGE="${HOME_FRONT_IMAGE}" \
+            STAGED_FRONT_BUILD_SHA="${HOME_FRONT_BUILD_SHA}" \
+            ./deploy/homeserver/blue_green_deploy.sh
+
+          cleanup_remote_tmp
+          trap - EXIT
+          REMOTE
+          REMOTE_TMP_DIR=""
+          trap - EXIT
+
+          # 원격 스크립트는 성공 경로마다 결과 마커를 정확히 하나 남긴다. 마커가 없으면 "성공
+          # 종료했지만 무엇을 했는지 모른다"는 뜻이라 성공으로 보고하지 않는다.
+          FRONT_DEPLOY_RESULT="$(grep -oE '^front_deploy_result=[a-z_]+$' "${FRONT_DEPLOY_LOG}" | tail -n 1 | cut -d= -f2 || true)"
+          FRONT_SERVED_BUILD_SHA="$(grep -oE 'served_build_sha=[0-9a-f]{40}' "${FRONT_DEPLOY_LOG}" | tail -n 1 | cut -d= -f2 || true)"
+          FRONT_SWITCHED_AT="$(grep -oE 'switched_at=[0-9TZ:-]+' "${FRONT_DEPLOY_LOG}" | tail -n 1 | cut -d= -f2 || true)"
+
+          {
+            echo "- front result: ${FRONT_DEPLOY_RESULT:-unknown}"
+            echo "- served build sha after cutover: ${FRONT_SERVED_BUILD_SHA:-not observed}"
+            echo "- cutover time (UTC): ${FRONT_SWITCHED_AT:-not observed}"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+          case "${FRONT_DEPLOY_RESULT}" in
+            deployed | noop) ;;
+            *)
+              echo "front deploy finished without reporting a supported result marker" >&2
+              exit 1
+              ;;
+          esac
+
+          # 원격이 이미 같은 대조를 하고 실패 시 rollback까지 한다. 여기서 다시 보는 이유는 그
+          # 대조가 실제로 일어났는지를 러너가 독립적으로 확인하기 위해서다 - 원격 스크립트가
+          # 검증을 건너뛰면서 성공 마커만 남기는 회귀가 여기서 걸린다.
+          if [ "${FRONT_SERVED_BUILD_SHA}" != "${HOME_FRONT_BUILD_SHA}" ]; then
+            echo "front deploy reported success but the edge served build sha=${FRONT_SERVED_BUILD_SHA:-none}, expected ${HOME_FRONT_BUILD_SHA}" >&2
+            exit 1
+          fi
+
+          {
+            echo "verified=true"
+            echo "result=${FRONT_DEPLOY_RESULT}"
+            echo "served_build_sha=${FRONT_SERVED_BUILD_SHA}"
+          } >> "${GITHUB_OUTPUT}"
+
+      - name: Create Web repository dispatch token
+        id: web-dispatch-token
+        if: github.event_name == 'repository_dispatch' && steps.front-deploy.outputs.verified == 'true'
+        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
+        with:
+          client-id: ${{ vars.REPO_SYNC_APP_CLIENT_ID }}
+          private-key: ${{ secrets.REPO_SYNC_APP_PRIVATE_KEY }}
+          owner: AquilaXk
+          repositories: aquila-blog-web
+          permission-contents: write
+
+      - name: Dispatch verified Platform deployment
+        id: verified-event
+        if: github.event_name == 'repository_dispatch' && steps.front-deploy.outputs.verified == 'true'
+        env:
+          GH_TOKEN: ${{ steps.web-dispatch-token.outputs.token }}
+          PLATFORM_REPOSITORY: ${{ github.repository }}
+          PLATFORM_SHA: ${{ needs.calculateTag.outputs.deploy_sha }}
+          WEB_REPOSITORY: AquilaXk/aquila-blog-web
+          WEB_SHA: ${{ needs.calculateTag.outputs.front_source_sha }}
+          IMAGE_REF: ${{ needs.calculateTag.outputs.front_image_ref }}
+          DEPLOY_RUN_ID: ${{ github.run_id }}
+          DOMAIN: https://blog.aquilaxk.site
+          SERVED_BUILD_SHA: ${{ steps.front-deploy.outputs.served_build_sha }}
+          DISPATCH_PAYLOAD_FILE: ${{ runner.temp }}/platform-web-deployment-ready.json
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          node <<'NODE'
+          const { createHash } = require("node:crypto")
+          const { appendFileSync, writeFileSync } = require("node:fs")
+
+          const values = {
+            schema_version: "1",
+            platform_repository: process.env.PLATFORM_REPOSITORY,
+            platform_sha: process.env.PLATFORM_SHA,
+            web_repository: process.env.WEB_REPOSITORY,
+            web_sha: process.env.WEB_SHA,
+            deploy_run_id: process.env.DEPLOY_RUN_ID,
+            domain: process.env.DOMAIN,
+            served_build_sha: process.env.SERVED_BUILD_SHA,
+          }
+          if (
+            values.platform_repository !== "AquilaXk/aquila-blog" ||
+            values.web_repository !== "AquilaXk/aquila-blog-web" ||
+            values.domain !== "https://blog.aquilaxk.site"
+          ) {
+            throw new Error("deployment repository or domain identity is invalid")
+          }
+          for (const key of ["platform_sha", "web_sha", "served_build_sha"]) {
+            if (!/^[a-f0-9]{40}$/.test(values[key] || "")) throw new Error(`${key} is invalid`)
+          }
+          if (!/^[1-9][0-9]*$/.test(values.deploy_run_id || "")) {
+            throw new Error("deploy_run_id is invalid")
+          }
+          if (values.served_build_sha !== values.web_sha) {
+            throw new Error("served_build_sha does not match web_sha")
+          }
+
+          const imageRef = process.env.IMAGE_REF || ""
+          if (!/^[^\s@]+@sha256:[a-f0-9]{64}$/.test(imageRef)) {
+            throw new Error("front image ref is not an immutable digest")
+          }
+          const imageDigest = imageRef.slice(imageRef.indexOf("@") + 1)
+          const keys = [
+            "schema_version",
+            "platform_repository",
+            "platform_sha",
+            "web_repository",
+            "web_sha",
+            "image_digest",
+            "deploy_run_id",
+            "domain",
+            "served_build_sha",
+          ]
+          const clientPayload = {
+            schema_version: values.schema_version,
+            platform_repository: values.platform_repository,
+            platform_sha: values.platform_sha,
+            web_repository: values.web_repository,
+            web_sha: values.web_sha,
+            image_digest: imageDigest,
+            deploy_run_id: values.deploy_run_id,
+            domain: values.domain,
+            served_build_sha: values.served_build_sha,
+          }
+          const canonical = keys.map((key) => `${key}=${clientPayload[key]}\n`).join("")
+          const deploymentIdentity = createHash("sha256").update(canonical).digest("hex")
+          clientPayload.deployment_identity = deploymentIdentity
+
+          writeFileSync(
+            process.env.DISPATCH_PAYLOAD_FILE,
+            JSON.stringify({ event_type: "platform_web_deployment_ready", client_payload: clientPayload }),
+          )
+          appendFileSync(process.env.GITHUB_OUTPUT, `deployment_identity=${deploymentIdentity}\nimage_digest=${imageDigest}\n`)
+          NODE
+
+          gh api --method POST "repos/${WEB_REPOSITORY}/dispatches" --input "${DISPATCH_PAYLOAD_FILE}" --silent
+
+      - name: Record verified Platform deployment event
+        if: github.event_name == 'repository_dispatch' && steps.front-deploy.outputs.verified == 'true' && steps.verified-event.outcome == 'success'
+        env:
+          PLATFORM_REPOSITORY: ${{ github.repository }}
+          PLATFORM_SHA: ${{ needs.calculateTag.outputs.deploy_sha }}
+          WEB_REPOSITORY: AquilaXk/aquila-blog-web
+          WEB_SHA: ${{ needs.calculateTag.outputs.front_source_sha }}
+          IMAGE_DIGEST: ${{ steps.verified-event.outputs.image_digest }}
+          DEPLOY_RUN_ID: ${{ github.run_id }}
+          DEPLOYMENT_IDENTITY: ${{ steps.verified-event.outputs.deployment_identity }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          {
+            echo "## Verified Platform Web deployment event"
+            echo
+            echo "- Platform run: ${GITHUB_SERVER_URL}/${PLATFORM_REPOSITORY}/actions/runs/${DEPLOY_RUN_ID}"
+            echo "- Platform SHA: \`${PLATFORM_SHA}\`"
+            echo "- Web receiver: \`${WEB_REPOSITORY}\`"
+            echo "- Web SHA: \`${WEB_SHA}\`"
+            echo "- Image digest: \`${IMAGE_DIGEST}\`"
+            echo "- Deployment identity: \`${DEPLOYMENT_IDENTITY}\`"
+          } >> "${GITHUB_STEP_SUMMARY}"

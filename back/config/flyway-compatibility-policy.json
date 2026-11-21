@@ -1,0 +1,100 @@
+{
+  "version": 1,
+  "migrations": [
+    {
+      "file": "back/src/main/resources/db/migration/V20260823_01__add_post_content_html_trust.sql",
+      "class": "EXPAND_SAFE"
+    },
+    {
+      "file": "back/src/main/resources/db/migration/V20260824_01__create_admin_operation_receipt.sql",
+      "class": "EXPAND_SAFE"
+    },
+    {
+      "file": "back/src/main/resources/db/migration/V20260826_01__share_search_runtime_controls.sql",
+      "class": "EXPAND_SAFE"
+    },
+    {
+      "file": "back/src/main/resources/db/migration/V20260829_01__restore_task_id_sequence_default.sql",
+      "class": "EXPAND_SAFE"
+    },
+    {
+      "file": "back/src/main/resources/db/migration/V20260902_01__drain_retired_public_persistence.sql",
+      "class": "REQUIRES_N_MINUS_1_TEST"
+    },
+    {
+      "file": "back/src/main/resources/db/migration/V20260902_02__drop_retired_public_persistence.sql",
+      "class": "CONTRACT_AFTER_CUTOVER",
+      "cutoverEvidenceId": "retired-public-persistence-phase-1"
+    },
+    {
+      "file": "back/src/main/resources/db/migration/V20260902_03__drop_retired_member_legal_acceptance.sql",
+      "class": "CONTRACT_AFTER_CUTOVER",
+      "cutoverEvidenceId": "retired-legal-acceptance-runtime"
+    },
+    {
+      "file": "back/src/main/resources/db/migration/V20260903_01__enforce_task_payload_v2_storage.sql",
+      "class": "CONTRACT_AFTER_CUTOVER",
+      "cutoverEvidenceId": "task-payload-v2-producer"
+    },
+    {
+      "file": "back/src/main/kotlin/db/migration/V20260903_02__reconcile_profile_workspace_snapshots.kt",
+      "class": "REQUIRES_N_MINUS_1_TEST"
+    },
+    {
+      "file": "back/src/main/resources/db/migration/V20260903_03__create_platform_schema_cutover.sql",
+      "class": "EXPAND_SAFE"
+    },
+    {
+      "file": "back/src/main/resources/db/migration/V20260908_01__migrate_retired_storage_urls.sql",
+      "class": "REQUIRES_N_MINUS_1_TEST"
+    },
+    {
+      "file": "back/src/main/resources/db/migration/V20260923_01__create_post_image_references.sql",
+      "class": "EXPAND_SAFE"
+    },
+    {
+      "file": "back/src/main/resources/db/migration/V20260923_02__normalize_post_columns.sql",
+      "class": "EXPAND_SAFE"
+    },
+    {
+      "file": "back/src/main/resources/db/migration/V20261114_01__add_missing_operational_indexes_concurrently.sql",
+      "class": "EXPAND_SAFE"
+    },
+    {
+      "file": "back/src/main/resources/db/migration/V20261115_01__add_admin_and_reader_composite_indexes_concurrently.sql",
+      "class": "EXPAND_SAFE"
+    },
+    {
+      "file": "back/src/main/resources/db/migration/V20261115_02__add_adjacent_deleted_and_readable_indexes_concurrently.sql",
+      "class": "EXPAND_SAFE"
+    },
+    {
+      "file": "back/src/main/resources/db/migration/V20261115_03__add_admin_engagement_sort_indexes_concurrently.sql",
+      "class": "EXPAND_SAFE"
+    },
+    {
+      "file": "back/src/main/resources/db/migration/V20261118_01__create_post_revision_ledger.sql",
+      "class": "EXPAND_SAFE"
+    }
+  ],
+  "cutovers": [
+    {
+      "id": "retired-public-persistence-phase-1",
+      "repository": "AquilaXk/aquila-blog",
+      "mergeSha": "8902c8e2ec09e3f8c9393d8f044759c0141129d8",
+      "deployRunId": 33554058558
+    },
+    {
+      "id": "retired-legal-acceptance-runtime",
+      "repository": "AquilaXk/aquila-blog",
+      "mergeSha": "19f9040c625bd5f36fc871311e28826d89db3f75",
+      "deployRunId": 33614068613
+    },
+    {
+      "id": "task-payload-v2-producer",
+      "repository": "AquilaXk/aquila-blog",
+      "mergeSha": "2551e6c4068aec245bdda57b843d4f3aaf35b1c2",
+      "deployRunId": 33724981013
+    }
+  ]
+}

@@ -1,0 +1,177 @@
+package com.back.boundedContexts.post.application.port.output
+
+import com.back.boundedContexts.member.domain.shared.Member
+import com.back.boundedContexts.post.domain.Post
+import com.back.boundedContexts.post.domain.PostAttr
+import com.back.boundedContexts.post.dto.AdmDeletedPostDto
+import com.back.boundedContexts.post.dto.AdmDeletedPostSnapshotDto
+import com.back.boundedContexts.post.dto.AdmPostFacetCounts
+import com.back.boundedContexts.post.dto.PostInteractionReadStateDto
+import com.back.boundedContexts.post.dto.PublicPostDetailContentCacheDto
+import com.back.boundedContexts.post.dto.PublicSitemapPostItemDto
+import com.back.standard.dto.post.type1.PostSearchSortType1
+import java.time.Instant
+import java.util.Optional
+
+interface PostRepositoryPort {
+    data class PagedQuery(
+        val kw: String,
+        val zeroBasedPage: Int,
+        val pageSize: Int,
+        val sortProperty: String,
+        val sortAscending: Boolean,
+        val adminStatus: String = "all",
+    )
+
+    data class TaggedPagedQuery(
+        val kw: String,
+        val tag: String,
+        val zeroBasedPage: Int,
+        val pageSize: Int,
+        val sortProperty: String,
+        val sortAscending: Boolean,
+    )
+
+    data class DeletedPagedQuery(
+        val kw: String,
+        val zeroBasedPage: Int,
+        val pageSize: Int,
+    )
+
+    data class CursorQuery(
+        val cursorSortValue: Long?,
+        val cursorId: Long?,
+        val limit: Int,
+        val sort: PostSearchSortType1,
+    )
+
+    data class TaggedCursorQuery(
+        val tag: String,
+        val cursorSortValue: Long?,
+        val cursorId: Long?,
+        val limit: Int,
+        val sort: PostSearchSortType1,
+    )
+
+    data class RelatedAuthorQuery(
+        val authorId: Long,
+        val excludePostId: Long?,
+        val limit: Int,
+    )
+
+    data class PagedResult<T>(
+        val content: List<T>,
+        val totalElements: Long,
+    )
+
+    fun count(): Long
+
+    fun getAdminPostFacetCounts(): AdmPostFacetCounts
+
+    fun countByAuthor(author: Member): Long
+
+    fun save(post: Post): Post
+
+    fun saveAndFlush(post: Post): Post
+
+    fun flush()
+
+    fun findById(id: Long): Optional<Post>
+
+    fun findAllByIds(ids: Collection<Long>): List<Post>
+
+    fun existsById(id: Long): Boolean
+
+    fun findFirstByOrderByIdDesc(): Post?
+
+    fun existsByAuthorAndTitle(
+        author: Member,
+        title: String,
+    ): Boolean
+
+    fun findQPagedByKw(query: PagedQuery): PagedResult<Post>
+
+    fun findQPagedByKwForAdmin(query: PagedQuery): PagedResult<Post>
+
+    fun findDeletedPagedByKw(query: DeletedPagedQuery): PagedResult<AdmDeletedPostDto>
+
+    fun findDeletedSnapshotById(id: Long): AdmDeletedPostSnapshotDto?
+
+    fun softDeleteById(id: Long): Boolean
+
+    fun restoreDeletedById(id: Long): Boolean
+
+    fun hardDeleteDeletedById(id: Long): Boolean
+
+    fun findQPagedByAuthorAndKw(
+        author: Member,
+        query: PagedQuery,
+    ): PagedResult<Post>
+
+    fun findQPagedByKwAndTag(query: TaggedPagedQuery): PagedResult<Post>
+
+    fun findPublicByCursor(query: CursorQuery): List<Post>
+
+    fun findPublicByTagCursor(query: TaggedCursorQuery): List<Post>
+
+    fun findPublicByAuthorExceptPost(query: RelatedAuthorQuery): List<Post>
+
+    fun findPreviousPublicPost(
+        createdAt: Instant,
+        id: Long,
+    ): Post?
+
+    fun findNextPublicPost(
+        createdAt: Instant,
+        id: Long,
+    ): Post?
+
+    fun findPublicDetailById(id: Long): Post?
+
+    fun isPublicDetailReadable(id: Long): Boolean
+
+    fun findPublicDetailContentById(id: Long): PublicPostDetailContentCacheDto?
+
+    fun findPublicSitemapItems(): List<PublicSitemapPostItemDto>
+
+    fun findPublicSitemapItems(limit: Int): List<PublicSitemapPostItemDto>
+
+    fun findInteractionReadStateById(id: Long): PostInteractionReadStateDto?
+
+    fun existsByIdAndContentContaining(
+        id: Long,
+        contentFragment: String,
+    ): Boolean
+
+    fun existsByContentContaining(contentFragment: String): Boolean
+
+    fun existsImageReference(
+        postId: Long,
+        objectKey: String,
+    ): Boolean
+
+    fun existsImageReferenceByObjectKey(objectKey: String): Boolean
+
+    fun findFirstReferencingPostId(objectKey: String): Long?
+
+    fun existsPublicPostReferencingImage(objectKey: String): Boolean
+
+    fun syncImageReferences(
+        postId: Long,
+        objectKeys: Collection<String>,
+    )
+
+    fun deleteImageReferencesByPostId(postId: Long)
+
+    fun updateHitCount(
+        post: Post,
+        hitCount: Int,
+        hitCountAttr: PostAttr?,
+    )
+
+    fun updateLikesCount(
+        post: Post,
+        likesCount: Int,
+        likesCountAttr: PostAttr?,
+    )
+}

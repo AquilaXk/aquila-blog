@@ -1,0 +1,120 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+repo_root="$(git rev-parse --show-toplevel)"
+cd "${repo_root}"
+
+guard="tools/guards/check-forbidden-tracked-files.sh"
+readme_blob="$(git rev-parse HEAD:README.md)"
+guard_output="$(mktemp)"
+trap 'rm -f "${guard_output}"' EXIT
+
+run_with_temp_index() {
+  local command="$1"
+  local tmp_index
+  tmp_index="$(mktemp)"
+  GIT_INDEX_FILE="${tmp_index}" git read-tree HEAD
+  GIT_INDEX_FILE="${tmp_index}" git rm -r --cached --ignore-unmatch front >/dev/null
+  GIT_INDEX_FILE="${tmp_index}" git rm -r --cached --ignore-unmatch docs/legal >/dev/null
+  GIT_INDEX_FILE="${tmp_index}" git rm -r --cached --ignore-unmatch infra >/dev/null
+  GIT_INDEX_FILE="${tmp_index}" git rm -r --cached --ignore-unmatch .github/pull_request_template.md tools/templates >/dev/null
+  set +e
+  GIT_INDEX_FILE="${tmp_index}" bash -c "${command}"
+  local status=$?
+  set -e
+  rm -f "${tmp_index}"
+  return "${status}"
+}
+
+if ! bash "${guard}"; then
+  echo "[test] expected current tracked files to pass forbidden-doc guard" >&2
+  exit 1
+fi
+
+if run_with_temp_index "git update-index --add --cacheinfo 100644 '${readme_blob}' docs/leak.md && bash '${guard}' >'${guard_output}' 2>&1"; then
+  echo "[test] expected tracked docs/leak.md to be rejected" >&2
+  exit 1
+fi
+
+if ! run_with_temp_index "git update-index --add --cacheinfo 100644 '${readme_blob}' docs/design/contract.md && bash '${guard}' >'${guard_output}' 2>&1"; then
+  echo "[test] expected tracked docs/design/contract.md to be allowed" >&2
+  exit 1
+fi
+
+if ! run_with_temp_index "git update-index --add --cacheinfo 100644 '${readme_blob}' docs/ops/security-incident-runbook.md && bash '${guard}' >'${guard_output}' 2>&1"; then
+  echo "[test] expected tracked docs/ops/security-incident-runbook.md to be allowed" >&2
+  exit 1
+fi
+
+if ! run_with_temp_index "git update-index --add --cacheinfo 100644 '${readme_blob}' docs/ops/cloud-transfer-limits-and-recovery.md && bash '${guard}' >'${guard_output}' 2>&1"; then
+  echo "[test] expected tracked docs/ops/cloud-transfer-limits-and-recovery.md to be allowed" >&2
+  exit 1
+fi
+
+if run_with_temp_index "git update-index --add --cacheinfo 100644 '${readme_blob}' back/new-report.md && bash '${guard}' >'${guard_output}' 2>&1"; then
+  echo "[test] expected tracked back/new-report.md to be rejected" >&2
+  exit 1
+fi
+
+if run_with_temp_index "git update-index --add --cacheinfo 100644 '${readme_blob}' docs/leak.md && bash '${guard}' --staged >'${guard_output}' 2>&1"; then
+  echo "[test] expected staged docs/leak.md to be rejected" >&2
+  exit 1
+fi
+
+if ! run_with_temp_index "git update-index --add --cacheinfo 100644 '${readme_blob}' docs/design/contract.md && bash '${guard}' --staged >'${guard_output}' 2>&1"; then
+  echo "[test] expected staged docs/design/contract.md to be allowed" >&2
+  exit 1
+fi
+
+if run_with_temp_index "git update-index --add --cacheinfo 100644 '${readme_blob}' front/docs/design/contract.md && bash '${guard}' --staged >'${guard_output}' 2>&1"; then
+  echo "[test] expected staged front/docs/design/contract.md to be rejected" >&2
+  exit 1
+fi
+
+if run_with_temp_index "git update-index --add --cacheinfo 100644 '${readme_blob}' front/docs/design/nested/contract.md && bash '${guard}' --staged >'${guard_output}' 2>&1"; then
+  echo "[test] expected staged nested front/docs/design markdown to be rejected" >&2
+  exit 1
+fi
+
+if ! run_with_temp_index "git update-index --add --cacheinfo 100644 '${readme_blob}' docs/ops/security-incident-runbook.md && bash '${guard}' --staged >'${guard_output}' 2>&1"; then
+  echo "[test] expected staged docs/ops/security-incident-runbook.md to be allowed" >&2
+  exit 1
+fi
+
+if ! run_with_temp_index "git update-index --add --cacheinfo 100644 '${readme_blob}' docs/ops/cloud-transfer-limits-and-recovery.md && bash '${guard}' --staged >'${guard_output}' 2>&1"; then
+  echo "[test] expected staged docs/ops/cloud-transfer-limits-and-recovery.md to be allowed" >&2
+  exit 1
+fi
+
+if ! run_with_temp_index "git update-index --add --cacheinfo 100644 '${readme_blob}' TODO.md && bash '${guard}' --staged >'${guard_output}' 2>&1"; then
+  echo "[test] expected staged TODO.md to be allowed" >&2
+  exit 1
+fi
+
+if ! run_with_temp_index "git update-index --add --cacheinfo 100644 '${readme_blob}' THIRD_PARTY_NOTICES.md && bash '${guard}' >'${guard_output}' 2>&1"; then
+  echo "[test] expected tracked THIRD_PARTY_NOTICES.md to be allowed" >&2
+  exit 1
+fi
+
+if ! run_with_temp_index "git update-index --add --cacheinfo 100644 '${readme_blob}' THIRD_PARTY_NOTICES.md && bash '${guard}' --staged >'${guard_output}' 2>&1"; then
+  echo "[test] expected staged THIRD_PARTY_NOTICES.md to be allowed" >&2
+  exit 1
+fi
+
+for forbidden_path in \
+  ".agents/rules/domain.md" \
+  ".agents/hooks.json" \
+  ".gemini/GEMINI.md" \
+  ".gemini/settings.json"
+do
+  if run_with_temp_index "git update-index --add --cacheinfo 100644 '${readme_blob}' '${forbidden_path}' && bash '${guard}' >'${guard_output}' 2>&1"; then
+    echo "[test] expected tracked ${forbidden_path} to be rejected" >&2
+    exit 1
+  fi
+  if run_with_temp_index "git update-index --add --cacheinfo 100644 '${readme_blob}' '${forbidden_path}' && bash '${guard}' --staged >'${guard_output}' 2>&1"; then
+    echo "[test] expected staged ${forbidden_path} to be rejected" >&2
+    exit 1
+  fi
+done
+
+echo "[test] forbidden tracked docs guard passed"

@@ -1,0 +1,217 @@
+package com.back.boundedContexts.post.application.service
+
+import com.back.global.storage.application.UploadedFileUrlCodec
+import com.back.global.task.annotation.Task
+import com.back.global.task.annotation.TaskPayloadSensitivity
+import com.back.standard.dto.TaskPayload
+import java.util.UUID
+
+@Task(
+    type = PostWriteSideEffectPayload.TASK_TYPE,
+    schemaVersion = 2,
+    sensitivity = TaskPayloadSensitivity.PERSONAL,
+    label = "게시글 쓰기 후속 작업",
+    maxRetries = 5,
+    baseDelaySeconds = 10,
+    backoffMultiplier = 2.0,
+    maxDelaySeconds = 300,
+)
+data class PostWriteSideEffectPayload(
+    override val uid: UUID,
+    override val aggregateType: String,
+    override val aggregateId: Long,
+    val postId: Long,
+    val attachmentKeys: PostAttachmentObjectKeySnapshot,
+    val beforeTags: List<String>,
+    val afterTags: List<String>,
+    val cacheInvalidationTargets: Set<PostReadCacheInvalidationTarget>,
+    val evictReason: String,
+    val recommendationAction: PostRecommendationSideEffect,
+    val domainEventType: String?,
+    val domainEventJson: String?,
+) : TaskPayload {
+    companion object {
+        const val TASK_TYPE = "post.write.side-effect"
+    }
+}
+
+enum class PostAttachmentTaskAction {
+    NONE,
+    SYNC,
+    DELETE,
+}
+
+data class PostAttachmentObjectKeySnapshot(
+    val action: PostAttachmentTaskAction,
+    val currentImageObjectKeys: List<String>,
+    val previousImageObjectKeys: List<String>,
+    val currentFileObjectKeys: List<String>,
+    val previousFileObjectKeys: List<String>,
+    val deletedImageObjectKeys: List<String>,
+    val deletedFileObjectKeys: List<String>,
+) {
+    companion object {
+        fun fromContents(
+            previousContent: String?,
+            currentContent: String?,
+            deletedContent: String?,
+            preExtractedCurrentKeys: UploadedFileUrlCodec.PartitionedObjectKeys? = null,
+        ): PostAttachmentObjectKeySnapshot {
+            check(currentContent == null || deletedContent == null) {
+                "Post attachment task cannot sync and delete in one payload"
+            }
+            val currentKeys =
+                if (currentContent == null) {
+                    null
+                } else {
+                    preExtractedCurrentKeys ?: UploadedFileUrlCodec.extractPartitionedObjectKeysFromContent(currentContent)
+                }
+            val previousKeys = previousContent?.let(UploadedFileUrlCodec::extractPartitionedObjectKeysFromContent)
+            val deletedKeys = deletedContent?.let(UploadedFileUrlCodec::extractPartitionedObjectKeysFromContent)
+            return PostAttachmentObjectKeySnapshot(
+                action =
+                    when {
+                        currentContent != null -> PostAttachmentTaskAction.SYNC
+                        deletedContent != null -> PostAttachmentTaskAction.DELETE
+                        else -> PostAttachmentTaskAction.NONE
+                    },
+                currentImageObjectKeys = currentKeys?.imageKeys?.sorted().orEmpty(),
+                previousImageObjectKeys = previousKeys?.imageKeys?.sorted().orEmpty(),
+                currentFileObjectKeys = currentKeys?.fileKeys?.sorted().orEmpty(),
+                previousFileObjectKeys = previousKeys?.fileKeys?.sorted().orEmpty(),
+                deletedImageObjectKeys = deletedKeys?.imageKeys?.sorted().orEmpty(),
+                deletedFileObjectKeys = deletedKeys?.fileKeys?.sorted().orEmpty(),
+            )
+        }
+    }
+}
+
+internal data class PostWriteSideEffectCommand(
+    val postId: Long,
+    val previousContent: String?,
+    val currentContent: String?,
+    val deletedContent: String?,
+    val beforeTags: List<String>,
+    val afterTags: List<String>,
+    val cacheInvalidationScope: PostReadCacheInvalidationScope,
+    val evictReason: String,
+    val recommendationAction: PostRecommendationSideEffect,
+    val operationUid: UUID = UUID.randomUUID(),
+    val preExtractedCurrentKeys: UploadedFileUrlCodec.PartitionedObjectKeys? = null,
+)
+
+enum class PostRecommendationSideEffect {
+    REFRESH,
+    EVICT,
+    NONE,
+}
+
+enum class PostReadCacheInvalidationTarget {
+    ADMIN_POSTS_FIRST_PAGE,
+    HOT_READ_PAGES,
+    SEARCH_FIRST_PAGE,
+    IMPACTED_TAG_PAGES,
+    PUBLIC_TAGS,
+    DETAIL,
+}
+
+internal enum class PostPublicChangeImpact {
+    LISTING_VISIBILITY,
+    TITLE,
+    CONTENT,
+    TAG,
+    SUMMARY,
+}
+
+internal sealed class PostReadCacheInvalidationScope(
+    private val targetSet: Set<PostReadCacheInvalidationTarget>,
+) {
+    data object None : PostReadCacheInvalidationScope(emptySet())
+
+    data object PublicPostCreated : PostReadCacheInvalidationScope(ALL_PUBLIC_READ_TARGETS)
+
+    data object PublicPostDeleted : PostReadCacheInvalidationScope(ALL_PUBLIC_READ_TARGETS)
+
+    data object PublicPostRestored : PostReadCacheInvalidationScope(ALL_PUBLIC_READ_TARGETS)
+
+    data object PublicPostHardDeleted : PostReadCacheInvalidationScope(ALL_PUBLIC_READ_TARGETS)
+
+    data object DetailOnly : PostReadCacheInvalidationScope(setOf(PostReadCacheInvalidationTarget.DETAIL))
+
+    data object AdminPostListOnly : PostReadCacheInvalidationScope(setOf(PostReadCacheInvalidationTarget.ADMIN_POSTS_FIRST_PAGE))
+
+    data object AdminPostListAndDetail : PostReadCacheInvalidationScope(
+        setOf(PostReadCacheInvalidationTarget.ADMIN_POSTS_FIRST_PAGE, PostReadCacheInvalidationTarget.DETAIL),
+    )
+
+    class PublicPostModified(
+        impacts: Set<PostPublicChangeImpact>,
+    ) : PostReadCacheInvalidationScope(targetsForModifiedPublicPost(impacts))
+
+    private class Explicit(
+        targets: Set<PostReadCacheInvalidationTarget>,
+    ) : PostReadCacheInvalidationScope(targets)
+
+    fun targets(): Set<PostReadCacheInvalidationTarget> = targetSet
+
+    fun evicts(target: PostReadCacheInvalidationTarget): Boolean = target in targetSet
+
+    fun isEmpty(): Boolean = targetSet.isEmpty()
+
+    companion object {
+        private val ALL_PUBLIC_READ_TARGETS = PostReadCacheInvalidationTarget.entries.toSet()
+
+        fun fromTargets(targets: Set<PostReadCacheInvalidationTarget>): PostReadCacheInvalidationScope =
+            if (targets.isEmpty()) {
+                None
+            } else {
+                Explicit(targets)
+            }
+
+        private fun targetsForModifiedPublicPost(impacts: Set<PostPublicChangeImpact>): Set<PostReadCacheInvalidationTarget> =
+            buildSet {
+                add(PostReadCacheInvalidationTarget.ADMIN_POSTS_FIRST_PAGE)
+                add(PostReadCacheInvalidationTarget.HOT_READ_PAGES)
+                if (
+                    impacts.any {
+                        it == PostPublicChangeImpact.LISTING_VISIBILITY ||
+                            it == PostPublicChangeImpact.TITLE ||
+                            it == PostPublicChangeImpact.CONTENT ||
+                            it == PostPublicChangeImpact.TAG ||
+                            it == PostPublicChangeImpact.SUMMARY
+                    }
+                ) {
+                    add(PostReadCacheInvalidationTarget.SEARCH_FIRST_PAGE)
+                }
+                if (
+                    impacts.any {
+                        it == PostPublicChangeImpact.LISTING_VISIBILITY ||
+                            it == PostPublicChangeImpact.TITLE ||
+                            it == PostPublicChangeImpact.CONTENT ||
+                            it == PostPublicChangeImpact.TAG ||
+                            it == PostPublicChangeImpact.SUMMARY
+                    }
+                ) {
+                    add(PostReadCacheInvalidationTarget.IMPACTED_TAG_PAGES)
+                }
+                if (
+                    impacts.any {
+                        it == PostPublicChangeImpact.LISTING_VISIBILITY ||
+                            it == PostPublicChangeImpact.TAG
+                    }
+                ) {
+                    add(PostReadCacheInvalidationTarget.PUBLIC_TAGS)
+                }
+                if (
+                    impacts.any {
+                        it == PostPublicChangeImpact.LISTING_VISIBILITY ||
+                            it == PostPublicChangeImpact.TITLE ||
+                            it == PostPublicChangeImpact.CONTENT ||
+                            it == PostPublicChangeImpact.SUMMARY
+                    }
+                ) {
+                    add(PostReadCacheInvalidationTarget.DETAIL)
+                }
+            }
+    }
+}

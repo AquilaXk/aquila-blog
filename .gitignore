@@ -1,0 +1,43 @@
+.idea/
+front/.idea/
+front/tsconfig.tsbuildinfo
+deploy/homeserver/.env.prod
+deploy/homeserver/.env.back.prod
+deploy/homeserver/.env.caddy.prod
+deploy/homeserver/.env.front.prod
+deploy/homeserver/.env.front.metrics.prod
+deploy/homeserver/.web-metrics-token
+deploy/homeserver/.web-metrics-credentials/
+deploy/homeserver/.deploy-backups/
+deploy/homeserver/.deploy-baseline*
+# front blue/green 런타임 상태와 rollback 증거 (#1539). 서버에서만 생성된다.
+deploy/homeserver/.active_front
+deploy/homeserver/.front-release-state.env
+deploy/homeserver/*.backup
+deploy/homeserver/*.enc
+
+# Agent-only docs (machine-facing)
+AGENTS.md
+CLAUDE.md
+GEMINI.md
+CURSOR.md
+COPILOT.md
+docs/*
+!docs/README.md
+!docs/design/
+!docs/design/**
+!docs/legal/
+!docs/legal/**
+!docs/ops/
+!docs/ops/**
+.cursor/
+.claude/
+.aider/
+.aider*
+.windsurf/
+.codex/
+.ai/
+
+# k6 output artifacts
+perf/k6/results/*.json
+perf/k6/results/*.txt

@@ -1,0 +1,122 @@
+# promtool unit tests for deploy/homeserver/monitoring/rules/task-alerts.yml.
+#
+# Lives in tools/test/, not next to the rules file: Prometheus glob-loads
+# `/etc/prometheus/rules/*.yml` (prometheus.yml `rule_files`), so a promtool *test* file dropped
+# into that directory would be parsed as a rule file at runtime and break the whole rule set.
+#
+# `rule_files` below is resolved relative to this file's directory.
+#
+# Run: promtool test rules tools/test/task-alerts.promtool-test.yml
+# tools/test/monitoring-alerts.test.mjs runs this automatically wherever promtool is installed.
+rule_files:
+  - ../../deploy/homeserver/monitoring/rules/task-alerts.yml
+
+evaluation_interval: 1m
+
+tests:
+  - name: front runtime scrape is healthy
+    input_series:
+      - series: 'docker_container_running{job="docker_runtime_probe",service="front_blue"}'
+        values: "1+0x4"
+      - series: 'up{job="front",service="aquila-front",deploy_color="blue"}'
+        values: "1+0x4"
+    alert_rule_test:
+      - eval_time: 4m
+        alertname: AquilaFrontRuntimeMetricsScrapeDown
+        exp_alerts: []
+
+  - name: front blue scrape is down
+    input_series:
+      - series: 'docker_container_running{job="docker_runtime_probe",service="front_blue"}'
+        values: "1+0x4"
+      - series: 'up{job="front",service="aquila-front",deploy_color="blue"}'
+        values: "0+0x4"
+    alert_rule_test:
+      - eval_time: 4m
+        alertname: AquilaFrontRuntimeMetricsScrapeDown
+        exp_alerts:
+          - exp_labels:
+              deploy_color: blue
+              service: front_blue
+              severity: warning
+            exp_annotations:
+              summary: "Web runtime metrics scrape is down"
+              description: "Prometheus has no successful metrics scrape for the running blue front target for 3m."
+
+  - name: front blue scrape is absent
+    input_series:
+      - series: 'docker_container_running{job="docker_runtime_probe",service="front_blue"}'
+        values: "1+0x4"
+    alert_rule_test:
+      - eval_time: 4m
+        alertname: AquilaFrontRuntimeMetricsScrapeDown
+        exp_alerts:
+          - exp_labels:
+              deploy_color: blue
+              service: front_blue
+              severity: warning
+            exp_annotations:
+              summary: "Web runtime metrics scrape is down"
+              description: "Prometheus has no successful metrics scrape for the running blue front target for 3m."
+
+  - name: front profile is off
+    input_series:
+      - series: 'docker_container_running{job="docker_runtime_probe",service="front_blue"}'
+        values: "0+0x4"
+    alert_rule_test:
+      - eval_time: 4m
+        alertname: AquilaFrontRuntimeMetricsScrapeDown
+        exp_alerts: []
+
+  - name: home warm cache HIT match must not alert
+    interval: 5m
+    input_series:
+      - series: 'aquila_public_edge_probe_cache_state_match{route_class="home",expected_state="HIT",observed_state="HIT"}'
+        values: "1+0x400"
+    alert_rule_test:
+      - eval_time: 35m
+        alertname: AquilaPublicEdgeCacheStateUnobserved
+        exp_alerts: []
+
+  - name: home warm cache mismatch transitions must share one persistent alert
+    interval: 5m
+    input_series:
+      - series: 'aquila_public_edge_probe_cache_state_match{route_class="home",expected_state="HIT",observed_state="MISS"}'
+        values: "0+0x2 stale"
+      - series: 'aquila_public_edge_probe_cache_state_match{route_class="home",expected_state="HIT",observed_state="STALE"}'
+        values: "_ _ _ 0+0x400"
+    alert_rule_test:
+      - eval_time: 35m
+        alertname: AquilaPublicEdgeCacheStateUnobserved
+        exp_alerts:
+          - exp_labels:
+              expected_state: HIT
+              route_class: home
+              severity: warning
+            exp_annotations:
+              summary: "Public edge cache state is no longer observable"
+              description: "The home route's warm cache state has mismatched HIT for 30m or is missing. Check the front container, the Caddy web vhost header handling, and the probe route set."
+      - eval_time: 27h
+        alertname: AquilaPublicEdgeCacheStateUnobserved
+        exp_alerts:
+          - exp_labels:
+              expected_state: HIT
+              route_class: home
+              severity: warning
+            exp_annotations:
+              summary: "Public edge cache state is no longer observable"
+              description: "The home route's warm cache state has mismatched HIT for 30m or is missing. Check the front container, the Caddy web vhost header handling, and the probe route set."
+
+  - name: home warm cache state absent must alert
+    interval: 5m
+    alert_rule_test:
+      - eval_time: 35m
+        alertname: AquilaPublicEdgeCacheStateUnobserved
+        exp_alerts:
+          - exp_labels:
+              expected_state: HIT
+              route_class: home
+              severity: warning
+            exp_annotations:
+              summary: "Public edge cache state is no longer observable"
+              description: "The home route's warm cache state has mismatched HIT for 30m or is missing. Check the front container, the Caddy web vhost header handling, and the probe route set."

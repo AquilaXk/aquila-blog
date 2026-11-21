@@ -1,0 +1,4 @@
+-- Operational indexes are owned by versioned Flyway migrations.
+-- See V20260723_01__add_operational_indexes_concurrently.sql and
+-- V20260723_02__add_post_title_content_pgroonga_index.sql.
+-- This repeatable migration intentionally contains no DDL.

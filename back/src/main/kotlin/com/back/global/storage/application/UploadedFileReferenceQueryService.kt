@@ -1,0 +1,74 @@
+package com.back.global.storage.application
+
+import com.back.boundedContexts.member.application.port.output.MemberAttrRepositoryPort
+import com.back.boundedContexts.member.domain.shared.memberMixin.PROFILE_WORKSPACE_DRAFT
+import com.back.boundedContexts.member.domain.shared.memberMixin.PROFILE_WORKSPACE_PUBLISHED
+import com.back.boundedContexts.post.application.port.output.PostRepositoryPort
+import com.back.global.storage.domain.UploadedFile
+import com.back.global.storage.domain.UploadedFileOwnerType
+import org.springframework.stereotype.Service
+
+@Service
+class UploadedFileReferenceQueryService(
+    private val postRepository: PostRepositoryPort,
+    private val memberAttrRepository: MemberAttrRepositoryPort,
+    private val retentionProperties: UploadedFileRetentionProperties = UploadedFileRetentionProperties(),
+) {
+    fun findReferencedObjectKeys(candidates: Collection<UploadedFile>): Set<String> {
+        if (candidates.isEmpty()) return emptySet()
+
+        val referencedKeys = linkedSetOf<String>()
+        candidates.forEach { uploadedFile ->
+            if (isReferencedByKnownOwner(uploadedFile) ||
+                (retentionProperties.fallbackLookupEnabled && isReferencedByFallbackLookup(uploadedFile))
+            ) {
+                referencedKeys += uploadedFile.objectKey
+            }
+        }
+        return referencedKeys
+    }
+
+    private fun isReferencedByKnownOwner(uploadedFile: UploadedFile): Boolean =
+        when (uploadedFile.ownerType) {
+            UploadedFileOwnerType.POST -> {
+                val ownerId = uploadedFile.ownerId
+                (ownerId != null && postRepository.existsImageReference(ownerId, uploadedFile.objectKey)) ||
+                    postRepository.existsImageReferenceByObjectKey(uploadedFile.objectKey) ||
+                    isReferencedByMemberProfileAttr(uploadedFile.objectKey)
+            }
+            UploadedFileOwnerType.MEMBER_PROFILE -> {
+                val ownerId = uploadedFile.ownerId
+                (
+                    ownerId != null &&
+                        (
+                            memberAttrRepository.existsBySubjectIdAndNameAndStrValueContaining(
+                                ownerId,
+                                PROFILE_WORKSPACE_DRAFT,
+                                uploadedFile.objectKey,
+                            ) ||
+                                memberAttrRepository.existsBySubjectIdAndNameAndStrValueContaining(
+                                    ownerId,
+                                    PROFILE_WORKSPACE_PUBLISHED,
+                                    uploadedFile.objectKey,
+                                )
+                        )
+                ) ||
+                    postRepository.existsImageReferenceByObjectKey(uploadedFile.objectKey)
+            }
+            else -> false
+        }
+
+    private fun isReferencedByFallbackLookup(uploadedFile: UploadedFile): Boolean {
+        val objectKey = uploadedFile.objectKey
+        return postRepository.existsImageReferenceByObjectKey(objectKey) ||
+            isReferencedByMemberProfileAttr(objectKey)
+    }
+
+    private fun isReferencedByMemberProfileAttr(objectKey: String): Boolean {
+        val imageUrl = UploadedFileUrlCodec.buildImageUrl(objectKey)
+        return memberAttrRepository.existsByNameAndStrValueContaining(PROFILE_WORKSPACE_DRAFT, objectKey) ||
+            memberAttrRepository.existsByNameAndStrValueContaining(PROFILE_WORKSPACE_PUBLISHED, objectKey) ||
+            memberAttrRepository.existsByNameAndStrValueContaining(PROFILE_WORKSPACE_DRAFT, imageUrl) ||
+            memberAttrRepository.existsByNameAndStrValueContaining(PROFILE_WORKSPACE_PUBLISHED, imageUrl)
+    }
+}

@@ -6,6 +6,7 @@ import com.back.global.security.domain.AuthSecurityEventType
 import com.back.global.storage.application.UploadedFileRetentionService
 import com.back.global.task.application.TaskQueueDiagnosticsService
 import org.springframework.stereotype.Service
+import org.springframework.transaction.annotation.Transactional
 import java.time.Instant
 
 data class AdminDashboardTaskQueueSnapshot(
@@ -57,6 +58,7 @@ class AdminDashboardSnapshotService(
     private val uploadedFileRetentionService: UploadedFileRetentionService,
     private val postUseCase: PostUseCase,
 ) {
+    @Transactional(readOnly = true)
     fun getSnapshot(): AdminDashboardSnapshot {
         val generatedAt = Instant.now()
         val taskQueue = taskQueueDiagnosticsService.diagnoseQueue()

@@ -86,21 +86,35 @@ class UploadedFilePurgeService(
 
     fun diagnoseCleanup(sampleSize: Int): UploadedFileCleanupDiagnostics {
         val now = now()
-        val cleanupSummary = diagnoseCleanupSummary(sampleSize)
         val safeSampleSize = sampleSize.coerceIn(1, 20)
-        val reconcileDiagnostics = diagnoseReconcile(now, safeSampleSize)
-        val statusCounts = uploadedFileRepository.countGroupedByStatus()
+        val preReconcileSnapshot =
+            checkNotNull(
+                readOnlyTransactionTemplate.execute {
+                    val summaryData = loadCleanupSummaryData(now, safeSampleSize)
+                    PreReconcileDiagnosticsSnapshot(
+                        cleanupSummary = summaryData.summary,
+                        sampleEligibleObjectKeys = summaryData.sampleEligibleObjectKeys,
+                        statusCounts = uploadedFileRepository.countGroupedByStatus(),
+                        longLivedPendingDelete = loadLongLivedPendingDeleteDiagnostics(now, safeSampleSize),
+                    )
+                },
+            )
+        val reconcileDiagnostics =
+            diagnoseReconcile(
+                sampleSize = safeSampleSize,
+                longLivedPendingDelete = preReconcileSnapshot.longLivedPendingDelete,
+            )
 
         return UploadedFileCleanupDiagnostics(
-            tempCount = statusCounts[UploadedFileStatus.TEMP] ?: 0L,
-            activeCount = statusCounts[UploadedFileStatus.ACTIVE] ?: 0L,
-            pendingDeleteCount = statusCounts[UploadedFileStatus.PENDING_DELETE] ?: 0L,
-            deletedCount = statusCounts[UploadedFileStatus.DELETED] ?: 0L,
-            eligibleForPurgeCount = cleanupSummary.eligibleForPurgeCount,
+            tempCount = preReconcileSnapshot.statusCounts[UploadedFileStatus.TEMP] ?: 0L,
+            activeCount = preReconcileSnapshot.statusCounts[UploadedFileStatus.ACTIVE] ?: 0L,
+            pendingDeleteCount = preReconcileSnapshot.statusCounts[UploadedFileStatus.PENDING_DELETE] ?: 0L,
+            deletedCount = preReconcileSnapshot.statusCounts[UploadedFileStatus.DELETED] ?: 0L,
+            eligibleForPurgeCount = preReconcileSnapshot.cleanupSummary.eligibleForPurgeCount,
             cleanupSafetyThreshold = retentionProperties.cleanupSafetyThreshold,
-            blockedBySafetyThreshold = cleanupSummary.blockedBySafetyThreshold,
-            oldestEligiblePurgeAfter = cleanupSummary.oldestEligiblePurgeAfter,
-            sampleEligibleObjectKeys = loadEligibleObjectKeys(now, safeSampleSize),
+            blockedBySafetyThreshold = preReconcileSnapshot.cleanupSummary.blockedBySafetyThreshold,
+            oldestEligiblePurgeAfter = preReconcileSnapshot.cleanupSummary.oldestEligiblePurgeAfter,
+            sampleEligibleObjectKeys = preReconcileSnapshot.sampleEligibleObjectKeys,
             reconcile = reconcileDiagnostics,
         )
     }
@@ -108,11 +122,22 @@ class UploadedFilePurgeService(
     fun diagnoseCleanupSummary(sampleSize: Int): UploadedFileCleanupSummary {
         val now = now()
         val safeSampleSize = sampleSize.coerceIn(1, 20)
+        return checkNotNull(
+            readOnlyTransactionTemplate.execute {
+                loadCleanupSummaryData(now, safeSampleSize).summary
+            },
+        )
+    }
+
+    private fun loadCleanupSummaryData(
+        now: Instant,
+        sampleSize: Int,
+    ): CleanupSummaryData {
         val eligibleCandidates =
             uploadedFileRepository.findByStatusInAndPurgeAfterLessThanEqualOrderByPurgeAfterAsc(
                 statuses = purgeCandidateStatuses,
                 purgeAfter = now,
-                pageable = PageRequest.of(0, safeSampleSize),
+                pageable = PageRequest.of(0, sampleSize),
             )
         val eligibleCount =
             uploadedFileRepository.countByStatusInAndPurgeAfterLessThanEqual(
@@ -120,31 +145,23 @@ class UploadedFilePurgeService(
                 now,
             )
 
-        return UploadedFileCleanupSummary(
-            eligibleForPurgeCount = eligibleCount,
-            blockedBySafetyThreshold = eligibleCount > retentionProperties.cleanupSafetyThreshold,
-            oldestEligiblePurgeAfter = eligibleCandidates.firstOrNull()?.purgeAfter,
+        return CleanupSummaryData(
+            summary =
+                UploadedFileCleanupSummary(
+                    eligibleForPurgeCount = eligibleCount,
+                    blockedBySafetyThreshold = eligibleCount > retentionProperties.cleanupSafetyThreshold,
+                    oldestEligiblePurgeAfter = eligibleCandidates.firstOrNull()?.purgeAfter,
+                ),
+            sampleEligibleObjectKeys = eligibleCandidates.map { it.objectKey },
         )
     }
 
-    private fun loadEligibleObjectKeys(
-        now: Instant,
-        sampleSize: Int,
-    ): List<String> =
-        uploadedFileRepository
-            .findByStatusInAndPurgeAfterLessThanEqualOrderByPurgeAfterAsc(
-                statuses = purgeCandidateStatuses,
-                purgeAfter = now,
-                pageable = PageRequest.of(0, sampleSize),
-            ).map { it.objectKey }
-
     private fun diagnoseReconcile(
-        now: Instant,
         sampleSize: Int,
+        longLivedPendingDelete: LongLivedPendingDeleteDiagnostics,
     ): UploadedFileReconcileDiagnostics {
         val objectPrefix = resolveReconcilePrefix()
         val inventoryLimit = retentionProperties.reconcileInventoryLimit.coerceIn(1, MAX_RECONCILE_INVENTORY_LIMIT)
-        val longLivedPendingDelete = loadLongLivedPendingDeleteDiagnostics(now, sampleSize)
         val inventory =
             runCatching { postImageStoragePort.listObjects(objectPrefix, inventoryLimit) }
                 .getOrElse { exception ->
@@ -160,28 +177,37 @@ class UploadedFilePurgeService(
                     )
                 }
         val inventoryObjectKeys = inventory.objects.map { it.objectKey }
-        val uploadedFilesByKey =
-            if (inventoryObjectKeys.isEmpty()) {
-                emptyMap()
-            } else {
-                uploadedFileRepository
-                    .findByObjectKeyIn(inventoryObjectKeys)
-                    .filter { it.status in activeStorageStatuses }
-                    .associateBy { it.objectKey }
-            }
+        val dbReconcileSnapshot =
+            checkNotNull(
+                readOnlyTransactionTemplate.execute {
+                    val uploadedFilesByKey =
+                        if (inventoryObjectKeys.isEmpty()) {
+                            emptyMap()
+                        } else {
+                            uploadedFileRepository
+                                .findByObjectKeyIn(inventoryObjectKeys)
+                                .filter { it.status in activeStorageStatuses }
+                                .associateBy { it.objectKey }
+                        }
+                    val dbRows =
+                        uploadedFileRepository.findByStatusInAndObjectKeyStartingWithOrderByIdAsc(
+                            statuses = activeStorageStatuses,
+                            objectKeyPrefix = objectPrefix,
+                            pageable = PageRequest.of(0, inventoryLimit + 1),
+                        )
+                    ReconcileDbSnapshot(
+                        uploadedFilesByKey = uploadedFilesByKey,
+                        dbRows = dbRows,
+                    )
+                },
+            )
         val bucketOnlyObjectKeys =
             inventoryObjectKeys
-                .filterNot(uploadedFilesByKey::containsKey)
+                .filterNot(dbReconcileSnapshot.uploadedFilesByKey::containsKey)
                 .take(sampleSize)
 
-        val dbRows =
-            uploadedFileRepository.findByStatusInAndObjectKeyStartingWithOrderByIdAsc(
-                statuses = activeStorageStatuses,
-                objectKeyPrefix = objectPrefix,
-                pageable = PageRequest.of(0, inventoryLimit + 1),
-            )
-        val dbRowsTruncated = dbRows.size > inventoryLimit
-        val sampledDbRows = dbRows.take(inventoryLimit)
+        val dbRowsTruncated = dbReconcileSnapshot.dbRows.size > inventoryLimit
+        val sampledDbRows = dbReconcileSnapshot.dbRows.take(inventoryLimit)
         val dbOnlyMissingObjectKeys =
             if (inventory.isTruncated) {
                 emptyList()
@@ -197,7 +223,7 @@ class UploadedFilePurgeService(
             inventoryObjectCount = inventory.objects.size,
             inventoryTruncated = inventory.isTruncated,
             dbRowsTruncated = dbRowsTruncated,
-            bucketOnlyObjectCount = inventoryObjectKeys.size - uploadedFilesByKey.size,
+            bucketOnlyObjectCount = inventoryObjectKeys.size - dbReconcileSnapshot.uploadedFilesByKey.size,
             sampleBucketOnlyObjectKeys = bucketOnlyObjectKeys,
             dbOnlyMissingObjectCount = dbOnlyMissingObjectKeys.size,
             sampleDbOnlyObjectKeys = dbOnlyMissingObjectKeys.take(sampleSize),
@@ -315,6 +341,23 @@ class UploadedFilePurgeService(
             sampleLongLivedPendingDeleteObjectKeys = longLivedPendingDelete.sampleObjectKeys,
             repairMode = "dry-run-degraded",
         )
+
+    private data class CleanupSummaryData(
+        val summary: UploadedFileCleanupSummary,
+        val sampleEligibleObjectKeys: List<String>,
+    )
+
+    private data class PreReconcileDiagnosticsSnapshot(
+        val cleanupSummary: UploadedFileCleanupSummary,
+        val sampleEligibleObjectKeys: List<String>,
+        val statusCounts: Map<UploadedFileStatus, Long>,
+        val longLivedPendingDelete: LongLivedPendingDeleteDiagnostics,
+    )
+
+    private data class ReconcileDbSnapshot(
+        val uploadedFilesByKey: Map<String, UploadedFile>,
+        val dbRows: List<UploadedFile>,
+    )
 
     private data class LongLivedPendingDeleteDiagnostics(
         val count: Long,

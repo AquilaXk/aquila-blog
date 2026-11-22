@@ -4,15 +4,18 @@ import com.back.boundedContexts.post.application.service.PostSearchEngineMirrorS
 import com.back.global.exception.application.AppException
 import com.back.global.exception.application.ErrorCode
 import com.back.global.security.application.AuthSecurityEventDto
+import com.back.global.security.application.AuthSecurityEventService
 import com.back.global.security.domain.SecurityUser
 import com.back.global.storage.application.UploadedFileCleanupDiagnostics
 import com.back.global.storage.application.UploadedFileReconcileDiagnostics
 import com.back.global.system.application.AdminDashboardAuthSecuritySnapshot
 import com.back.global.system.application.AdminDashboardContentSnapshot
 import com.back.global.system.application.AdminDashboardSnapshot
+import com.back.global.system.application.AdminDashboardSnapshotService
 import com.back.global.system.application.AdminDashboardStorageCleanupSnapshot
 import com.back.global.system.application.AdminDashboardTaskQueueSnapshot
 import com.back.global.system.application.AdminOperationService
+import com.back.global.system.application.AdminSystemHealthSnapshotService
 import com.back.global.system.application.SearchRuntimeControlQueryService
 import com.back.global.system.model.AdminOperationAction
 import com.back.global.system.model.AdminOperationResultCode
@@ -21,10 +24,12 @@ import com.back.global.system.model.SearchRuntimeControlKey
 import com.back.global.system.model.SearchRuntimeControlValue
 import com.back.global.task.application.TaskExecutionSample
 import com.back.global.task.application.TaskQueueDiagnostics
+import com.back.global.task.application.TaskQueueDiagnosticsService
 import com.back.global.task.application.TaskRetryPolicy
 import com.back.global.task.application.TaskTypeDiagnostics
 import com.back.global.task.domain.TaskStatus
 import com.back.support.BaseAdmSystemControllerWebMvcTest
+import org.assertj.core.api.Assertions.assertThat
 import org.junit.jupiter.api.Test
 import org.mockito.BDDMockito.given
 import org.mockito.Mockito.verify
@@ -34,6 +39,8 @@ import org.springframework.security.test.context.support.WithMockUser
 import org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.user
 import org.springframework.test.web.servlet.get
 import org.springframework.test.web.servlet.post
+import org.springframework.transaction.annotation.Transactional
+import org.springframework.transaction.support.TransactionSynchronizationManager
 import java.time.Instant
 import java.util.UUID
 
@@ -365,6 +372,87 @@ class ApiV1AdmSystemControllerTest : BaseAdmSystemControllerWebMvcTest() {
             jsonPath("$.reconcile.bucketOnlyObjectCount") { value(1) }
             jsonPath("$.reconcile.dbOnlyMissingObjectCount") { value(1) }
         }
+    }
+
+    @Test
+    fun `시스템 관리자 컨트롤러는 Transactional을 두지 않고 DB 조회 서비스 경계에만 readOnly Transactional을 둔다`() {
+        assertThat(ApiV1AdmSystemController::class.java.isAnnotationPresent(Transactional::class.java)).isFalse()
+
+        val expectedNonTxMethods =
+            setOf(
+                "bootstrap",
+                "health",
+                "grafanaAuthProxy",
+                "taskQueueDiagnostics",
+                "listDlqTasks",
+                "dashboardSnapshot",
+                "authSecurityEvents",
+                "getSearchRuntimeFlags",
+                "uploadedFileCleanupDiagnostics",
+            )
+        val declaredMethodNames =
+            ApiV1AdmSystemController::class.java.declaredMethods
+                .map { it.name }
+                .toSet()
+        assertThat(declaredMethodNames).containsAll(expectedNonTxMethods)
+
+        ApiV1AdmSystemController::class.java.declaredMethods.forEach { method ->
+            assertThat(method.isAnnotationPresent(Transactional::class.java))
+                .describedAs("Controller method %s must not carry @Transactional", method.name)
+                .isFalse()
+        }
+
+        assertThat(AdminSystemHealthSnapshotService::class.java.isAnnotationPresent(Transactional::class.java)).isFalse()
+        AdminSystemHealthSnapshotService::class.java.declaredMethods.forEach { method ->
+            assertThat(method.isAnnotationPresent(Transactional::class.java))
+                .describedAs("Health service method %s must not hold DB transaction across Redis check", method.name)
+                .isFalse()
+        }
+
+        val dashboardSnapshotTx =
+            AdminDashboardSnapshotService::class.java
+                .getDeclaredMethod("getSnapshot")
+                .getAnnotation(Transactional::class.java)
+        assertThat(dashboardSnapshotTx).isNotNull
+        assertThat(dashboardSnapshotTx.readOnly).isTrue()
+
+        val taskDiagnosticsTx =
+            TaskQueueDiagnosticsService::class.java
+                .getDeclaredMethod("diagnoseQueue")
+                .getAnnotation(Transactional::class.java)
+        assertThat(taskDiagnosticsTx).isNotNull
+        assertThat(taskDiagnosticsTx.readOnly).isTrue()
+
+        val authSecurityEventsTx =
+            AuthSecurityEventService::class.java
+                .getDeclaredMethod("getRecent", Int::class.javaPrimitiveType)
+                .getAnnotation(Transactional::class.java)
+        assertThat(authSecurityEventsTx).isNotNull
+        assertThat(authSecurityEventsTx.readOnly).isTrue()
+
+        val searchRuntimeSnapshotTx =
+            SearchRuntimeControlQueryService::class.java
+                .getDeclaredMethod("runtimeSnapshot")
+                .getAnnotation(Transactional::class.java)
+        assertThat(searchRuntimeSnapshotTx).isNotNull
+        assertThat(searchRuntimeSnapshotTx.readOnly).isTrue()
+    }
+
+    @Test
+    @WithMockUser(roles = ["ADMIN"])
+    fun `업로드 파일 cleanup 진단은 컨트롤러 트랜잭션 없이 실행된다`() {
+        var txActiveInControllerCall = true
+        given(uploadedFileRetentionService.diagnoseCleanup()).willAnswer {
+            txActiveInControllerCall = TransactionSynchronizationManager.isActualTransactionActive()
+            uploadedFileCleanupDiagnostics()
+        }
+
+        mvc.get("/system/api/v1/adm/storage/cleanup").andExpect {
+            status { isOk() }
+            jsonPath("$.reconcile.repairMode") { value("dry-run") }
+        }
+
+        assertThat(txActiveInControllerCall).isFalse()
     }
 
     @Test

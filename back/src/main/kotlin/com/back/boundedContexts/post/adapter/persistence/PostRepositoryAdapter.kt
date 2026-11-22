@@ -142,13 +142,6 @@ class PostRepositoryAdapter(
 
     override fun findInteractionReadStateById(id: Long): PostInteractionReadStateDto? = postRepository.findInteractionReadStateById(id)
 
-    override fun existsByIdAndContentContaining(
-        id: Long,
-        contentFragment: String,
-    ): Boolean = postRepository.existsByIdAndContentContaining(id, contentFragment)
-
-    override fun existsByContentContaining(contentFragment: String): Boolean = postRepository.existsByContentContaining(contentFragment)
-
     override fun existsImageReference(
         postId: Long,
         objectKey: String,

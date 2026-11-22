@@ -9,6 +9,7 @@ import com.back.global.system.model.SearchRuntimeControlValue
 import org.springframework.beans.factory.annotation.Value
 import org.springframework.dao.DataAccessException
 import org.springframework.stereotype.Service
+import org.springframework.transaction.annotation.Transactional
 import java.time.Instant
 
 @Service
@@ -37,6 +38,7 @@ class SearchRuntimeControlQueryService(
         val searchEngineMirrorForceDisabled: Boolean,
     )
 
+    @Transactional(readOnly = true)
     fun runtimeSnapshot(): RuntimeSnapshot =
         try {
             val states = controlStatePort.findAllByControlKeyIn(requiredKeys)

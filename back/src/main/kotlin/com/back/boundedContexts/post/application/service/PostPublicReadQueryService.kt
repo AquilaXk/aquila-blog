@@ -65,8 +65,6 @@ class PostPublicReadQueryService(
     private val detailSnapshotCacheLimit = detailSnapshotCacheMaxChars.coerceAtLeast(detailContentCacheLimit)
     private val detailCacheLockRegistry = ConcurrentHashMap<Long, DetailCacheLock>()
     private val cachePayloadMaxBytes = ConcurrentHashMap<String, AtomicLong>()
-    private val adjacentCacheKeys = java.util.concurrent.ConcurrentLinkedDeque<Long>()
-    private val adjacentCacheKeySet = ConcurrentHashMap.newKeySet<Long>()
 
     @Transactional(readOnly = true)
     @Cacheable(
@@ -450,15 +448,6 @@ class PostPublicReadQueryService(
         if (!written) return
         recordCacheResult(PostQueryCacheNames.ADJACENT_POSTS, "put")
         recordCachePayloadSize(PostQueryCacheNames.ADJACENT_POSTS, estimateAdjacentPayloadSize(dto))
-
-        if (adjacentCacheKeySet.add(id)) {
-            adjacentCacheKeys.addLast(id)
-            while (adjacentCacheKeySet.size > MAX_ADJACENT_CACHE_ENTRIES) {
-                val oldestId = adjacentCacheKeys.pollFirst() ?: break
-                adjacentCacheKeySet.remove(oldestId)
-                cache.evict(oldestId)
-            }
-        }
     }
 
     private fun estimateAdjacentPayloadSize(dto: AdjacentPostsDto): Int {
@@ -895,7 +884,6 @@ class PostPublicReadQueryService(
     }
 
     companion object {
-        const val MAX_ADJACENT_CACHE_ENTRIES = 1024
         private val WHITESPACE_REGEX = Regex("\\s+")
 
         @JvmStatic

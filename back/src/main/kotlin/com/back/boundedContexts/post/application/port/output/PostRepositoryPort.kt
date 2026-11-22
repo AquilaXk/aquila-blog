@@ -138,13 +138,6 @@ interface PostRepositoryPort {
 
     fun findInteractionReadStateById(id: Long): PostInteractionReadStateDto?
 
-    fun existsByIdAndContentContaining(
-        id: Long,
-        contentFragment: String,
-    ): Boolean
-
-    fun existsByContentContaining(contentFragment: String): Boolean
-
     fun existsImageReference(
         postId: Long,
         objectKey: String,

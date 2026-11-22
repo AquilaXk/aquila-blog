@@ -95,6 +95,37 @@ class ApiV1PostImageControllerTest {
     }
 
     @Test
+    @DisplayName("저장된 key가 webp 등 변환 확장자면 uploaded_file MIME을 저장 key 확장자 기준으로 기록한다")
+    fun `posts images 업로드는 저장된 key 확장자에 맞는 정규화 MIME 타입을 기록한다`() {
+        val cases =
+            listOf(
+                Triple("posts/2026/03/converted.webp", "image/png", "image/webp"),
+                Triple("posts/2026/03/upper.WEBP", "image/png", "image/webp"),
+                Triple("posts/2026/03/photo.jpg", "image/png", "image/jpeg"),
+                Triple("posts/2026/03/photo.jpeg", "image/png", "image/jpeg"),
+                Triple("posts/2026/03/anim.gif", "image/png", "image/gif"),
+                Triple("posts/2026/03/modern.avif", "image/png", "image/avif"),
+                Triple("posts/2026/03/no-extension", "image/x-png; charset=binary", "image/png"),
+                Triple("posts/2026/03/unknown.bin", "text/html", "application/octet-stream"),
+            )
+
+        cases.forEach { (storedKey, uploadedContentType, expectedMimeType) ->
+            val file = ByteAccessFailingMultipartFile("file", "sample.bin", uploadedContentType, pngBytes())
+            postImageStorageService.nextImageKey = storedKey
+
+            val response = withIsolatedAppConfig { controller.uploadPostImage(file) }
+
+            assertThat(response.resultCode).isEqualTo("201-1")
+            verify(uploadedFileRetentionService).registerTempUploadWithCompensation(
+                storedKey,
+                expectedMimeType,
+                file.size,
+                UploadedFilePurpose.POST_IMAGE,
+            )
+        }
+    }
+
+    @Test
     @DisplayName("AppConfig URL 설정은 테스트 밖으로 누출되지 않는다")
     fun `AppConfig URL 설정 뒤 raw companion 상태를 복원한다`() {
         val snapshot = appConfigUrlSnapshot()

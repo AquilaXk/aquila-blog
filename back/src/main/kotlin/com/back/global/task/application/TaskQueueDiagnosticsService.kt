@@ -7,6 +7,7 @@ import com.back.global.task.domain.TaskStatus
 import org.springframework.beans.factory.annotation.Value
 import org.springframework.data.domain.PageRequest
 import org.springframework.stereotype.Service
+import org.springframework.transaction.annotation.Transactional
 import java.time.Instant
 import java.util.concurrent.atomic.AtomicReference
 import kotlin.math.max
@@ -80,6 +81,7 @@ class TaskQueueDiagnosticsService(
 
     private val diagnosticsSnapshotRef = AtomicReference<DiagnosticsSnapshot?>(null)
 
+    @Transactional(readOnly = true)
     fun diagnoseQueue(): TaskQueueDiagnostics {
         val now = Instant.now()
         diagnosticsSnapshotRef.get()?.let { snapshot ->
@@ -150,6 +152,7 @@ class TaskQueueDiagnosticsService(
         )
     }
 
+    @Transactional(readOnly = true)
     fun diagnoseTaskType(taskType: String): TaskTypeDiagnostics {
         val now = Instant.now()
         val stuckBefore = now.minusSeconds(processingTimeoutSeconds)

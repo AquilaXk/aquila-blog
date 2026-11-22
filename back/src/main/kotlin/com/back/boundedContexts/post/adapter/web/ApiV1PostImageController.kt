@@ -36,6 +36,7 @@ import java.nio.charset.CharacterCodingException
 import java.nio.charset.CodingErrorAction
 import java.nio.charset.StandardCharsets
 import java.util.Base64
+import java.util.Locale
 import java.util.concurrent.TimeUnit
 
 @RestController
@@ -78,9 +79,10 @@ class ApiV1PostImageController(
                 originalFilename = file.originalFilename,
             )
         val key = postImageStorageService.uploadPostImage(uploadRequest)
+        val storedMimeType = resolveUploadedImageMimeType(key, file.contentType)
         uploadedFileRetentionService.registerTempUploadWithCompensation(
             objectKey = key,
-            contentType = file.contentType.orEmpty(),
+            contentType = storedMimeType,
             fileSize = file.size,
             purpose = UploadedFilePurpose.POST_IMAGE,
         )
@@ -286,6 +288,27 @@ class ApiV1PostImageController(
                     .cachePublic(),
             )
         }
+    }
+
+    private fun resolveUploadedImageMimeType(
+        objectKey: String,
+        declaredContentType: String?,
+    ): String {
+        val fileName = objectKey.substringAfterLast('/')
+        val dotIndex = fileName.lastIndexOf('.')
+        if (dotIndex >= 0 && dotIndex < fileName.lastIndex) {
+            val fromExtension =
+                when (fileName.substring(dotIndex + 1).lowercase(Locale.ROOT)) {
+                    "webp" -> "image/webp"
+                    "png" -> "image/png"
+                    "jpg", "jpeg" -> "image/jpeg"
+                    "gif" -> "image/gif"
+                    "avif" -> "image/avif"
+                    else -> null
+                }
+            if (fromExtension != null) return fromExtension
+        }
+        return resolveSafeImageMimeType(declaredContentType) ?: "application/octet-stream"
     }
 
     private fun resolveSafeImageMimeType(rawContentType: String?): String? {

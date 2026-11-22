@@ -16,12 +16,5 @@ interface PostRepository :
         title: String,
     ): Boolean
 
-    fun existsByIdAndContentContaining(
-        id: Long,
-        contentFragment: String,
-    ): Boolean
-
-    fun existsByContentContaining(contentFragment: String): Boolean
-
     fun findFirstByOrderByIdDesc(): Post?
 }

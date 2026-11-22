@@ -33,7 +33,6 @@ import org.springframework.http.HttpHeaders
 import org.springframework.http.HttpStatus
 import org.springframework.http.ResponseEntity
 import org.springframework.security.core.annotation.AuthenticationPrincipal
-import org.springframework.transaction.annotation.Transactional
 import org.springframework.web.bind.annotation.GetMapping
 import org.springframework.web.bind.annotation.PostMapping
 import org.springframework.web.bind.annotation.RequestBody
@@ -157,7 +156,6 @@ class ApiV1AdmSystemController(
     )
 
     @GetMapping("/bootstrap")
-    @Transactional(readOnly = true)
     fun bootstrap(
         @AuthenticationPrincipal securityUser: SecurityUser,
     ): AdminSystemBootstrapResBody =
@@ -168,7 +166,6 @@ class ApiV1AdmSystemController(
         )
 
     @GetMapping("/health")
-    @Transactional(readOnly = true)
     fun health(
         @RequestParam(defaultValue = "false") fresh: Boolean,
     ): HealthResBody =
@@ -179,7 +176,6 @@ class ApiV1AdmSystemController(
         }
 
     @GetMapping("/grafana/auth-proxy")
-    @Transactional(readOnly = true)
     fun grafanaAuthProxy(
         @AuthenticationPrincipal securityUser: SecurityUser,
     ): ResponseEntity<Void> =
@@ -192,11 +188,9 @@ class ApiV1AdmSystemController(
             .build()
 
     @GetMapping("/tasks")
-    @Transactional(readOnly = true)
     fun taskQueueDiagnostics(): TaskQueueDiagnostics = taskQueueDiagnosticsService.diagnoseQueue()
 
     @GetMapping("/tasks/dlq")
-    @Transactional(readOnly = true)
     fun listDlqTasks(
         @RequestParam(required = false) taskType: String?,
         @RequestParam(defaultValue = "50") limit: Int,
@@ -208,11 +202,9 @@ class ApiV1AdmSystemController(
     }
 
     @GetMapping("/dashboard-snapshot")
-    @Transactional(readOnly = true)
     fun dashboardSnapshot(): AdminDashboardSnapshot = adminDashboardSnapshotService.getSnapshot()
 
     @GetMapping("/auth/security-events")
-    @Transactional(readOnly = true)
     fun authSecurityEvents(
         @RequestParam(defaultValue = "30") limit: Int,
     ): List<AuthSecurityEventDto> = authSecurityEventService.getRecent(limit)
@@ -275,7 +267,6 @@ class ApiV1AdmSystemController(
         )
 
     @GetMapping("/search/runtime-flags")
-    @Transactional(readOnly = true)
     fun getSearchRuntimeFlags(): SearchRuntimeFlags {
         val runtimeSnapshot = searchRuntimeControlQueryService.runtimeSnapshot()
         val mirrorCircuitStatus = postSearchEngineMirrorService.getCircuitStatus()
@@ -346,6 +337,5 @@ class ApiV1AdmSystemController(
         )
 
     @GetMapping("/storage/cleanup")
-    @Transactional(readOnly = true)
     fun uploadedFileCleanupDiagnostics(): UploadedFileCleanupDiagnostics = uploadedFileRetentionService.diagnoseCleanup()
 }

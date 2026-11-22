@@ -16,6 +16,8 @@ import com.back.boundedContexts.post.domain.PostAttr
 import com.back.boundedContexts.post.domain.postMixin.HIT_COUNT
 import com.back.boundedContexts.post.domain.postMixin.LIKES_COUNT
 import com.back.boundedContexts.post.dto.AdmDeletedPostSnapshotDto
+import com.back.boundedContexts.post.dto.AdmPostBulkActionType
+import com.back.boundedContexts.post.event.PostDeletedEvent
 import com.back.boundedContexts.post.model.PostSummaryMode
 import com.back.global.app.AppConfig
 import com.back.global.event.application.EventPublisher
@@ -54,6 +56,7 @@ import org.mockito.BDDMockito.willReturn
 import org.mockito.Mockito.inOrder
 import org.mockito.Mockito.mock
 import org.mockito.Mockito.never
+import org.mockito.Mockito.times
 import org.mockito.Mockito.verifyNoInteractions
 import org.springframework.cache.CacheManager
 import org.springframework.data.domain.Pageable
@@ -65,6 +68,7 @@ import org.springframework.transaction.support.SimpleTransactionStatus
 import tools.jackson.module.kotlin.jacksonObjectMapper
 import java.time.Clock
 import java.time.Instant
+import java.time.ZoneOffset
 import java.util.Optional
 
 @DisplayName("PostApplicationServiceDeleteResilience 테스트")
@@ -627,6 +631,116 @@ class PostApplicationServiceDeleteResilienceTest {
 
         then(cacheManager).should().getCache(PostQueryCacheNames.FEED)
         assertThat(postWriteSideEffectTasks()).hasSize(1)
+    }
+
+    @Test
+    @DisplayName("bulkActionForAdmin RESTORE는 ID당 findDeletedSnapshotById를 1회만 호출한다")
+    fun bulkRestoreQueriesDeletedSnapshotOncePerId() {
+        val actor = member(1, "관리자")
+        val snapshot =
+            AdmDeletedPostSnapshotDto(
+                id = 31L,
+                title = "벌크 복구 대상",
+                content = "본문 #tag",
+                authorId = 3L,
+                published = true,
+                listed = true,
+            )
+        val restoredPost =
+            Post(
+                id = 31L,
+                author = member(3L, "작성자"),
+                title = "벌크 복구 대상",
+                content = "본문 #tag",
+                published = true,
+                listed = true,
+            ).apply {
+                createdAt = Instant.now()
+                modifiedAt = createdAt
+            }
+        given(postRepository.findDeletedSnapshotById(31L)).willReturn(snapshot)
+        given(postRepository.findDeletedSnapshotById(99L)).willReturn(null)
+        given(postRepository.restoreDeletedById(31L)).willReturn(true)
+        given(postRepository.findById(31L)).willReturn(Optional.of(restoredPost))
+
+        val result = service.bulkActionForAdmin(actor, listOf(31L, 31L, 99L), AdmPostBulkActionType.RESTORE)
+
+        assertThat(result.processedCount).isEqualTo(1)
+        assertThat(result.ids).containsExactly(31L)
+        then(postRepository).should(times(1)).findDeletedSnapshotById(31L)
+        then(postRepository).should(times(1)).findDeletedSnapshotById(99L)
+        then(postRepository).should(times(1)).restoreDeletedById(31L)
+    }
+
+    @Test
+    @DisplayName("bulkActionForAdmin HARD_DELETE는 ID당 findDeletedSnapshotById를 1회만 호출한다")
+    fun bulkHardDeleteQueriesDeletedSnapshotOncePerId() {
+        val actor = member(1, "관리자")
+        val snapshot =
+            AdmDeletedPostSnapshotDto(
+                id = 33L,
+                title = "벌크 영구삭제 대상",
+                content = "본문 #tag",
+                authorId = 4L,
+                published = false,
+                listed = false,
+            )
+        given(postRepository.findDeletedSnapshotById(33L)).willReturn(snapshot)
+        given(postRepository.findDeletedSnapshotById(98L)).willReturn(null)
+        given(postRepository.hardDeleteDeletedById(33L)).willReturn(true)
+
+        val result = service.bulkActionForAdmin(actor, listOf(33L, 33L, 98L), AdmPostBulkActionType.HARD_DELETE)
+
+        assertThat(result.processedCount).isEqualTo(1)
+        assertThat(result.ids).containsExactly(33L)
+        then(postRepository).should(times(1)).findDeletedSnapshotById(33L)
+        then(postRepository).should(times(1)).findDeletedSnapshotById(98L)
+        then(postRepository).should(times(1)).hardDeleteDeletedById(33L)
+    }
+
+    @Test
+    @DisplayName("hardDeleteDeletedByIdForAdmin는 주입된 Clock으로 삭제 스냅샷 이벤트 시각을 생성한다")
+    fun hardDeleteUsesInjectedClockForDeletedSnapshotEvent() {
+        val fixedNow = Instant.parse("2026-11-22T12:34:56Z")
+        val fixedClock = Clock.fixed(fixedNow, ZoneOffset.UTC)
+        val serviceWithFixedClock =
+            PostApplicationService(
+                postRepository = postRepository,
+                postWriteRequestIdempotencyRepository = postWriteRequestIdempotencyRepository,
+                memberRepository = memberRepository,
+                secureTipPort = secureTipPort,
+                uploadedFileRetentionService = uploadedFileRetentionService,
+                postRecommendRankingService = postRecommendRankingService,
+                postKeywordSearchPipelineService = postKeywordSearchPipelineService,
+                taskFacade = taskFacade,
+                objectMapper = objectMapper,
+                postHydrationService = postHydrationService,
+                postCounterService = postCounterService,
+                postTagIndexService = postTagIndexService,
+                postTempDraftService = postTempDraftService,
+                postHitSideEffectQueue = postHitSideEffectQueue,
+                clock = fixedClock,
+            )
+        val snapshot =
+            AdmDeletedPostSnapshotDto(
+                id = 34L,
+                title = "시각 고정 영구삭제",
+                content = "본문",
+                authorId = 5L,
+                published = false,
+                listed = false,
+            )
+        given(postRepository.findDeletedSnapshotById(34L)).willReturn(snapshot)
+        given(postRepository.hardDeleteDeletedById(34L)).willReturn(true)
+
+        serviceWithFixedClock.hardDeleteDeletedByIdForAdmin(34L)
+
+        val payload = capturePostWriteSideEffectPayload()
+        val domainEvent = objectMapper.readValue(requireNotNull(payload.domainEventJson), PostDeletedEvent::class.java)
+        assertThat(domainEvent.postDto.createdAt).isEqualTo(fixedNow)
+        assertThat(domainEvent.postDto.modifiedAt).isEqualTo(fixedNow)
+        assertThat(domainEvent.actorDto.createdAt).isEqualTo(fixedNow)
+        assertThat(domainEvent.actorDto.modifiedAt).isEqualTo(fixedNow)
     }
 
     private fun capturePostWriteSideEffectPayload(): PostWriteSideEffectPayload {

@@ -45,6 +45,7 @@ import org.springframework.transaction.support.TransactionSynchronization
 import org.springframework.transaction.support.TransactionSynchronizationManager
 import tools.jackson.databind.ObjectMapper
 import java.nio.charset.StandardCharsets
+import java.time.Clock
 import java.time.Instant
 import java.util.UUID
 import kotlin.jvm.optionals.getOrNull
@@ -71,6 +72,7 @@ class PostApplicationService(
     private val postHitSideEffectQueue: PostHitSideEffectQueue,
     private val postReadCacheInvalidator: PostReadCacheInvalidator? = null,
     private val postRevisionRepository: PostRevisionRepositoryPort? = null,
+    private val clock: Clock = Clock.systemUTC(),
 ) : PostUseCase {
     private val logger = LoggerFactory.getLogger(PostApplicationService::class.java)
 
@@ -82,6 +84,7 @@ class PostApplicationService(
 
     override fun count(): Long = postRepository.count()
 
+    @Transactional(readOnly = true)
     override fun getAdminPostFacetCounts(): AdmPostFacetCounts = postRepository.getAdminPostFacetCounts()
 
     override fun randomSecureTip(): String = secureTipPort.randomSecureTip()
@@ -722,7 +725,11 @@ class PostApplicationService(
         val snapshot =
             postRepository.findDeletedSnapshotById(id)
                 ?: throw AppException(ErrorCode.NOT_FOUND, "해당 글을 찾을 수 없습니다.")
+        return restoreDeletedBySnapshotForAdmin(snapshot)
+    }
 
+    internal fun restoreDeletedBySnapshotForAdmin(snapshot: AdmDeletedPostSnapshotDto): Post {
+        val id = snapshot.id
         val restored = postRepository.restoreDeletedById(id)
         if (!restored) {
             throw AppException(ErrorCode.NOT_FOUND, "이미 복구되었거나 존재하지 않는 글입니다.")
@@ -780,7 +787,11 @@ class PostApplicationService(
         val snapshot =
             postRepository.findDeletedSnapshotById(id)
                 ?: throw AppException(ErrorCode.NOT_FOUND, "해당 글을 찾을 수 없습니다.")
+        hardDeleteDeletedBySnapshotForAdmin(snapshot)
+    }
 
+    internal fun hardDeleteDeletedBySnapshotForAdmin(snapshot: AdmDeletedPostSnapshotDto) {
+        val id = snapshot.id
         val hardDeleted = postRepository.hardDeleteDeletedById(id)
         if (!hardDeleted) {
             throw AppException(ErrorCode.NOT_FOUND, "이미 영구삭제되었거나 존재하지 않는 글입니다.")
@@ -1087,14 +1098,16 @@ class PostApplicationService(
                     }
                 }
                 com.back.boundedContexts.post.dto.AdmPostBulkActionType.RESTORE -> {
-                    if (postRepository.findDeletedSnapshotById(id) != null) {
-                        restoreDeletedByIdForAdmin(id)
+                    val snapshot = postRepository.findDeletedSnapshotById(id)
+                    if (snapshot != null) {
+                        restoreDeletedBySnapshotForAdmin(snapshot)
                         processedIds.add(id)
                     }
                 }
                 com.back.boundedContexts.post.dto.AdmPostBulkActionType.HARD_DELETE -> {
-                    if (postRepository.findDeletedSnapshotById(id) != null) {
-                        hardDeleteDeletedByIdForAdmin(id)
+                    val snapshot = postRepository.findDeletedSnapshotById(id)
+                    if (snapshot != null) {
+                        hardDeleteDeletedBySnapshotForAdmin(snapshot)
                         processedIds.add(id)
                     }
                 }
@@ -1319,7 +1332,7 @@ class PostApplicationService(
         snapshot: AdmDeletedPostSnapshotDto,
         beforeTags: List<String>,
     ): PostDto {
-        val now = Instant.now()
+        val now = Instant.now(clock)
         return PostDto(
             id = snapshot.id,
             createdAt = now,
@@ -1490,7 +1503,7 @@ class PostApplicationService(
     }
 
     private fun toDeletedSnapshotActorDto(authorId: Long): MemberDto {
-        val now = Instant.now()
+        val now = Instant.now(clock)
         return MemberDto(
             id = authorId,
             createdAt = now,

@@ -20,6 +20,7 @@ import org.mockito.Mockito.verify
 import org.mockito.Mockito.verifyNoInteractions
 import org.mockito.Mockito.`when`
 import org.springframework.dao.DataIntegrityViolationException
+import org.springframework.data.domain.Pageable
 import org.springframework.transaction.PlatformTransactionManager
 import org.springframework.transaction.TransactionDefinition
 import org.springframework.transaction.TransactionStatus
@@ -391,6 +392,142 @@ class UploadedFileRetentionServiceConflictRecoveryTest {
         assertThat(repository.singleStatusCalls).isZero()
     }
 
+    @Test
+    fun `cleanup diagnostics는 DB 조회만 readOnly 트랜잭션으로 실행하고 object storage listing은 트랜잭션 밖에서 호출한다`() {
+        val txManager = RecordingTransactionManager()
+        val observedDbReadStates = mutableListOf<Pair<Int, Boolean>>()
+        var observedListObjectsDepth: Int? = null
+        val repository =
+            TxObservingRepository(txManager, observedDbReadStates).apply {
+                save(
+                    UploadedFile(
+                        id = 1L,
+                        objectKey = "posts/2026/03/tx-check.png",
+                        bucket = TEST_BUCKET,
+                        contentType = "image/png",
+                        fileSize = 128L,
+                        status = UploadedFileStatus.PENDING_DELETE,
+                        purgeAfter = Instant.parse("2026-05-19T00:00:00Z"),
+                    ),
+                )
+            }
+        `when`(postImageStoragePort.listObjects(POSTS_PREFIX, 1000)).thenAnswer {
+            observedListObjectsDepth = txManager.activeDepth
+            PostImageStoragePort.StoredObjectListing(
+                objects = listOf(PostImageStoragePort.StoredObjectSummary("posts/2026/03/tx-check.png", 128L)),
+                isTruncated = false,
+            )
+        }
+        val service = newService(repository, txManager = txManager)
+
+        val diagnostics = service.diagnoseCleanup()
+
+        assertThat(diagnostics.pendingDeleteCount).isEqualTo(1L)
+        assertThat(observedListObjectsDepth).isEqualTo(0)
+        assertThat(observedDbReadStates).isNotEmpty
+        assertThat(observedDbReadStates).allMatch { (depth, readOnly) -> depth > 0 && readOnly }
+        assertThat(txManager.startedReadOnlyFlags).hasSizeGreaterThanOrEqualTo(2).containsOnly(true)
+        assertThat(txManager.activeDepth).isZero()
+
+        observedDbReadStates.clear()
+        txManager.startedReadOnlyFlags.clear()
+        val summary = service.diagnoseCleanupSummary()
+        assertThat(summary.eligibleForPurgeCount).isEqualTo(1L)
+        assertThat(observedDbReadStates).isNotEmpty
+        assertThat(observedDbReadStates).allMatch { (depth, readOnly) -> depth > 0 && readOnly }
+        assertThat(txManager.startedReadOnlyFlags).containsExactly(true)
+        assertThat(txManager.activeDepth).isZero()
+    }
+
+    private class TxObservingRepository(
+        private val txManager: RecordingTransactionManager,
+        private val observedStates: MutableList<Pair<Int, Boolean>>,
+    ) : EmptyUploadedFileRepository() {
+        private val store = linkedMapOf<String, UploadedFile>()
+
+        private fun record() {
+            observedStates += txManager.activeDepth to txManager.currentReadOnly
+        }
+
+        override fun save(entity: UploadedFile): UploadedFile {
+            store[entity.objectKey] = entity
+            return entity
+        }
+
+        override fun findByObjectKeyIn(objectKeys: Collection<String>): List<UploadedFile> {
+            record()
+            return objectKeys.mapNotNull(store::get)
+        }
+
+        override fun countGroupedByStatus(): Map<UploadedFileStatus, Long> {
+            record()
+            return store.values
+                .groupingBy { it.status }
+                .eachCount()
+                .mapValues { it.value.toLong() }
+        }
+
+        override fun countByStatusInAndPurgeAfterLessThanEqual(
+            statuses: Collection<UploadedFileStatus>,
+            purgeAfter: Instant,
+        ): Long {
+            record()
+            return store.values
+                .count { it.status in statuses && it.purgeAfter?.let { pa -> !pa.isAfter(purgeAfter) } == true }
+                .toLong()
+        }
+
+        override fun findByStatusInAndPurgeAfterLessThanEqualOrderByPurgeAfterAsc(
+            statuses: Collection<UploadedFileStatus>,
+            purgeAfter: Instant,
+            pageable: Pageable,
+        ): List<UploadedFile> {
+            record()
+            return store.values
+                .filter { it.status in statuses && it.purgeAfter?.let { pa -> !pa.isAfter(purgeAfter) } == true }
+                .sortedBy { it.purgeAfter }
+                .take(pageable.pageSize)
+        }
+
+        override fun findByStatusInAndObjectKeyStartingWithOrderByIdAsc(
+            statuses: Collection<UploadedFileStatus>,
+            objectKeyPrefix: String,
+            pageable: Pageable,
+        ): List<UploadedFile> {
+            record()
+            return store.values
+                .filter { it.status in statuses && it.objectKey.startsWith(objectKeyPrefix) }
+                .sortedBy { it.id }
+                .take(pageable.pageSize)
+        }
+    }
+
+    private class RecordingTransactionManager : PlatformTransactionManager {
+        var activeDepth: Int = 0
+            private set
+        var currentReadOnly: Boolean = false
+            private set
+        val startedReadOnlyFlags = mutableListOf<Boolean>()
+
+        override fun getTransaction(definition: TransactionDefinition?): TransactionStatus {
+            val isReadOnly = definition?.isReadOnly == true
+            activeDepth += 1
+            currentReadOnly = isReadOnly
+            startedReadOnlyFlags += isReadOnly
+            return SimpleTransactionStatus()
+        }
+
+        override fun commit(status: TransactionStatus) {
+            activeDepth = (activeDepth - 1).coerceAtLeast(0)
+            if (activeDepth == 0) currentReadOnly = false
+        }
+
+        override fun rollback(status: TransactionStatus) {
+            activeDepth = (activeDepth - 1).coerceAtLeast(0)
+            if (activeDepth == 0) currentReadOnly = false
+        }
+    }
+
     private class GroupedCountRecordingRepository(
         private var nextGroupedCounts: Map<UploadedFileStatus, Long>,
     ) : EmptyUploadedFileRepository() {
@@ -416,6 +553,7 @@ class UploadedFileRetentionServiceConflictRecoveryTest {
         repository: UploadedFileRepositoryPort,
         storageProperties: StoragePropertiesPort = CloudStorageProperties(),
         retentionProperties: UploadedFileRetentionProperties = UploadedFileRetentionProperties(),
+        txManager: PlatformTransactionManager = transactionManager,
     ): UploadedFileRetentionService =
         UploadedFileRetentionService(
             registrationService =
@@ -424,7 +562,7 @@ class UploadedFileRetentionServiceConflictRecoveryTest {
                     postImageStoragePort = postImageStoragePort,
                     storageProperties = storageProperties,
                     retentionProperties = retentionProperties,
-                    transactionManager = transactionManager,
+                    transactionManager = txManager,
                     clock = clock,
                     prodSequenceGuardService = prodSequenceGuardService,
                 ),
@@ -442,7 +580,7 @@ class UploadedFileRetentionServiceConflictRecoveryTest {
                     postImageStoragePort = postImageStoragePort,
                     storageProperties = storageProperties,
                     retentionProperties = retentionProperties,
-                    transactionManager = transactionManager,
+                    transactionManager = txManager,
                     clock = clock,
                 ),
             purgeService =
@@ -456,7 +594,7 @@ class UploadedFileRetentionServiceConflictRecoveryTest {
                             postRepository = postRepository,
                             memberAttrRepository = memberAttrRepository,
                         ),
-                    transactionManager = transactionManager,
+                    transactionManager = txManager,
                     clock = clock,
                 ),
         )

@@ -19,6 +19,10 @@ import test from "node:test"
 const repoRoot = path.resolve(import.meta.dirname, "../..")
 const contractPath = path.join(repoRoot, "deploy/env/env.contract.json")
 const deployWorkflowPath = path.join(repoRoot, ".github/workflows/deploy.yml")
+const rolloutCommonPath = path.join(repoRoot, "deploy/homeserver/lib/rollout_common.sh")
+const postDeployVerifyPath = path.join(repoRoot, "deploy/homeserver/lib/post_deploy_verify.sh")
+const remoteBackendRolloutPath = path.join(repoRoot, "deploy/homeserver/remote_backend_rollout.sh")
+const remoteFrontRolloutPath = path.join(repoRoot, "deploy/homeserver/remote_front_rollout.sh")
 const blueGreenPath = path.join(repoRoot, "deploy/homeserver/blue_green_deploy.sh")
 const materializerPath = path.join(repoRoot, "deploy/homeserver/materialize_service_env.sh")
 const identityScriptPath = path.join(repoRoot, "deploy/homeserver/minio_service_identity.sh")
@@ -435,7 +439,13 @@ test("service env materialization includes only current application identity", (
 })
 
 test("deploy and operator checks use the pinned verifier without mutable image or secret argv fallback", () => {
-  const workflow = requiredText(deployWorkflowPath)
+  const workflow = [
+    requiredText(deployWorkflowPath),
+    requiredText(rolloutCommonPath),
+    requiredText(postDeployVerifyPath),
+    requiredText(remoteBackendRolloutPath),
+    requiredText(remoteFrontRolloutPath),
+  ].join("\n")
   const blueGreen = requiredText(blueGreenPath)
   const identity = requiredText(identityScriptPath)
   const doctor = requiredText(doctorPath)
@@ -477,7 +487,7 @@ test("deploy and operator checks use the pinned verifier without mutable image o
 })
 
 test("deploy rollback is active before MinIO runtime mutation", () => {
-  const workflow = requiredText(deployWorkflowPath)
+  const workflow = requiredText(remoteBackendRolloutPath)
   const minioStartIndex = workflow.indexOf("up -d minio_1")
   const identityPrepareIndex = workflow.indexOf('minio_service_identity.sh" prepare')
   const rollbackActivationIndex = workflow.indexOf('RUNTIME_ENV_MATERIALIZED="true"', minioStartIndex - 200)

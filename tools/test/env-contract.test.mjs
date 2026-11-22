@@ -8,6 +8,17 @@ import test from "node:test"
 const repoRoot = path.resolve(import.meta.dirname, "../..")
 const contractPath = path.join(repoRoot, "deploy/env/env.contract.json")
 const workflowPath = path.join(repoRoot, ".github/workflows/deploy.yml")
+const rolloutCommonPath = path.join(repoRoot, "deploy/homeserver/lib/rollout_common.sh")
+const postDeployVerifyPath = path.join(repoRoot, "deploy/homeserver/lib/post_deploy_verify.sh")
+const remoteBackendRolloutPath = path.join(repoRoot, "deploy/homeserver/remote_backend_rollout.sh")
+const remoteFrontRolloutPath = path.join(repoRoot, "deploy/homeserver/remote_front_rollout.sh")
+const readBackendDeploySurface = () =>
+  [
+    readFileSync(workflowPath, "utf8"),
+    readFileSync(rolloutCommonPath, "utf8"),
+    readFileSync(postDeployVerifyPath, "utf8"),
+    readFileSync(remoteBackendRolloutPath, "utf8"),
+  ].join("\n")
 const ciWorkflowPath = path.join(repoRoot, ".github/workflows/ci.yml")
 const securityWorkflowPath = path.join(repoRoot, ".github/workflows/security.yml")
 const backupRestoreWorkflowPath = path.join(repoRoot, ".github/workflows/backup-restore-drill.yml")
@@ -548,6 +559,10 @@ test("home-server-source requires admin embed origins before SSH deployment", as
 test("active product contracts do not retain the unimplemented AI summary seam", () => {
   const activeProductPaths = [
     ".github/workflows/deploy.yml",
+    "deploy/homeserver/lib/rollout_common.sh",
+    "deploy/homeserver/lib/post_deploy_verify.sh",
+    "deploy/homeserver/remote_backend_rollout.sh",
+    "deploy/homeserver/remote_front_rollout.sh",
     "deploy/env/env.contract.json",
     "deploy/homeserver/.env.prod.example",
     "deploy/homeserver/.env.back.prod.example",
@@ -712,7 +727,7 @@ test("BACKEND_INTERNAL_URL은 색깔에 묶이지 않는 Caddy 내부 주소로 
 
   // 배포가 같은 값을 .env.prod에 핀한다. 오너 시크릿에 남은 옛 색깔 값이 그대로 살아남으면
   // front는 healthy를 보고하면서 프록시만 죽는다.
-  const workflow = readFileSync(workflowPath, "utf8")
+  const workflow = readFileSync(remoteBackendRolloutPath, "utf8")
   assert.match(workflow, /upsert_env_key "BACKEND_INTERNAL_URL" "http:\/\/caddy"/)
 
   // 색깔 URL은 계약 단계에서 막힌다.
@@ -733,7 +748,7 @@ test("legacy API domain is absent from active environment, runtime, and deploy s
     assert.doesNotMatch(readFileSync(activePath, "utf8"), new RegExp(retiredLegacyApiDomain), activePath)
   }
 
-  const workflow = readFileSync(workflowPath, "utf8")
+  const workflow = readFileSync(remoteBackendRolloutPath, "utf8")
   const copyIndex = workflow.indexOf('printf \'%s\\n\' "${HOME_SERVER_ENV}" > deploy/homeserver/.env.prod')
   const deletionIndex = workflow.indexOf(`remove_env_key "${retiredLegacyApiDomain}" "deploy/homeserver/.env.prod"`)
   assert(copyIndex !== -1, "HOME_SERVER_ENV must be copied to the deploy env file")
@@ -1057,7 +1072,7 @@ test("grafana admin password has no compose fallback and rejects weak contract v
 })
 
 test("homeserver monitoring runtime files stay readable by container users", () => {
-  const workflow = readFileSync(workflowPath, "utf8")
+  const workflow = [readFileSync(postDeployVerifyPath, "utf8"), readFileSync(remoteBackendRolloutPath, "utf8")].join("\n")
   const deployScript = readFileSync(deployScriptPath, "utf8")
   const steadyStateGuard = readFileSync(path.join(repoRoot, "deploy/homeserver/steady_state_guard.sh"), "utf8")
   const compose = readFileSync(composePath, "utf8")
@@ -2066,7 +2081,7 @@ test("WEB_DOMAIN is derived from the same switch as the other front-derived valu
   const result = validateEnvText({ contract, target: "home-server-source", text: drifted })
   assert(result.warnings.some((warning) => warning.key === "WEB_DOMAIN"), "drift must be announced")
 
-  const workflow = readFileSync(workflowPath, "utf8")
+  const workflow = readFileSync(remoteBackendRolloutPath, "utf8")
   assert.match(workflow, /PROD_SITE_WEB_DOMAIN="blog\.aquilaxk\.site"/)
   assert.match(workflow, /upsert_env_key "WEB_DOMAIN" "\$\{PROD_SITE_WEB_DOMAIN\}" "deploy\/homeserver\/\.env\.prod"/)
 
@@ -2151,13 +2166,13 @@ test("a switch host outside the declared topologies fails on the runner before t
 test("deploy workflow derives every prod site value from the same topology table as the env contract", async () => {
   const { loadContract } = await import("../env/validate-env.mjs")
   const topologies = siteTopologies(loadContract(contractPath))
-  const workflow = readFileSync(workflowPath, "utf8")
+  const workflow = readFileSync(remoteBackendRolloutPath, "utf8")
 
   // 두 층(러너 검증 / 원격 핀)이 서로 다른 표를 들고 있으면 "단일 레버"가 성립하지 않는다.
   for (const [apiDomain, topology] of Object.entries(topologies)) {
     const branch = workflow.slice(
-      workflow.indexOf(`            ${apiDomain})`),
-      workflow.indexOf(";;", workflow.indexOf(`            ${apiDomain})`)),
+      workflow.indexOf(`  ${apiDomain})`),
+      workflow.indexOf(";;", workflow.indexOf(`  ${apiDomain})`)),
     )
     assert.notEqual(branch, "", `deploy.yml must branch on the public API host ${apiDomain}`)
     assert(branch.includes(`PROD_SITE_COOKIE_DOMAIN="${topology.cookieDomain}"`), `${apiDomain} cookie domain`)
@@ -2245,6 +2260,7 @@ test("Platform contract keeps runtime keys but removes Web rendering and Web-own
 
 test("deploy workflow validates HOME_SERVER_ENV before SSH deployment", () => {
   const workflow = readFileSync(workflowPath, "utf8")
+  const remoteBackendRollout = readFileSync(remoteBackendRolloutPath, "utf8")
 
   assert.match(workflow, /Validate HOME_SERVER_ENV contract/)
   assert.match(workflow, /tools\/env\/validate-env\.mjs --target home-server-source/)
@@ -2256,30 +2272,30 @@ test("deploy workflow validates HOME_SERVER_ENV before SSH deployment", () => {
   assert.doesNotMatch(workflow, /vars\.AQUILA_RESTORE_PRIVACY_GATE_SCRIPT/)
   assert.match(workflow, /printf 'AQUILA_RESTORE_PRIVACY_GATE_SCRIPT=%s\\n' "\$\{HOME_RESTORE_PRIVACY_GATE_SCRIPT\}"/)
   assert.match(workflow, /printf 'HOME_RESTORE_PRIVACY_GATE_SCRIPT=%q\\n' "\$\{HOME_RESTORE_PRIVACY_GATE_SCRIPT\}"/)
-  assert.match(workflow, /upsert_env_key "AQUILA_RESTORE_PRIVACY_GATE_SCRIPT" "\$\{HOME_RESTORE_PRIVACY_GATE_SCRIPT\}" "deploy\/homeserver\/\.env\.prod"/)
+  assert.match(remoteBackendRollout, /upsert_env_key "AQUILA_RESTORE_PRIVACY_GATE_SCRIPT" "\$\{HOME_RESTORE_PRIVACY_GATE_SCRIPT\}" "deploy\/homeserver\/\.env\.prod"/)
   assert.doesNotMatch(workflow, /HOME_NEXT_PUBLIC_/)
   assert.doesNotMatch(workflow, /NEXT_PUBLIC_SIGNUP_ENABLED/)
   assert.doesNotMatch(workflow, /NEXT_PUBLIC_RUM_SAMPLE_RATE/)
   assert(workflow.indexOf("Validate HOME_SERVER_ENV contract") < workflow.indexOf("Deploy over SSH"))
-  assert.match(workflow, /export HOME_SERVER_ENV/)
-  assert(workflow.indexOf("export HOME_SERVER_ENV") < workflow.indexOf("create_external_backup.sh"))
-  assert.match(workflow, /restart_external_backup_legacy_minio_if_needed/)
-  assert.match(workflow, /backup created \(pre-checkout\)/)
-  assert.match(workflow, /keeping migrated MinIO copy for manual reconciliation after rollback/)
-  assert(!workflow.includes("removing migrated MinIO copy after rollback to legacy volume"))
-  assert(workflow.indexOf("backup created (pre-checkout)") < workflow.indexOf('git checkout --force "${HOME_DEPLOY_SHA}"'))
-  assert(workflow.indexOf("umask 077") < workflow.indexOf("backup created (pre-checkout)"))
+  assert.match(remoteBackendRollout, /export HOME_SERVER_ENV/)
+  assert(remoteBackendRollout.indexOf("export HOME_SERVER_ENV") < remoteBackendRollout.indexOf("create_external_backup.sh"))
+  assert.match(remoteBackendRollout, /restart_external_backup_legacy_minio_if_needed/)
+  assert.match(remoteBackendRollout, /backup created \(pre-checkout\)/)
+  assert.match(remoteBackendRollout, /keeping migrated MinIO copy for manual reconciliation after rollback/)
+  assert(!remoteBackendRollout.includes("removing migrated MinIO copy after rollback to legacy volume"))
+  assert(remoteBackendRollout.indexOf("backup created (pre-checkout)") < remoteBackendRollout.indexOf('git checkout --force "${HOME_DEPLOY_SHA}"'))
+  assert(remoteBackendRollout.indexOf("umask 077") < remoteBackendRollout.indexOf("backup created (pre-checkout)"))
   assert(
-    workflow.indexOf("restart_external_backup_legacy_minio_if_needed") <
-      workflow.indexOf("run_backup_rollback"),
+    remoteBackendRollout.indexOf("restart_external_backup_legacy_minio_if_needed") <
+      remoteBackendRollout.indexOf("run_backup_rollback"),
   )
-  assert(workflow.indexOf('rollback_from_backup_if_needed "unexpected_exit_status_${status}"') < workflow.indexOf("EXTERNAL_BACKUP_DIR="))
-  assert(workflow.indexOf("run_backup_rollback") < workflow.indexOf("restart_external_backup_legacy_minio_if_needed", workflow.indexOf("run_backup_rollback")))
-  assert(workflow.indexOf('DEPLOY_COMPLETED="true"') < workflow.lastIndexOf("rm -f deploy/homeserver/.external-minio-migration-stopped"))
+  assert(remoteBackendRollout.indexOf('rollback_from_backup_if_needed "unexpected_exit_status_${status}"') < remoteBackendRollout.indexOf("EXTERNAL_BACKUP_DIR="))
+  assert(remoteBackendRollout.indexOf("run_backup_rollback") < remoteBackendRollout.indexOf("restart_external_backup_legacy_minio_if_needed", remoteBackendRollout.indexOf("run_backup_rollback")))
+  assert(remoteBackendRollout.indexOf('DEPLOY_COMPLETED="true"') < remoteBackendRollout.lastIndexOf("rm -f deploy/homeserver/.external-minio-migration-stopped"))
 })
 
 test("deploy workflow derives the pinned prod site scope from the switch instead of hard-coding it", () => {
-  const workflow = readFileSync(workflowPath, "utf8")
+  const workflow = [readFileSync(rolloutCommonPath, "utf8"), readFileSync(remoteBackendRolloutPath, "utf8")].join("\n")
 
   // 하드 핀 문자열이 남아 있으면 HOME_SERVER_ENV 스위치와 갈라진다.
   assert.doesNotMatch(workflow, /upsert_env_key "CUSTOM_PROD_COOKIEDOMAIN" "aquilaxk\.site"/)
@@ -2317,7 +2333,7 @@ test("public edge probe runtime target requires materialized topology input", ()
     (key) => key.name === "PUBLIC_EDGE_PROBE_BASE_URL",
   )
   const compose = readFileSync(composePath, "utf8")
-  const workflow = readFileSync(workflowPath, "utf8")
+  const workflow = readFileSync(remoteBackendRolloutPath, "utf8")
 
   assert.equal(definition?.required, false)
   assert.match(
@@ -2338,7 +2354,7 @@ test("public edge probe runtime target requires materialized topology input", ()
 })
 
 test("deploy.yml의 host 파싱이 validate-env와 같은 host를 낸다", () => {
-  const workflow = readFileSync(workflowPath, "utf8")
+  const workflow = readFileSync(remoteBackendRolloutPath, "utf8")
 
   // 두 층이 다르게 파싱하면 "계약은 통과했는데 배포만 죽는" 클래스가 된다. userinfo가 그 경로다:
   // new URL().hostname은 벗겨내고, shell 파싱이 안 벗기면 `u@host`가 남아 case가 abort한다.
@@ -2381,7 +2397,10 @@ test("deploy.yml의 host 파싱이 validate-env와 같은 host를 낸다", () =>
 })
 
 test("배포 후 게이트가 same-origin 공개 표면도 검증한다", () => {
-  const workflow = readFileSync(workflowPath, "utf8")
+  const workflow = [
+    readFileSync(postDeployVerifyPath, "utf8"),
+    readFileSync(remoteBackendRolloutPath, "utf8"),
+  ].join("\n")
 
   // web vhost의 @backendApi prefix가 하나 빠져도 CD가 끝까지 green이고 공개 API만 Next.js
   // 404가 되는 실패를 잡는 게이트다 - 브라우저에서만 드러나는 실패다.
@@ -2468,34 +2487,35 @@ test("내부 edge probe는 미매치 Host의 빈 200을 성공으로 읽지 않�
 })
 
 test("deploy workflow validates live API security headers after homeserver rollout", () => {
-  const workflow = readFileSync(workflowPath, "utf8")
+  const verifyLib = readFileSync(postDeployVerifyPath, "utf8")
+  const remoteBackendRollout = readFileSync(remoteBackendRolloutPath, "utf8")
 
-  assert.match(workflow, /assert_live_security_headers\(\)/)
-  assert.match(workflow, /header_value_from_file\(\)/)
-  assert.match(workflow, /strict-transport-security" "max-age=31536000"/)
-  assert.match(workflow, /x-content-type-options" "nosniff"/)
-  assert.match(workflow, /x-frame-options" "deny"/)
-  assert.match(workflow, /referrer-policy" "strict-origin-when-cross-origin"/)
-  assert.match(workflow, /permissions-policy" "camera=\(\)"/)
-  assert.match(workflow, /cache-control" "no-store"/)
-  assert.match(workflow, /"public-feed"/)
-  assert.match(workflow, /\/post\/api\/v1\/posts\/feed\?page=1&pageSize=1&sort=CREATED_AT/)
-  assert.match(workflow, /"protected-auth-me"/)
-  assert.match(workflow, /\/member\/api\/v1\/auth\/me/)
-  assert.match(workflow, /rollback_and_exit "public_feed_security_header_smoke_failed"/)
-  assert.match(workflow, /rollback_and_exit "protected_auth_security_header_smoke_failed"/)
+  assert.match(verifyLib, /assert_live_security_headers\(\)/)
+  assert.match(verifyLib, /header_value_from_file\(\)/)
+  assert.match(verifyLib, /strict-transport-security" "max-age=31536000"/)
+  assert.match(verifyLib, /x-content-type-options" "nosniff"/)
+  assert.match(verifyLib, /x-frame-options" "deny"/)
+  assert.match(verifyLib, /referrer-policy" "strict-origin-when-cross-origin"/)
+  assert.match(verifyLib, /permissions-policy" "camera=\(\)"/)
+  assert.match(verifyLib, /cache-control" "no-store"/)
+  assert.match(remoteBackendRollout, /"public-feed"/)
+  assert.match(remoteBackendRollout, /\/post\/api\/v1\/posts\/feed\?page=1&pageSize=1&sort=CREATED_AT/)
+  assert.match(remoteBackendRollout, /"protected-auth-me"/)
+  assert.match(remoteBackendRollout, /\/member\/api\/v1\/auth\/me/)
+  assert.match(remoteBackendRollout, /rollback_and_exit "public_feed_security_header_smoke_failed"/)
+  assert.match(remoteBackendRollout, /rollback_and_exit "protected_auth_security_header_smoke_failed"/)
   // indexOf(-1)이 항상 작으므로, 순서 단언 전에 두 지점이 실제로 존재하는지부터 확인한다.
-  const publicHealthIndex = workflow.indexOf('wait_public_api_health "${WEB_DOMAIN}"')
+  const publicHealthIndex = remoteBackendRollout.indexOf('wait_public_api_health "${WEB_DOMAIN}"')
   assert(publicHealthIndex !== -1, "the public health gate must target the public web host")
-  assert(publicHealthIndex < workflow.indexOf("assert_live_security_headers"))
+  assert(publicHealthIndex < remoteBackendRollout.indexOf("assert_live_security_headers"))
   assert(
-    workflow.indexOf('assert_live_security_headers') <
-      workflow.indexOf("run_canary_ratio_check()"),
+    remoteBackendRollout.indexOf("assert_live_security_headers") <
+      remoteBackendRollout.indexOf("run_canary_ratio_check"),
   )
 })
 
 test("deploy workflow probes Caddy through its edge network", () => {
-  const workflow = readFileSync(workflowPath, "utf8")
+  const workflow = readFileSync(postDeployVerifyPath, "utf8")
 
   assert.match(workflow, /docker run --rm --network blog_home_edge curlimages\/curl:8\.7\.1/)
   assert.doesNotMatch(workflow, /docker run --rm --network blog_home_default curlimages\/curl:8\.7\.1/)
@@ -2771,7 +2791,7 @@ test("deploy calculateTag는 현재 main ancestry 밖의 deploy SHA를 차단한
 })
 
 test("deploy workflow uses immutable backend digest and does not push latest", () => {
-  const workflow = readFileSync(workflowPath, "utf8")
+  const workflow = readBackendDeploySurface()
 
   assert.match(workflow, /back_image_ref: \$\{\{ steps\.backend_image\.outputs\.back_image_ref \}\}/)
   assert.match(workflow, /id: build_backend_image/)
@@ -2793,7 +2813,8 @@ test("homeserver deploy preserves runtime-specific backend image release state",
   const recoverScript = readFileSync(path.join(repoRoot, "deploy/homeserver/recover.sh"), "utf8")
   const statusScript = readFileSync(path.join(repoRoot, "deploy/homeserver/check_deploy_status.sh"), "utf8")
   const steadyStateGuard = readFileSync(path.join(repoRoot, "deploy/homeserver/steady_state_guard.sh"), "utf8")
-  const workflow = readFileSync(workflowPath, "utf8")
+  const workflow = readBackendDeploySurface()
+  const remoteBackendRollout = readFileSync(remoteBackendRolloutPath, "utf8")
 
   for (const key of runtimeBackendImageKeys) {
     assert.match(deployScript, new RegExp(`${key}`))
@@ -2872,13 +2893,13 @@ test("homeserver deploy preserves runtime-specific backend image release state",
   assert.match(workflow, /preserved \$\{key\} from pre-deploy env after HOME_SERVER_ENV overwrite/)
   assert.match(workflow, /local digest missing for \$\{image_ref\}; pulling fallback image before deploy compose evaluation/)
   assert(
-    workflow.indexOf("printf '%s\\n' \"${HOME_SERVER_ENV}\" > deploy/homeserver/.env.prod") <
-      workflow.indexOf("preserve_pre_deploy_runtime_image_env_keys"),
+    remoteBackendRollout.indexOf("printf '%s\\n' \"${HOME_SERVER_ENV}\" > deploy/homeserver/.env.prod") <
+      remoteBackendRollout.indexOf("preserve_pre_deploy_runtime_image_env_keys"),
     "pre-deploy image digests must be preserved after HOME_SERVER_ENV overwrite",
   )
   assert(
-    workflow.indexOf("preserve_pre_deploy_runtime_image_env_keys") <
-      workflow.indexOf('ensure_image_key_from_local_digest "AUTOHEAL_IMAGE"'),
+    remoteBackendRollout.indexOf("preserve_pre_deploy_runtime_image_env_keys") <
+      remoteBackendRollout.indexOf('ensure_image_key_from_local_digest "AUTOHEAL_IMAGE"'),
     "image digest preserve must run before AUTOHEAL_IMAGE autofill",
   )
   assert.match(
@@ -2894,15 +2915,19 @@ test("homeserver deploy preserves runtime-specific backend image release state",
 })
 
 test("rollback keeps the current materialized keyring and only arms after blue-green activation", () => {
-  const workflow = readFileSync(workflowPath, "utf8")
+  const workflow = readBackendDeploySurface()
+  const remoteBackendRollout = readFileSync(remoteBackendRolloutPath, "utf8")
   const sourceExample = readFileSync(path.join(repoRoot, "deploy/homeserver/.env.prod.example"), "utf8")
   const backExample = readFileSync(path.join(repoRoot, "deploy/homeserver/.env.back.prod.example"), "utf8")
-  const rollbackStart = workflow.indexOf("run_backup_rollback() {")
-  const rollbackEnd = workflow.indexOf("rollback_from_backup_if_needed() {", rollbackStart)
-  const rollbackBlock = workflow.slice(rollbackStart, rollbackEnd)
-  const trapGate = workflow.slice(workflow.indexOf("rollback_from_backup_if_needed() {"), workflow.indexOf("./deploy/homeserver/prune_external_backups.sh"))
-  const materializedIndex = workflow.indexOf('RUNTIME_ENV_MATERIALIZED="true"')
-  const blueGreenIndex = workflow.indexOf("./deploy/homeserver/blue_green_deploy.sh; then", materializedIndex)
+  const rollbackStart = remoteBackendRollout.indexOf("run_backup_rollback() {")
+  const rollbackEnd = remoteBackendRollout.indexOf("rollback_from_backup_if_needed() {", rollbackStart)
+  const rollbackBlock = remoteBackendRollout.slice(rollbackStart, rollbackEnd)
+  const trapGate = remoteBackendRollout.slice(
+    remoteBackendRollout.indexOf("rollback_from_backup_if_needed() {"),
+    remoteBackendRollout.indexOf("./deploy/homeserver/prune_external_backups.sh"),
+  )
+  const materializedIndex = remoteBackendRollout.indexOf('RUNTIME_ENV_MATERIALIZED="true"')
+  const blueGreenIndex = remoteBackendRollout.indexOf("./deploy/homeserver/blue_green_deploy.sh; then", materializedIndex)
 
   for (const example of [sourceExample, backExample]) {
     assert.match(example, /remove all three previous entries from authoritative HOME_SERVER_ENV/i)
@@ -2919,7 +2944,7 @@ test("rollback keeps the current materialized keyring and only arms after blue-g
 })
 
 test("served cutover does not retain retired rollback environment aliases", () => {
-  const workflow = readFileSync(workflowPath, "utf8")
+  const workflow = readBackendDeploySurface()
 
   assert.doesNotMatch(workflow, /run_rollback_script_with_current_env_contract/)
   assert.doesNotMatch(workflow, /CUSTOM__MEMBER__SIGNUP__MAIL_FROM/)
@@ -2928,7 +2953,7 @@ test("served cutover does not retain retired rollback environment aliases", () =
 })
 
 test("deploy workflow requires pinned known_hosts and private GHCR credentials", () => {
-  const workflow = readFileSync(workflowPath, "utf8")
+  const workflow = [readBackendDeploySurface(), readFileSync(remoteFrontRolloutPath, "utf8")].join("\n")
 
   assert.match(workflow, /HOME_KNOWN_HOSTS: \$\{\{ secrets\.HOME_KNOWN_HOSTS \}\}/)
   assert.match(workflow, /HOME_GHCR_USERNAME: \$\{\{ secrets\.HOME_GHCR_USERNAME \}\}/)
@@ -2963,16 +2988,18 @@ test("deploy workflows use a single MagicDNS repository variable", () => {
 
 test("deploy workflow transfers secret env through temporary files instead of ssh command line", () => {
   const workflow = readFileSync(workflowPath, "utf8")
+  const remoteBackendRollout = readFileSync(remoteBackendRolloutPath, "utf8")
 
   assert.match(workflow, /home-server\.env/)
   assert.match(workflow, /scp -i "\$SSH_DIR\/home_key"/)
-  assert.match(workflow, /REMOTE_ENV_FILE=/)
+  assert.match(remoteBackendRollout, /REMOTE_ENV_FILE=/)
   assert.match(workflow, /cleanup_remote_tmp_from_runner\(\)/)
   assert.match(workflow, /trap cleanup_remote_tmp_from_runner EXIT/)
-  assert.match(workflow, /REMOTE\n\s+REMOTE_TMP_DIR=""/)
-  assert.match(workflow, /REMOTE\n\s+REMOTE_TMP_DIR=""\n\s+trap - EXIT/)
-  assert.match(workflow, /umask 077 && cat > '\$\{REMOTE_TMP_DIR\}\/deploy\.sh'/)
-  assert.match(workflow, /bash '\$\{REMOTE_TMP_DIR\}\/deploy\.sh' <\/dev\/null/)
+  assert.match(workflow, /deploy\/homeserver\/lib\/rollout_common\.sh/)
+  assert.match(workflow, /deploy\/homeserver\/lib\/post_deploy_verify\.sh/)
+  assert.match(workflow, /deploy\/homeserver\/remote_backend_rollout\.sh/)
+  assert.match(workflow, /REMOTE_TMP_DIR=""\n\s+trap - EXIT/)
+  assert.match(workflow, /bash '\$\{REMOTE_TMP_DIR\}\/remote_backend_rollout\.sh' <\/dev\/null/)
   assert.doesNotMatch(workflow, /REMOTE_TMP_DIR='\$\{REMOTE_TMP_DIR\}' bash -s/)
   assert.doesNotMatch(workflow, /HOME_SERVER_ENV_B64=/)
   assert.doesNotMatch(workflow, /HOME_GHCR_TOKEN_B64=/)
@@ -3414,6 +3441,7 @@ test("candidate administrator email readiness stops before cutover on the app ne
 
 test("blue-green deploy waits longer for candidate Flyway startup only", () => {
   const workflow = readFileSync(workflowPath, "utf8")
+  const remoteBackendRollout = readFileSync(remoteBackendRolloutPath, "utf8")
   const deployScript = readFileSync(deployScriptPath, "utf8")
   const candidateStart = deployScript.indexOf("check_candidate_backend_health()")
   const candidateEnd = deployScript.indexOf("switch_caddy_upstream()")
@@ -3432,7 +3460,7 @@ test("blue-green deploy waits longer for candidate Flyway startup only", () => {
   assert.match(candidateHealthBlock, /HEALTHCHECK_RETRIES="\$\{previous_retries\}"/)
   assert.match(blueGreenDeployJob, /timeout-minutes:\s*75/)
   assert.match(
-    workflow,
+    remoteBackendRollout,
     /CANDIDATE_HEALTHCHECK_RETRIES=450 \.\/deploy\/homeserver\/blue_green_deploy\.sh/,
   )
 })
@@ -3774,18 +3802,17 @@ test("ddos defense monitoring covers rate limit, docker runtime, redis, and memo
 })
 
 const extractDeployRemoteFunctions = (functionNames) => {
-  const lines = readFileSync(workflowPath, "utf8").split("\n")
-  const indent = " ".repeat(10)
+  const lines = [
+    ...readFileSync(rolloutCommonPath, "utf8").split("\n"),
+    ...readFileSync(remoteBackendRolloutPath, "utf8").split("\n"),
+  ]
   return functionNames
     .map((name) => {
-      const start = lines.indexOf(`${indent}${name}() {`)
-      assert.notEqual(start, -1, `${name} not found in deploy workflow remote script`)
-      const end = lines.findIndex((line, index) => index > start && line === `${indent}}`)
-      assert.notEqual(end, -1, `${name} block is not closed in deploy workflow remote script`)
-      return lines
-        .slice(start, end + 1)
-        .map((line) => (line.startsWith(indent) ? line.slice(indent.length) : line))
-        .join("\n")
+      const start = lines.indexOf(`${name}() {`)
+      assert.notEqual(start, -1, `${name} not found in rollout helper or remote script`)
+      const end = lines.findIndex((line, index) => index > start && line === "}")
+      assert.notEqual(end, -1, `${name} block is not closed in rollout helper or remote script`)
+      return lines.slice(start, end + 1).join("\n")
     })
     .join("\n\n")
 }
@@ -3818,7 +3845,7 @@ test("remove_env_key removes every validator-accepted retired assignment without
 })
 
 test("HOME_SERVER_ENV image digest는 pre-deploy 보존값보다 우선한다", () => {
-  const workflow = readFileSync(workflowPath, "utf8")
+  const workflow = readBackendDeploySurface()
   const staleDigest = "willfarrell/autoheal@sha256:31f580ef0279eaced5b38d631b08c474d70d8403c1c2fdd6ddcf2e879d5f3f7c"
   const freshDigest = "willfarrell/autoheal@sha256:201d007d40e3dc395b1176052ea8fe1cf5c4cf69c6d5aeeda6fcdeb256f2400d"
 
@@ -3963,7 +3990,7 @@ test("MinIO bootstrap은 required backend runtime image digest를 보존한다",
 })
 
 test("backend deploy은 source가 비운 front runtime image digest를 early compose 전에 보존한다", () => {
-  const workflow = readFileSync(workflowPath, "utf8")
+  const workflow = readFileSync(remoteBackendRolloutPath, "utf8")
   const preDeployDigests = Object.fromEntries(
     runtimeFrontImageKeys.map((key, index) => [
       key,
@@ -4144,7 +4171,8 @@ test("rollback 복원 기준점은 마지막 성공 배포 baseline으로 고정
   const backupScript = readFileSync(deployBackupScriptPath, "utf8")
   const deployScript = readFileSync(deployScriptPath, "utf8")
   const rollbackScript = readFileSync(path.join(repoRoot, "deploy/homeserver/rollback_last_deploy.sh"), "utf8")
-  const workflow = readFileSync(workflowPath, "utf8")
+  const workflow = readFileSync(remoteBackendRolloutPath, "utf8")
+  const remoteFrontRollout = readFileSync(remoteFrontRolloutPath, "utf8")
   const gitignore = readFileSync(path.join(repoRoot, ".gitignore"), "utf8")
 
   // 성공 배포 스냅샷은 완성된 뒤에만 공개돼야 한다. 중간에 끊긴 복사본이 남으면
@@ -4209,17 +4237,17 @@ test("rollback 복원 기준점은 마지막 성공 배포 baseline으로 고정
   assert.match(workflow, /BACKUP_FLYWAY_SCHEMA_VERSION="\$\(/)
   assert.match(workflow, /BACKUP_FLYWAY_SCHEMA_VERSION="unavailable"/)
   assert.match(workflow, /BACKUP_FLYWAY_SCHEMA_VERSION="\$\{BACKUP_FLYWAY_SCHEMA_VERSION\}"/)
-  const backendSourceFloorIndex = workflow.indexOf("if ! preflight_profile_workspace_cutover_source_floor; then")
-  const frontSourceFloorIndex = workflow.lastIndexOf("if ! preflight_profile_workspace_cutover_source_floor; then")
+  const backendSourceFloorIndex = workflow.indexOf("if ! preflight_profile_workspace_cutover_source_floor back; then")
+  const frontSourceFloorIndex = remoteFrontRollout.indexOf("if ! preflight_profile_workspace_cutover_source_floor front; then")
   const firstCheckoutIndex = workflow.indexOf('git checkout --force "${HOME_DEPLOY_SHA}"')
-  const frontCheckoutIndex = workflow.lastIndexOf('git checkout --force "${HOME_DEPLOY_SHA}"')
+  const frontCheckoutIndex = remoteFrontRollout.indexOf('git checkout --force "${HOME_DEPLOY_SHA}"')
   const backupCreateIndex = workflow.indexOf('BACKUP_DIR="$(./deploy/homeserver/create_deploy_backup.sh)"')
   assert(
     backendSourceFloorIndex !== -1 && backendSourceFloorIndex < backupCreateIndex && backendSourceFloorIndex < firstCheckoutIndex,
     "backend source-floor preflight must run before backup creation or checkout mutation",
   )
   assert(
-    frontSourceFloorIndex !== backendSourceFloorIndex && frontSourceFloorIndex < frontCheckoutIndex,
+    frontSourceFloorIndex !== -1 && frontSourceFloorIndex < frontCheckoutIndex,
     "front source-floor preflight must run before checkout mutation",
   )
   const standaloneSourceFloorIndex = deployScript.lastIndexOf("\nif ! ensure_profile_workspace_cutover_source_floor; then")
@@ -4282,7 +4310,7 @@ test("rollback 복원 기준점은 마지막 성공 배포 baseline으로 고정
   assert.doesNotMatch(backupScript, /::warning/)
   assert.match(workflow, /if grep -qx 'restore_source=worktree' "\$\{BACKUP_DIR\}\/metadata\.env" 2>\/dev\/null; then/)
   assert(
-    recordIndex < workflow.indexOf("          cleanup_remote_tmp\n          trap - EXIT"),
+    recordIndex < workflow.indexOf("cleanup_remote_tmp\ntrap - EXIT"),
     "baseline must be recorded before the remote session tears down",
   )
 
@@ -4290,8 +4318,8 @@ test("rollback 복원 기준점은 마지막 성공 배포 baseline으로 고정
 })
 
 test("profile retirement streams host SQL to container stdin and propagates failure", () => {
-  const workflow = readFileSync(workflowPath, "utf8")
-  const command = workflow.match(/^ +if ! docker compose[^\n]*retire_profile_workspace_legacy\.sql[^\n]*; then\n[^\n]*\n +fi/m)?.[0]
+  const workflow = readFileSync(remoteBackendRolloutPath, "utf8")
+  const command = workflow.match(/^ *if ! docker compose[^\n]*retire_profile_workspace_legacy\.sql[^\n]*; then\n[^\n]*\n *fi/m)?.[0]
   assert.ok(command, "retirement command must exist")
   const workDir = mkdtempSync(path.join(tmpdir(), "aquila-retirement-stdin-"))
   const capturePath = path.join(workDir, "stdin.sql")
@@ -5396,7 +5424,7 @@ test("배포·롤백 스크립트는 env 파일의 COMPOSE_PROFILES를 병합하
   // \r이라 닫는 따옴표를 못 떼고 `front"`가 되어 프로필이 조용히 꺼진다. 같은 리더가 DB 비밀번호와
   // 스토리지 키도 읽으므로 값 손상 범위가 프로필에 그치지 않는다. 읽는 지점에서 없앤다.
   const readers = [
-    ["deploy.yml", readFileSync(workflowPath, "utf8"), "read_prod_env_value"],
+    ["lib/rollout_common.sh", readFileSync(rolloutCommonPath, "utf8"), "read_prod_env_value"],
     ["blue_green_deploy.sh", deployScript, "env_value"],
     ["rollback_last_deploy.sh", rollbackScript, "env_value"],
     ["check_deploy_status.sh", readFileSync(deployStatusScriptPath, "utf8"), "env_value"],
@@ -5668,7 +5696,7 @@ test("install_external_backup_timer.sh는 flock 중복 실행 방지를 포함�
     assert.match(lines[1], /create_external_backup\.sh/)
     assert.match(lines[1], /prune_external_backups\.sh/)
 
-    const workflow = readFileSync(workflowPath, "utf8")
+    const workflow = readFileSync(remoteBackendRolloutPath, "utf8")
     assert.match(workflow, /deploy\/homeserver\/install_external_backup_timer\.sh/)
   } finally {
     rmSync(workDir, { force: true, recursive: true })
@@ -5761,7 +5789,7 @@ test("배포 베이스라인·백업·롤백 경로는 monitoring 디렉터리�
   const baselineScript = readFileSync(path.join(repoRoot, "deploy/homeserver/record_deploy_baseline.sh"), "utf8")
   const backupScript = readFileSync(deployBackupScriptPath, "utf8")
   const rollbackScript = readFileSync(path.join(repoRoot, "deploy/homeserver/rollback_last_deploy.sh"), "utf8")
-  const workflow = readFileSync(workflowPath, "utf8")
+  const workflow = readFileSync(remoteBackendRolloutPath, "utf8")
 
   assert.match(baselineScript, /cp -R "\$\{SCRIPT_DIR\}\/monitoring" "\$\{STAGING_DIR\}\/monitoring"/)
   assert.match(backupScript, /cp -R "\$\{BASELINE_DIR\}\/monitoring" "\$\{BACKUP_DIR\}\/monitoring"/)

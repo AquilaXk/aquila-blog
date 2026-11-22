@@ -8,6 +8,10 @@ const repoRoot = path.resolve(import.meta.dirname, "../..")
 const composePath = path.join(repoRoot, "deploy/homeserver/docker-compose.prod.yml")
 const contractPath = path.join(repoRoot, "deploy/env/env.contract.json")
 const workflowPath = path.join(repoRoot, ".github/workflows/deploy.yml")
+const rolloutCommonPath = path.join(repoRoot, "deploy/homeserver/lib/rollout_common.sh")
+const postDeployVerifyPath = path.join(repoRoot, "deploy/homeserver/lib/post_deploy_verify.sh")
+const remoteBackendRolloutPath = path.join(repoRoot, "deploy/homeserver/remote_backend_rollout.sh")
+const remoteFrontRolloutPath = path.join(repoRoot, "deploy/homeserver/remote_front_rollout.sh")
 const prometheusPath = path.join(repoRoot, "deploy/homeserver/monitoring/prometheus.yml")
 const caddyPath = path.join(repoRoot, "deploy/homeserver/caddy/Caddyfile")
 const alertmanagerPath = path.join(repoRoot, "deploy/homeserver/monitoring/alertmanager.yml")
@@ -271,7 +275,7 @@ test("postgres_exporter image pins, compose flags, and blind-spot alerts stay co
   for (const [name, source] of [
     ["blue_green_deploy.sh", deployScript],
     ["create_external_backup.sh", backupScript],
-    ["deploy.yml", read(workflowPath)],
+    ["remote_backend_rollout.sh", read(remoteBackendRolloutPath)],
   ]) {
     const pin = source.match(
       /ensure_image_(?:env_)?key_from_local_digest "POSTGRES_EXPORTER_IMAGE" "[^"]*postgres-exporter:v(\d+)\.(\d+)\.(\d+)"/,
@@ -397,7 +401,15 @@ test("front-render audit only recognizes an executable node invocation", () => {
   assert.equal(invokesFrontRenderGate("# node deploy/homeserver/front-render-gate.mjs"), false)
   assert.equal(invokesFrontRenderGate("node deploy/homeserver/front-render-gate.mjs --check"), true)
   assert.equal(invokesFrontRenderGate("run: node deploy/homeserver/front-render-gate.mjs --check"), true)
-  assert.equal(invokesFrontRenderGate(read(workflowPath)), false)
+  for (const filePath of [
+    workflowPath,
+    rolloutCommonPath,
+    postDeployVerifyPath,
+    remoteBackendRolloutPath,
+    remoteFrontRolloutPath,
+  ]) {
+    assert.equal(invokesFrontRenderGate(read(filePath)), false)
+  }
 })
 
 test("public-edge dashboard renders the bounded warm cache state contract without a zero fallback", () => {

@@ -892,7 +892,8 @@ test("Platform CI standalone evidence upload waits for non-skipped standalone ga
 test("actions storage cleanup preserves owasp-nvd caches", () => {
   const cleanup = parseWorkflow(".github/workflows/actions-storage-cleanup.yml")
 
-  for (const jobName of ["cleanup-pr-caches", "cleanup-weekly-caches"]) {
+  assert.equal(cleanup.jobs["cleanup-pr-caches"], undefined)
+  for (const jobName of ["cleanup-weekly-caches"]) {
     const steps = cleanup.jobs[jobName]?.steps ?? []
     assert.ok(steps.length > 0, `${jobName} must contain cleanup steps`)
     for (const step of steps) {

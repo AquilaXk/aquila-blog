@@ -6,7 +6,6 @@ const policyFile = "back/config/flyway-compatibility-policy.json"
 const supportedClasses = new Set(["EXPAND_SAFE", "CONTRACT_AFTER_CUTOVER", "REQUIRES_N_MINUS_1_TEST"])
 const frameworkFiles = new Set([
   "tools/ci/check-flyway-deploy-safety.mjs",
-  "tools/ci/classify-release.mjs",
   ".github/workflows/reusable-backend-quality.yml",
   "back/src/test/kotlin/com/back/infrastructure/FlywayNMinusOneCompatibilityTestcontainersIntegrationTest.kt",
   "back/src/test/kotlin/com/back/infrastructure/ProfileWorkspaceSnapshotReconcileMigrationTestcontainersIntegrationTest.kt",

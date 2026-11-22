@@ -3,17 +3,57 @@ set -euo pipefail
 
 workflow=".github/workflows/deploy.yml"
 security_workflow=".github/workflows/security.yml"
+rollout_common="deploy/homeserver/lib/rollout_common.sh"
+post_deploy_verify="deploy/homeserver/lib/post_deploy_verify.sh"
+remote_backend_rollout="deploy/homeserver/remote_backend_rollout.sh"
+remote_front_rollout="deploy/homeserver/remote_front_rollout.sh"
 
-if [[ ! -f "${workflow}" || ! -f "${security_workflow}" ]]; then
-  echo "missing deploy or Security workflow" >&2
-  exit 1
-fi
+for required_file in \
+  "${workflow}" \
+  "${security_workflow}" \
+  "${rollout_common}" \
+  "${post_deploy_verify}" \
+  "${remote_backend_rollout}" \
+  "${remote_front_rollout}"; do
+  if [[ ! -f "${required_file}" ]]; then
+    echo "missing required deploy surface file: ${required_file}" >&2
+    exit 1
+  fi
+done
+
+for exec_script in "${remote_backend_rollout}" "${remote_front_rollout}"; do
+  if [[ ! -x "${exec_script}" ]]; then
+    echo "remote rollout script must be executable: ${exec_script}" >&2
+    exit 1
+  fi
+done
+
+for shell_script in \
+  "${rollout_common}" \
+  "${post_deploy_verify}" \
+  "${remote_backend_rollout}" \
+  "${remote_front_rollout}"; do
+  bash -n "${shell_script}" || {
+    echo "bash syntax error in ${shell_script}" >&2
+    exit 1
+  }
+done
+
+workdir="$(mktemp -d)"
+trap 'rm -rf "${workdir}"' EXIT
+combined_deploy_surface="${workdir}/combined-deploy-surface.txt"
+cat \
+  "${workflow}" \
+  "${rollout_common}" \
+  "${post_deploy_verify}" \
+  "${remote_backend_rollout}" \
+  "${remote_front_rollout}" > "${combined_deploy_surface}"
 
 require_pattern() {
   local pattern="$1"
   local message="$2"
 
-  if ! grep -Eq "${pattern}" "${workflow}"; then
+  if ! grep -Eq "${pattern}" "${combined_deploy_surface}"; then
     echo "missing: ${message}" >&2
     exit 1
   fi
@@ -23,7 +63,7 @@ require_fixed() {
   local text="$1"
   local message="$2"
 
-  if ! grep -Fq -- "${text}" "${workflow}"; then
+  if ! grep -Fq -- "${text}" "${combined_deploy_surface}"; then
     echo "missing: ${message}" >&2
     exit 1
   fi
@@ -33,7 +73,7 @@ reject_pattern() {
   local pattern="$1"
   local message="$2"
 
-  if grep -Eq "${pattern}" "${workflow}"; then
+  if grep -Eq "${pattern}" "${combined_deploy_surface}"; then
     echo "unexpected: ${message}" >&2
     exit 1
   fi
@@ -265,7 +305,7 @@ for docker_publish_non_fixture in \
   fi
 done
 
-if docker_publish_command_matches "$(< "${workflow}")"; then
+if docker_publish_command_matches "$(< "${combined_deploy_surface}")"; then
   echo "unexpected: Platform must not shell-build or publish a Web image" >&2
   exit 1
 fi
@@ -382,7 +422,7 @@ if ! awk -v allowed="${legacy_api_domain_deletion}" '
     }
   }
   END { exit found ? 1 : 0 }
-' "${workflow}"; then
+' "${combined_deploy_surface}"; then
   echo "unexpected: Platform deploy must not retain another LEGACY_API_DOMAIN use" >&2
   exit 1
 fi
@@ -401,9 +441,9 @@ require_pattern 'rollback_and_exit "web_host_api_route_empty_body"' "the interna
 require_pattern 'create_external_backup\.sh' "homeserver deploy must create an external storage backup before rollout mutation"
 require_pattern 'prune_external_backups\.sh' "homeserver deploy must prune external backups around backup creation"
 
-external_create_line="$(grep -n 'EXTERNAL_BACKUP_DIR=.*create_external_backup\.sh' "${workflow}" | head -n 1 | cut -d: -f1)"
-first_prune_line="$(grep -n '^[[:space:]]*\./deploy/homeserver/prune_external_backups\.sh' "${workflow}" | head -n 1 | cut -d: -f1)"
-last_prune_line="$(grep -n '^[[:space:]]*\./deploy/homeserver/prune_external_backups\.sh' "${workflow}" | tail -n 1 | cut -d: -f1)"
+external_create_line="$(grep -n 'EXTERNAL_BACKUP_DIR=.*create_external_backup\.sh' "${remote_backend_rollout}" | head -n 1 | cut -d: -f1)"
+first_prune_line="$(grep -n '^[[:space:]]*\./deploy/homeserver/prune_external_backups\.sh' "${remote_backend_rollout}" | head -n 1 | cut -d: -f1)"
+last_prune_line="$(grep -n '^[[:space:]]*\./deploy/homeserver/prune_external_backups\.sh' "${remote_backend_rollout}" | tail -n 1 | cut -d: -f1)"
 
 if [[ -z "${external_create_line}" || -z "${first_prune_line}" || -z "${last_prune_line}" ]]; then
   echo "unexpected: external backup create/prune invocation not found" >&2
@@ -417,5 +457,87 @@ if [[ "${last_prune_line}" -le "${external_create_line}" ]]; then
   echo "unexpected: external backup prune must run after backup creation to enforce retention" >&2
   exit 1
 fi
+
+run_rollout_common_unit_tests() {
+  local repo_fixture="${workdir}/rollout-common-fixture"
+  local env_file="${repo_fixture}/deploy/homeserver/.env.prod"
+  local common_abs
+  common_abs="$(cd "$(dirname "${rollout_common}")" && pwd)/$(basename "${rollout_common}")"
+  mkdir -p "${repo_fixture}/deploy/homeserver"
+
+  (
+    cd "${repo_fixture}"
+    # shellcheck source=/dev/null
+    source "${common_abs}"
+
+    printf 'SINGLE_KEY=old\n' > "${env_file}"
+    upsert_env_key "SINGLE_KEY" "new" "${env_file}"
+    [[ "$(cat "${env_file}")" == "SINGLE_KEY=new" ]] || {
+      echo "upsert_env_key failed on single-line file" >&2
+      exit 1
+    }
+
+    upsert_env_key "SECOND_KEY" "val2" "${env_file}"
+    upsert_env_key "SECOND_KEY" "" "${env_file}"
+    [[ "$(grep -c '^SECOND_KEY=' "${env_file}")" -eq 1 ]] || {
+      echo "upsert_env_key duplicated SECOND_KEY" >&2
+      exit 1
+    }
+    [[ "$(grep '^SECOND_KEY=' "${env_file}")" == "SECOND_KEY=val2" ]] || {
+      echo "upsert_env_key overwrote with empty value" >&2
+      exit 1
+    }
+    if upsert_env_key "BAD;KEY" "v" "${env_file}" 2>/dev/null; then
+      echo "upsert_env_key accepted invalid key name" >&2
+      exit 1
+    fi
+
+    cat > "${env_file}" <<'EOF'
+# keep comment
+REMOVE_ME=first
+  export REMOVE_ME = "second"
+  REMOVE_ME = third
+KEEP_ME=stays
+EOF
+    remove_env_key "REMOVE_ME" "${env_file}"
+    if grep -q 'REMOVE_ME' "${env_file}"; then
+      echo "remove_env_key left matching assignments behind" >&2
+      exit 1
+    fi
+    grep -qx '# keep comment' "${env_file}" || { echo "remove_env_key lost comment" >&2; exit 1; }
+    grep -qx 'KEEP_ME=stays' "${env_file}" || { echo "remove_env_key lost KEEP_ME" >&2; exit 1; }
+    if remove_env_key "1INVALID" "${env_file}" 2>/dev/null; then
+      echo "remove_env_key accepted invalid key name" >&2
+      exit 1
+    fi
+
+    printf '  export CUSTOM_PROD_BACKURL = "https://blog.aquilaxk.site"\r\n' > "${env_file}"
+    [[ "$(read_prod_env_value CUSTOM_PROD_BACKURL)" == "https://blog.aquilaxk.site" ]] || {
+      echo "read_prod_env_value failed to parse export/quoted/CRLF value" >&2
+      exit 1
+    }
+    printf "CUSTOM_PROD_BACKURL='https://single.example'\r\n" >> "${env_file}"
+    [[ "$(read_prod_env_value CUSTOM_PROD_BACKURL)" == "https://single.example" ]] || {
+      echo "read_prod_env_value failed to select last single-quoted value" >&2
+      exit 1
+    }
+
+    local valid_digest="ghcr.io/aquilaxk/aquila-blog-back@sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+    require_digest_image_value "TEST_IMAGE" "${valid_digest}"
+    for bad_image in \
+      "" \
+      "ghcr.io/aquilaxk/aquila-blog-back:latest" \
+      "ghcr.io/aquilaxk/aquila-blog-back:latest@sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef" \
+      "ghcr.io/aquilaxk/aquila-blog-back:v1.0.0" \
+      "ghcr.io/aquilaxk/aquila-blog-back@sha256:abcd"; do
+      if ( require_digest_image_value "TEST_IMAGE" "${bad_image}" ) 2>/dev/null; then
+        echo "require_digest_image_value accepted invalid image: ${bad_image}" >&2
+        exit 1
+      fi
+    done
+  )
+}
+
+run_rollout_common_unit_tests
 
 echo "[test] Platform deploy workflow classification: PASS"

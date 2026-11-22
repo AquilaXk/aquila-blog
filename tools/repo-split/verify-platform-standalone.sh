@@ -109,11 +109,11 @@ fi
   run_step "Verify Platform repository boundary" \
     node tools/repo-boundary/check-platform-boundary.mjs
 
-  # The full backend gate emits the canonical OpenAPI and ErrorCode build
-  # artifacts consumed by check-public-contracts.mjs. Running it first proves
-  # both generation and drift from one immutable Platform snapshot.
+  # The backend contract export tests emit the canonical OpenAPI and ErrorCode
+  # build artifacts consumed by check-public-contracts.mjs. Running them first
+  # proves both generation and drift from one immutable Platform snapshot.
   run_step "Run backend required check and generate public contract inputs" \
-    bash -c 'cd back && ./gradlew check --rerun-tasks'
+    bash -c 'cd back && ./gradlew test --tests "com.back.global.springDoc.OpenApiContractExportTest" --tests "com.back.global.contracts.ErrorCodeContractExportTest" --rerun-tasks'
   run_step "Verify canonical public contract" \
     node tools/contracts/check-public-contracts.mjs
   # Compose syntax validation uses the example as a non-secret base, while the

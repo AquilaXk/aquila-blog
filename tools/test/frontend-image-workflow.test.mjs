@@ -8,6 +8,8 @@ import test from "node:test"
 
 const repoRoot = path.resolve(import.meta.dirname, "../..")
 const deployPath = path.join(repoRoot, ".github/workflows/deploy.yml")
+const remoteFrontRolloutPath = path.join(repoRoot, "deploy/homeserver/remote_front_rollout.sh")
+const rolloutCommonPath = path.join(repoRoot, "deploy/homeserver/lib/rollout_common.sh")
 const ciPath = path.join(repoRoot, ".github/workflows/ci.yml")
 const producerPath = path.join(repoRoot, ".github/workflows/frontend-image.yml")
 const securityPath = path.join(repoRoot, ".github/workflows/security.yml")
@@ -269,7 +271,7 @@ test("CI gate waits for an active matching run to succeed", () => {
 
   assert.equal(result.status, 0, result.stderr)
   assert.equal(result.callLog.filter((call) => call.startsWith("api ")).length, 2)
-  assert.deepEqual(result.callLog.filter((call) => call.startsWith("sleep ")), ["sleep 60"])
+  assert.deepEqual(result.callLog.filter((call) => call.startsWith("sleep ")), ["sleep 30"])
 })
 
 test("Security gate fails immediately when matching runs are terminal non-success", () => {
@@ -310,11 +312,11 @@ test("dispatch gate selectors classify every nonterminal workflow run as active"
 })
 
 test("Security gate fails closed after its bounded wait", () => {
-  const result = runWorkflowGate("Require successful Security for deploy SHA", Array(250).fill(""))
+  const result = runWorkflowGate("Require successful Security for deploy SHA", Array(60).fill(""))
 
   assert.notEqual(result.status, 0)
-  assert.equal(result.callLog.filter((call) => call.startsWith("api ")).length, 250)
-  assert.equal(result.callLog.filter((call) => call.startsWith("sleep ")).length, 249)
+  assert.equal(result.callLog.filter((call) => call.startsWith("api ")).length, 60)
+  assert.equal(result.callLog.filter((call) => call.startsWith("sleep ")).length, 59)
 })
 
 test("reusable Deploy keeps dispatches on an isolated workflow queue", () => {
@@ -331,7 +333,7 @@ test("dispatch waits for the exact Platform Security delivery to succeed", () =>
 
   assert.equal(result.status, 0, result.stderr)
   assert.equal(result.callLog.filter((call) => call.startsWith("api ")).length, 2)
-  assert.deepEqual(result.callLog.filter((call) => call.startsWith("sleep ")), ["sleep 60"])
+  assert.deepEqual(result.callLog.filter((call) => call.startsWith("sleep ")), ["sleep 30"])
   assert.deepEqual(result.callLog.filter((call) => call.startsWith("api ")), [
     `api repos/AquilaXk/aquila-blog/actions/workflows/security.yml/runs?head_sha=${"a".repeat(40)}&per_page=50 --paginate --jq .workflow_runs[] | select(.event == "push" and .head_branch == "main") | if (.status == "completed" and .conclusion == "success") then "success:\\(.id)" elif .status != "completed" then "active:\\(.id)" elif .status == "completed" then "terminal:\\(.id)" else empty end`,
     `api repos/AquilaXk/aquila-blog/actions/workflows/security.yml/runs?head_sha=${"a".repeat(40)}&per_page=50 --paginate --jq .workflow_runs[] | select(.event == "push" and .head_branch == "main") | if (.status == "completed" and .conclusion == "success") then "success:\\(.id)" elif .status != "completed" then "active:\\(.id)" elif .status == "completed" then "terminal:\\(.id)" else empty end`,
@@ -365,7 +367,7 @@ test("dispatch fails immediately when the exact Security delivery is terminal no
 for (const [label, responses, expectedApiCalls, expectedSleeps] of [
   ["terminal-only rows", ["terminal:1"], 1, 0],
   ["API failure", ["error"], 1, 0],
-  ["bounded timeout", Array(250).fill(""), 250, 249],
+  ["bounded timeout", Array(60).fill(""), 60, 59],
 ]) {
   test(`dispatch automatic Security delivery gate fails closed on ${label}`, () => {
     const result = runWorkflowGate("Require successful automatic Security delivery for dispatch SHA", responses)
@@ -811,6 +813,9 @@ test("dispatch no-op skips calculateTag and every deploy gate", () => {
 
 test("handoff keeps deployment ordering and the existing SSH cutover gates", () => {
   const source = deploy()
+  const remoteFrontRollout = readFileSync(remoteFrontRolloutPath, "utf8")
+  const rolloutCommon = readFileSync(rolloutCommonPath, "utf8")
+  const combinedFrontSurface = [source, remoteFrontRollout, rolloutCommon].join("\n")
 
   assert.match(source, /queue: max/)
   assert.doesNotMatch(source, /cancel-in-progress:/)
@@ -836,14 +841,19 @@ test("handoff keeps deployment ordering and the existing SSH cutover gates", () 
     "repository: AquilaXk/aquila-blog-web",
     "path: front",
   ]) {
-    assert.doesNotMatch(source, new RegExp(forbidden.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")), `${forbidden} is Web-only`)
+    assert.doesNotMatch(combinedFrontSurface, new RegExp(forbidden.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")), `${forbidden} is Web-only`)
   }
   assert.match(source, /HOME_KNOWN_HOSTS: \$\{\{ secrets\.HOME_KNOWN_HOSTS \}\}/)
   assert.doesNotMatch(source, /ssh-keyscan/)
   assert.match(source, /trap cleanup_remote_tmp_from_runner EXIT/)
-  assert.match(source, /DEPLOY_TARGET=front/)
-  assert.match(source, /STAGED_FRONT_IMAGE="\$\{HOME_FRONT_IMAGE\}"/)
-  assert.match(source, /STAGED_FRONT_BUILD_SHA="\$\{HOME_FRONT_BUILD_SHA\}"/)
+  assert.match(source, /deploy\/homeserver\/lib\/rollout_common\.sh/)
+  assert.match(source, /deploy\/homeserver\/remote_front_rollout\.sh/)
+  assert.match(source, /bash '\$\{REMOTE_TMP_DIR\}\/remote_front_rollout\.sh' <\/dev\/null/)
+  assert.match(remoteFrontRollout, /source "\$\{REMOTE_TMP_DIR\}\/rollout_common\.sh"/)
+  assert.match(remoteFrontRollout, /preflight_profile_workspace_cutover_source_floor front/)
+  assert.match(remoteFrontRollout, /DEPLOY_TARGET=front/)
+  assert.match(remoteFrontRollout, /STAGED_FRONT_IMAGE="\$\{HOME_FRONT_IMAGE\}"/)
+  assert.match(remoteFrontRollout, /STAGED_FRONT_BUILD_SHA="\$\{HOME_FRONT_BUILD_SHA\}"/)
   assert.match(source, /deployed \| noop\) ;;/)
   assert.match(source, /front deploy finished without reporting a supported result marker/)
   assert.doesNotMatch(source, /if \[ "\$\{FRONT_DEPLOY_RESULT\}" = "deployed" \] && \[ "\$\{FRONT_SERVED_BUILD_SHA\}"/)

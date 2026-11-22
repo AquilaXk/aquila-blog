@@ -1,15 +1,11 @@
 {
   "version": 1,
   "entries": [
-    { "path": "tools/test/backend-ci-dependabot-credentials.test.mjs", "kind": "direct-ci", "workflow": ".github/workflows/dependabot-credential-contract.yml", "job": "dependabot-credential-contract", "step": "Verify Dependabot test credential contract" },
-    { "path": "tools/test/release-plan.test.mjs", "kind": "direct-ci", "workflow": ".github/workflows/reusable-backend-quality.yml", "job": "backend-ci", "step": "Test release planner guards" },
     { "path": "tools/test/flyway-deploy-safety.test.mjs", "kind": "direct-ci", "workflow": ".github/workflows/reusable-backend-quality.yml", "job": "backend-ci", "step": "Test release planner guards" },
-    { "path": "tools/test/comment-jacoco-summary.test.mjs", "kind": "direct-ci", "workflow": ".github/workflows/reusable-backend-quality.yml", "job": "backend-ci", "step": "Test release planner guards" },
     { "path": "tools/test/demo-seed-prod-gate.test.mjs", "kind": "direct-ci", "workflow": ".github/workflows/reusable-backend-quality.yml", "job": "backend-ci", "step": "Test release planner guards" },
     { "path": "tools/test/env-contract.test.mjs", "kind": "direct-ci", "workflow": ".github/workflows/reusable-backend-quality.yml", "job": "backend-ci", "step": "Test release planner guards" },
     { "path": "tools/test/minio-service-account-contract.test.mjs", "kind": "direct-ci", "workflow": ".github/workflows/reusable-backend-quality.yml", "job": "backend-ci", "step": "Test release planner guards" },
     { "path": "tools/test/public-contract-manifest.test.mjs", "kind": "direct-ci", "workflow": ".github/workflows/reusable-backend-quality.yml", "job": "backend-ci", "step": "Test release planner guards" },
-    { "path": "tools/test/testcontainers-execution-contract.test.mjs", "kind": "direct-ci", "workflow": ".github/workflows/reusable-backend-quality.yml", "job": "backend-ci", "step": "Test release planner guards" },
     { "path": "tools/test/check-forbidden-tracked-files.test.sh", "kind": "direct-ci", "workflow": ".github/workflows/reusable-backend-quality.yml", "job": "backend-ci", "step": "Test forbidden tracked file guard" },
     { "path": "tools/test/commit-msg-hook.test.sh", "kind": "direct-ci", "workflow": ".github/workflows/reusable-backend-quality.yml", "job": "backend-ci", "step": "Test commit-msg hook rules" },
     { "path": "tools/test/pre-push-hook.test.sh", "kind": "direct-ci", "workflow": ".github/workflows/reusable-backend-quality.yml", "job": "backend-ci", "step": "Test pre-push branch rules" },

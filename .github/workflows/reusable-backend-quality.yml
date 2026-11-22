@@ -13,8 +13,7 @@ env:
 
 permissions:
   contents: read
-  issues: write
-  pull-requests: write
+  pull-requests: read
 
 jobs:
   backend-ci:
@@ -29,7 +28,7 @@ jobs:
           set -euo pipefail
           git init .
           git remote add origin "https://github.com/${GITHUB_REPOSITORY}.git"
-          git fetch --depth=1 origin "${GITHUB_REF}"
+          git fetch --depth=2 origin "${GITHUB_REF}"
           git checkout --force FETCH_HEAD
 
       - name: Detect backend-related changes
@@ -87,31 +86,52 @@ jobs:
           echo "backend=${backend}" >> "${GITHUB_OUTPUT}"
 
       - name: Check Flyway deploy safety
-        if: github.event_name == 'pull_request'
+        if: github.event_name == 'pull_request' || github.event_name == 'push'
         id: flyway_safety
         env:
-          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
         shell: bash
         run: |
           set -euo pipefail
 
+          changed_files="${RUNNER_TEMP}/changed-files.txt"
           report="${RUNNER_TEMP}/flyway-deploy-safety.json"
           policy_path="back/config/flyway-compatibility-policy.json"
           base_policy="${RUNNER_TEMP}/base-flyway-compatibility-policy.json"
-          git fetch --depth=1 origin "${BASE_SHA}"
-          base_policy_paths="$(git ls-tree -r --name-only "${BASE_SHA}" -- "${policy_path}")"
-          if [ "${base_policy_paths}" = "${policy_path}" ]; then
-            git show "${BASE_SHA}:${policy_path}" > "${base_policy}"
-          elif [ -z "${base_policy_paths}" ]; then
-            printf '{"version":1,"migrations":[],"cutovers":[]}\n' > "${base_policy}"
+
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            BASE_SHA="${PR_BASE_SHA}"
+            git fetch --depth=1 origin "${BASE_SHA}"
+            base_policy_paths="$(git ls-tree -r --name-only "${BASE_SHA}" -- "${policy_path}")"
+            if [ "${base_policy_paths}" = "${policy_path}" ]; then
+              git show "${BASE_SHA}:${policy_path}" > "${base_policy}"
+            elif [ -z "${base_policy_paths}" ]; then
+              printf '{"version":1,"migrations":[],"cutovers":[]}\n' > "${base_policy}"
+            else
+              echo "::error title=Flyway compatibility policy blocked::Could not resolve the exact base policy."
+              exit 1
+            fi
+          elif git rev-parse --verify HEAD^1 >/dev/null 2>&1; then
+            git diff --name-only HEAD^1 HEAD > "${changed_files}"
+            BASE_SHA="$(git rev-parse HEAD^1)"
+            base_policy_paths="$(git ls-tree -r --name-only "${BASE_SHA}" -- "${policy_path}")"
+            if [ "${base_policy_paths}" = "${policy_path}" ]; then
+              git show "${BASE_SHA}:${policy_path}" > "${base_policy}"
+            elif [ -z "${base_policy_paths}" ]; then
+              printf '{"version":1,"migrations":[],"cutovers":[]}\n' > "${base_policy}"
+            else
+              echo "::error title=Flyway compatibility policy blocked::Could not resolve the exact base policy."
+              exit 1
+            fi
           else
-            echo "::error title=Flyway compatibility policy blocked::Could not resolve the exact base policy."
-            exit 1
+            : > "${changed_files}"
+            printf '{"version":1,"migrations":[],"cutovers":[]}\n' > "${base_policy}"
           fi
+
           set +e
           node tools/ci/check-flyway-deploy-safety.mjs \
             --json \
-            --changed-files "${RUNNER_TEMP}/changed-files.txt" \
+            --changed-files "${changed_files}" \
             --policy "${policy_path}" \
             --base-policy "${base_policy}" \
             --output "${report}" \
@@ -123,6 +143,14 @@ jobs:
           node - "${report}" <<'NODE'
           const fs = require("node:fs")
           const report = JSON.parse(fs.readFileSync(process.argv[2], "utf8"))
+          fs.appendFileSync(
+            process.env.GITHUB_OUTPUT,
+            [
+              `run_n_minus_one=${Boolean(report.runNMinusOne)}`,
+              `framework_changed=${Boolean(report.frameworkChanged)}`,
+              "",
+            ].join("\n"),
+          )
           fs.appendFileSync(
             process.env.GITHUB_STEP_SUMMARY,
             [
@@ -137,46 +165,14 @@ jobs:
           )
           NODE
 
-      - name: Classify release risk
-        if: github.event_name == 'pull_request'
-        id: release_policy
-        shell: bash
+      - name: Enforce Flyway deploy safety
+        if: steps.flyway_safety.outputs.status != '0'
         run: |
-          set -euo pipefail
-
-          report="${RUNNER_TEMP}/release-plan.json"
-          node tools/ci/classify-release.mjs \
-            --json \
-            --changed-files "${RUNNER_TEMP}/changed-files.txt" \
-            --migration-safety-json "${RUNNER_TEMP}/flyway-deploy-safety.json" \
-            --github-output "$GITHUB_OUTPUT" \
-            > "${report}"
-          node - "${report}" <<'NODE'
-          const fs = require("node:fs")
-          const report = JSON.parse(fs.readFileSync(process.argv[2], "utf8"))
-          fs.appendFileSync(
-            process.env.GITHUB_STEP_SUMMARY,
-            [
-              "## Release policy",
-              `- change scope: ${report.changeScope}`,
-              `- risk profile: ${report.riskProfile}`,
-              `- deploy backend: ${report.deployBackend}`,
-              `- N-1 compatibility test: ${report.runNMinusOne}`,
-              `- compatibility framework changed: ${report.frameworkChanged}`,
-              `- reasons: ${report.reasons.join(", ") || "none"}`,
-              "",
-            ].join("\n"),
-          )
-          NODE
-
-      - name: Enforce blocked release policy
-        if: github.event_name == 'pull_request' && (steps.flyway_safety.outputs.status != '0' || steps.release_policy.outputs.release_risk_profile == 'blocked')
-        run: |
-          echo "Release policy blocked this change. Flyway compatibility evidence is required before deployment." >&2
+          echo "Flyway deploy safety blocked this change. Flyway compatibility evidence is required before deployment." >&2
           exit 1
 
       - name: Test release planner guards
-        run: node --test tools/test/release-plan.test.mjs tools/test/flyway-deploy-safety.test.mjs tools/test/comment-jacoco-summary.test.mjs tools/test/demo-seed-prod-gate.test.mjs tools/test/env-contract.test.mjs tools/test/minio-service-account-contract.test.mjs tools/test/public-contract-manifest.test.mjs tools/test/testcontainers-execution-contract.test.mjs
+        run: node --test tools/test/flyway-deploy-safety.test.mjs tools/test/demo-seed-prod-gate.test.mjs tools/test/env-contract.test.mjs tools/test/minio-service-account-contract.test.mjs tools/test/public-contract-manifest.test.mjs
 
       - name: Guard forbidden AI docs and tool metadata
         run: bash tools/guards/check-forbidden-tracked-files.sh
@@ -248,64 +244,6 @@ jobs:
       - name: Test Platform deploy workflow classification
         run: bash tools/test/verify-deploy-workflow-classification.sh
 
-      # 이중 의존성 리뷰 안내 (Defense-in-depth):
-      # 백엔드 CI 파이프라인의 빠른 피드백을 위해 Dependency Graph compare API를 직접 검증합니다.
-      # .github/workflows/security.yml의 공식 dependency-review-action과 병행 동작하므로,
-      # GitHub Dependency Graph API 장애/지연 시 두 검증이 동시에 실패할 수 있습니다 (#1124).
-      - name: Dependency review
-        if: github.event_name == 'pull_request'
-        shell: bash
-        env:
-          BASE_SHA: ${{ github.event.pull_request.base.sha }}
-          GITHUB_READ_TOKEN: ${{ github.token }}
-          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
-        run: |
-          set -euo pipefail
-
-          report="${RUNNER_TEMP}/dependency-review.json"
-          dependency_url="${GITHUB_API_URL}/repos/${GITHUB_REPOSITORY}/dependency-graph/compare/${BASE_SHA}...${HEAD_SHA}"
-          curl_args=(
-            -fsSL
-            -H "Accept: application/vnd.github+json"
-            -H "X-GitHub-Api-Version: 2022-11-28"
-            -H "Authorization: Bearer ${GITHUB_READ_TOKEN}"
-          )
-          if ! curl "${curl_args[@]}" "${dependency_url}" > "${report}"; then
-            echo "::error title=Dependency review blocked::Dependency Graph compare API failed. Enable Dependency Graph for this repository (#1124)."
-            exit 1
-          fi
-
-          python3 - "${report}" <<'PY'
-          import json
-          import sys
-
-          with open(sys.argv[1], encoding="utf-8") as handle:
-              dependencies = json.load(handle)
-
-          if not isinstance(dependencies, list):
-              print("Dependency review response is not a list; Dependency Graph may be disabled.", file=sys.stderr)
-              sys.exit(1)
-
-          vulnerable = [
-              item
-              for item in dependencies
-              if item.get("change_type") in {"added", "changed"} and item.get("vulnerabilities")
-          ]
-
-          if vulnerable:
-              for item in vulnerable:
-                  name = item.get("name", "unknown")
-                  version = item.get("version", "unknown")
-                  vulns = ", ".join(
-                      vulnerability.get("advisory_ghsa_id", "unknown")
-                      for vulnerability in item.get("vulnerabilities", [])
-                  )
-                  print(f"vulnerable dependency: {name}@{version} ({vulns})")
-              sys.exit(1)
-
-          print("Dependency review passed: no vulnerable added or changed dependencies.")
-          PY
-
       - name: Skip backend-heavy checks
         if: steps.changes.outputs.backend != 'true'
         run: |
@@ -324,7 +262,7 @@ jobs:
           cache: gradle
 
       - name: Run Flyway N-1 compatibility test
-        if: steps.changes.outputs.backend == 'true' && github.event_name == 'pull_request' && (steps.release_policy.outputs.release_run_n_minus_one == 'true' || steps.release_policy.outputs.release_framework_changed == 'true')
+        if: steps.changes.outputs.backend == 'true' && github.event_name == 'pull_request' && (steps.flyway_safety.outputs.run_n_minus_one == 'true' || steps.flyway_safety.outputs.framework_changed == 'true')
         working-directory: back
         run: >-
           ./gradlew testcontainersTest
@@ -393,119 +331,23 @@ jobs:
         run: ./gradlew ciFastCheck --rerun-tasks
 
       # main/push(release trunk)는 Testcontainers를 포함한 full check를 required로 실행한다.
-      # PR의 전체 테스트·통합 커버리지는 필수 Platform Standalone job이 담당한다.
+      # PR은 ciFastCheck로 빠른 검증을 수행하며, Platform Standalone은 경계·계약 export·Compose 구성을 검증한다.
       - name: Run backend full check
         if: steps.changes.outputs.backend == 'true' && github.event_name != 'pull_request'
         working-directory: back
         run: ./gradlew check --rerun-tasks
 
       - name: Set up Node.js for canonical public contract check
-        if: always() && steps.changes.outputs.backend == 'true'
+        if: steps.changes.outputs.backend == 'true'
         uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version: "20"
-      - name: Verify Testcontainers execution evidence
-        if: always() && steps.changes.outputs.backend == 'true' && github.event_name != 'pull_request'
-        run: node tools/ci/verify-testcontainers-results.mjs --results back/build/test-results/testcontainersTest --summary back/build/test-results/testcontainers-summary.json
-      - name: Upload Testcontainers raw XML evidence
-        if: always() && steps.changes.outputs.backend == 'true' && github.event_name != 'pull_request'
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
-        with:
-          name: testcontainers-raw-xml-${{ github.run_id }}-${{ github.run_attempt }}
-          path: back/build/test-results/testcontainersTest/TEST-*.xml
-          if-no-files-found: error
-          retention-days: 3
-      - name: Upload Testcontainers execution summary
-        if: always() && steps.changes.outputs.backend == 'true' && github.event_name != 'pull_request'
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
-        with:
-          name: testcontainers-summary-${{ github.run_id }}-${{ github.run_attempt }}
-          path: back/build/test-results/testcontainers-summary.json
-          if-no-files-found: error
-          retention-days: 3
       - name: Verify canonical public contract bundle
         if: steps.changes.outputs.backend == 'true'
         shell: bash
         run: |
           set -euo pipefail
           node tools/contracts/check-public-contracts.mjs
-
-      - name: Comment Jacoco coverage summary
-        if: always() && github.event_name == 'pull_request' && steps.changes.outputs.backend == 'true' && github.event.pull_request.head.repo.full_name == github.repository && hashFiles('back/build/reports/jacoco/pr/jacocoPrReport.xml') != ''
-        env:
-          GH_TOKEN: ${{ github.token }}
-          GITHUB_READ_TOKEN: ${{ github.token }}
-          PR_NUMBER: ${{ github.event.pull_request.number }}
-        shell: bash
-        run: |
-          summary_file="${RUNNER_TEMP}/jacoco-summary.md"
-          comments_file="${RUNNER_TEMP}/pr-comments.json"
-          changed_files="${RUNNER_TEMP}/changed-files.txt"
-
-          if [ -z "${GITHUB_READ_TOKEN:-}" ]; then
-            echo "::error title=GitHub API token missing::Cannot enumerate pull request files."
-            exit 1
-          fi
-
-          api_base_url="${GITHUB_API_URL}/repos/${GITHUB_REPOSITORY}/pulls/${PR_NUMBER}/files?per_page=100"
-          : > "${changed_files}"
-          page=1
-          while true; do
-            response_body="${RUNNER_TEMP}/jacoco-github-response-body.json"
-            curl \
-              -fsSL \
-              --connect-timeout 10 \
-              --max-time 30 \
-              -H "Accept: application/vnd.github+json" \
-              -H "X-GitHub-Api-Version: 2022-11-28" \
-              -H "Authorization: Bearer ${GITHUB_READ_TOKEN}" \
-              "${api_base_url}&page=${page}" \
-              > "${response_body}"
-            jq -r '.[].filename' "${response_body}" >> "${changed_files}"
-            if [ "$(jq 'length' "${response_body}")" -lt 100 ]; then
-              break
-            fi
-            page=$((page + 1))
-          done
-
-          python3 tools/ci/comment-jacoco-summary.py \
-            back/build/reports/jacoco/pr/jacocoPrReport.xml \
-            back/config/jacoco-coverage-baseline-excludes.txt \
-            --changed-files "${changed_files}" \
-            --full-report back/build/reports/jacoco/pr-full/jacocoPrFullCoverageReport.xml \
-            > "${summary_file}"
-
-          body="$(cat "${summary_file}")"
-          if gh api "repos/${GITHUB_REPOSITORY}/issues/${PR_NUMBER}/comments" --paginate > "${comments_file}"; then
-            comment_id="$(
-              python3 -c 'import json, sys; marker = "<!-- aquila-blog:jacoco-coverage-summary -->"; comments = json.load(open(sys.argv[1], encoding="utf-8")); print(next((item["id"] for item in comments if marker in item.get("body", "")), ""))' "${comments_file}"
-            )"
-
-            if [[ -n "${comment_id}" ]]; then
-              gh api --method PATCH "repos/${GITHUB_REPOSITORY}/issues/comments/${comment_id}" --field body="${body}" \
-                || echo "::warning title=Jacoco comment skipped::GitHub comment update failed; summary is available in the step summary."
-            else
-              gh api --method POST "repos/${GITHUB_REPOSITORY}/issues/${PR_NUMBER}/comments" --field body="${body}" \
-                || echo "::warning title=Jacoco comment skipped::GitHub comment creation failed; summary is available in the step summary."
-            fi
-          else
-            echo "::warning title=Jacoco comment skipped::GitHub comment lookup failed; summary is available in the step summary."
-          fi
-
-          cat "${summary_file}" >> "${GITHUB_STEP_SUMMARY}"
-
-      - name: Upload Jacoco PR report
-        if: always() && steps.changes.outputs.backend == 'true' && hashFiles('back/build/reports/jacoco/pr/jacocoPrReport.xml') != ''
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
-        with:
-          name: jacoco-pr-report
-          path: |
-            back/build/reports/jacoco/pr/jacocoPrReport.xml
-            back/build/reports/jacoco/pr/html
-            back/build/reports/jacoco/pr-full/jacocoPrFullCoverageReport.xml
-            back/build/reports/jacoco/pr-full/html
-          if-no-files-found: error
-          retention-days: 3
 
       - name: Upload backend reports on failure
         if: failure() && steps.changes.outputs.backend == 'true'

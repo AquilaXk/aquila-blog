@@ -175,8 +175,8 @@ mkdir -p \
   "${route_repo}/contracts/public-api" \
   "${route_repo}/tools/test"
 printf 'name: CI\n' >"${route_repo}/.github/workflows/ci.yml"
-printf 'name: Dependabot Credential Contract\n' \
-  >"${route_repo}/.github/workflows/dependabot-credential-contract.yml"
+printf 'name: Reusable Backend Quality\n' \
+  >"${route_repo}/.github/workflows/reusable-backend-quality.yml"
 printf '// fixture\n' >"${route_repo}/back/gradle/backend-test-infra.gradle.kts"
 printf 'spring: {}\n' >"${route_repo}/back/src/main/resources/application.yml"
 printf '{}\n' >"${route_repo}/contracts/public-api/openapi.json"
@@ -198,12 +198,12 @@ assert_no_route_marker 'public-gradle'
 assert_no_route_marker 'public-sync'
 restore_route_fixture '.github/workflows/ci.yml'
 
-# The focused credential workflow keeps its execution-inventory binding without running
+# The reusable backend quality workflow keeps its execution-inventory binding without running
 # the public API exporter.
-stage_and_run_hook '.github/workflows/dependabot-credential-contract.yml'
+stage_and_run_hook '.github/workflows/reusable-backend-quality.yml'
 assert_route_marker 'inventory-test'
 assert_no_route_marker 'public-gradle'
-restore_route_fixture '.github/workflows/dependabot-credential-contract.yml'
+restore_route_fixture '.github/workflows/reusable-backend-quality.yml'
 
 # Hook routing changes self-validate without invoking the public exporter.
 stage_and_run_hook '.githooks/pre-commit'

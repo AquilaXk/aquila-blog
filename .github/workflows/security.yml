@@ -160,11 +160,11 @@ jobs:
         run: ./gradlew --no-daemon --no-build-cache --rerun-tasks classes -x test
 
       - name: Perform CodeQL Analysis (trusted context)
-        if: github.event_name != 'pull_request' || (github.event.pull_request.head.repo.fork == false && github.actor != 'dependabot[bot]')
+        if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.fork == false
         uses: github/codeql-action/analyze@256d634097be96e792d6764f9edaefc4320557b1 # v4
 
-      - name: Perform CodeQL Analysis (no upload for fork/dependabot PR)
-        if: github.event_name == 'pull_request' && (github.event.pull_request.head.repo.fork == true || github.actor == 'dependabot[bot]')
+      - name: Perform CodeQL Analysis (no upload for fork PR)
+        if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.fork == true
         uses: github/codeql-action/analyze@256d634097be96e792d6764f9edaefc4320557b1 # v4
         with:
           upload: never

@@ -15,7 +15,7 @@
 
 ## Method
 - Added `PerformanceSanityTest`:
-  - [PerformanceSanityTest.kt](/Users/aquila/Custom/GitProjects/aquila-blog/back/src/test/kotlin/com/back/perf/PerformanceSanityTest.kt)
+  - [PerformanceSanityTest.kt](src/test/kotlin/com/back/perf/PerformanceSanityTest.kt)
 - Measurement metric:
   - `SessionFactory.statistics.prepareStatementCount`
 - Query count was reset immediately before each measured HTTP request.
@@ -40,5 +40,5 @@
 
 ## Command
 ```bash
-./gradlew test --no-daemon --tests "com.back.perf.PerformanceSanityTest"
+./back/gradlew -p back test --no-daemon --tests "com.back.perf.PerformanceSanityTest"
 ```

@@ -1,6 +1,6 @@
+.DS_Store
+**/.DS_Store
 .idea/
-front/.idea/
-front/tsconfig.tsbuildinfo
 deploy/homeserver/.env.prod
 deploy/homeserver/.env.back.prod
 deploy/homeserver/.env.caddy.prod

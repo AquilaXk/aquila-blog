@@ -19,8 +19,8 @@ check out, build, scan, or retain a fallback copy of Web source.
 ## Stable runtime ownership
 
 The Web URL is `https://blog.aquilaxk.site`, and the public API is served from that
-same host by path rather than from a separate API host (#1575). The pre-transition
-hosts `www.aquilaxk.site` and `api.aquilaxk.site` are retired (#1555, #1596).
+same host by path rather than from a separate API host. The pre-transition
+hosts `www.aquilaxk.site` and `api.aquilaxk.site` are retired.
 Platform retains DB, Redis, MinIO, administrator cookies, and backend runtime
 ownership. The GHCR image family remains unchanged, including
 `ghcr.io/aquilaxk/aquila-blog-back`.

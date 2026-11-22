@@ -33,7 +33,7 @@
 - [`../docs/design/task-delivery-guarantees.md`](../docs/design/task-delivery-guarantees.md) (태스크 큐 및 비동기 처리 보장)
 - [`../docs/design/cache-consistency-contract.md`](../docs/design/cache-consistency-contract.md) (공개 조회 캐시 및 ETag 계약)
 - [`../docs/design/cloud-multipart-state-machine.md`](../docs/design/cloud-multipart-state-machine.md) (클라우드 멀티파트 상태 머신)
-- [`../docs/session-handoff.md`](../docs/session-handoff.md) (운영 세션 핸드오프)
+- [`../docs/design/profile-workspace-persistence.md`](../docs/design/profile-workspace-persistence.md) (프로필 워크스페이스 영속성)
 
 ## 핵심 기능
 
@@ -54,7 +54,7 @@
 
 ### 인증/세션
 
-- 일반 회원 비밀번호 로그인과 관리자 이메일 코드 로그인, 로그아웃, `auth/me` 제공
+- 단일 관리자 이메일 8자리 코드 인증과 서버 세션(`AdminSessionPrincipal`) 기반 토큰 회전, 로그아웃, `auth/me` 제공
 - 쿠키 기반 인증(`apiKey`, `accessToken`)
 
 #### 인증 흐름

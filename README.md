@@ -2,19 +2,19 @@
 
 **개인 기술 블로그와 서비스 표면을 뒷받침하는 백엔드 API, OpenAPI 공개 계약, 홈서버 블루/그린 배포 플랫폼**
 
-Aquila Blog Platform은 [blog.aquilaxk.site](https://blog.aquilaxk.site)와 [www.aquilaxk.site](https://www.aquilaxk.site)를 운영하는 백엔드 API, 데이터 계층, 홈서버 인프라를 관리하는 저장소입니다. Spring Boot 4.1(Kotlin) API 서버와 PostgreSQL(PGroonga), Redis, MinIO, Caddy 리버스 프록시, 관측·백업 스크립트를 한곳에서 다룹니다.
+Aquila Blog Platform은 [blog.aquilaxk.site](https://blog.aquilaxk.site)와 [www.aquilaxk.site](https://www.aquilaxk.site)를 운영하는 백엔드 API, 데이터 계층, 홈서버 인프라를 관리하는 저장소입니다. Spring Boot 4.1.1(Kotlin 2.4.10, Java 25) API 서버와 PostgreSQL(PGroonga), Redis 7.4, MinIO, Caddy 리버스 프록시, 관측·백업 스크립트를 한곳에서 다룹니다.
 
-웹 프론트엔드 소스, 에디터 스튜디오, 회사·다운로드 페이지 UI는 [AquilaXk/aquila-blog-web](https://github.com/AquilaXk/aquila-blog-web)이 소유합니다. 이 저장소는 공개 API 계약 정본(`contracts/public-api/`)을 생성하고 웹 저장소로 전달하는 역할까지 맡습니다.
+웹 프론트엔드 UI, 마크다운 에디터 스튜디오, 회사·다운로드 페이지 소스는 [AquilaXk/aquila-blog-web](https://github.com/AquilaXk/aquila-blog-web)이 소유합니다. 이 저장소는 공개 API 계약 정본(`contracts/public-api/`)을 생성해 웹 저장소 `main` 브랜치로 전달하고, 웹 런타임 이미지를 받아 블루/그린 무중단 배포까지 수행합니다.
 
 ![Aquila Blog Architecture](README.assets/portfolio/aquila-blog-architecture.png)
 
 ## 주요 구성
 
-* 백엔드 API(`back/`): 게시글 피드·상세·검색, 관리자 인증, 프로필 워크스페이스, 미디어 업로드·클라우드 재생, Flyway 마이그레이션
-* 공개 API 계약(`contracts/public-api/`): OpenAPI 명세, 에러 코드, 요약 픽스처 정본 생성 및 SHA-256 매니페스트 검증
-* 홈서버 배포(`deploy/homeserver/`): Blue/Green 무중단 배포, Caddy 리버스 프록시, DB/스토리지 외부 백업 및 롤백 스크립트
-* 관측과 부하 시험(`deploy/homeserver/monitoring/`, `perf/k6/`): Prometheus, Grafana, Loki/Promtail 설정 및 k6 읽기 경로 부하·카오스 시나리오
-* 저장소 가드(`tools/`): 경계 검사, 추적 금지 파일 검사, Flyway N-1 배포 안전성 검사, Git 훅 드리프트 검증
+* 백엔드 API(`back/`): `post`, `member`, `cloud`, `home` 경계로 나뉜 모듈과 `AFTER_COMMIT` 후속 처리, Weak ETag 공개 캐시, 단일 관리자 이메일 8자리 코드·서버 세션 인증(`AdminSessionPrincipal`)
+* 공개 API 계약(`contracts/public-api/`): OpenAPI 명세·에러 코드·요약 픽스처 정본 생성, SHA-256 매니페스트 검증, `sync-public-contract-to-web.yml` 기반 웹 저장소 `main` 직접 동기화
+* 홈서버 무중단 배포(`deploy/homeserver/`): 모듈화된 원격 롤아웃 스크립트(`remote_backend_rollout.sh`, `remote_front_rollout.sh`, `lib/`) 기반 Blue/Green 전환, Caddy 동일 출처 라우팅, 암호화 외부 백업·복원 리허설 및 자동 롤백
+* 관측과 부하 시험(`deploy/homeserver/monitoring/`, `perf/k6/`): Prometheus, Grafana, Loki/Promtail 운영 지표·로그 수집과 k6 읽기 경로 부하·카오스 시나리오
+* 저장소 가드와 배포 게이트(`tools/`, `.github/workflows/`): 저장소 경계, 추적 금지 파일, 훅 드리프트, 테스트 실행 인벤토리, Flyway N-1 호환성 검사 및 동일 SHA `Security` 통과 후 배포 강제
 
 설계 계약과 운영 런북은 [docs/README.md](docs/README.md), 백엔드 세부 구조는 [back/README.md](back/README.md), 홈서버 보안 점검 항목은 [deploy/homeserver/HARDENING.md](deploy/homeserver/HARDENING.md)에 있습니다.
 
@@ -35,6 +35,7 @@ docker compose -f back/devInfra/docker-compose.yml up -d           # 로컬 Post
 bash tools/guards/check-forbidden-tracked-files.sh
 node tools/repo-boundary/check-platform-boundary.mjs
 node tools/contracts/check-public-contracts.mjs
+node tools/ci/verify-test-execution-inventory.mjs
 ```
 
 ## 문제 신고

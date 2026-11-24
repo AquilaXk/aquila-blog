@@ -3,8 +3,11 @@ package com.back.boundedContexts.post.adapter.web
 import com.back.boundedContexts.post.dto.AdjacentPostsDto
 import com.back.boundedContexts.post.dto.CursorFeedPageDto
 import com.back.boundedContexts.post.dto.FeedPostDto
+import com.back.boundedContexts.post.dto.PostDto
+import com.back.boundedContexts.post.dto.PublicPostBacklinksResBody
 import com.back.boundedContexts.post.dto.PublicPostsBootstrapDto
 import com.back.boundedContexts.post.dto.PublicSitemapPostsResBody
+import com.back.boundedContexts.post.dto.PublicWikilinkCatalogResBody
 import com.back.boundedContexts.post.dto.TagCountDto
 import com.back.standard.dto.page.PageDto
 import com.back.standard.dto.post.type1.PostSearchSortType1
@@ -187,6 +190,23 @@ class PostPublicReadResponseFactory(
             data = data,
         )
 
+    fun buildPostDtoPageWeakEtag(
+        source: String,
+        page: Int,
+        pageSize: Int,
+        sort: PostSearchSortType1,
+        kw: String = "",
+        data: PageDto<PostDto>,
+    ): String =
+        etagSeedBuilder.buildPostDtoPageWeakEtag(
+            source = source,
+            page = page,
+            pageSize = pageSize,
+            sort = sort,
+            kw = kw,
+            data = data,
+        )
+
     fun buildCursorFeedWeakEtag(
         source: String,
         pageSize: Int,
@@ -246,4 +266,11 @@ class PostPublicReadResponseFactory(
         limit: Int,
         data: PublicSitemapPostsResBody,
     ): String = etagSeedBuilder.buildSitemapWeakEtag(limit, data)
+
+    fun buildWikilinkCatalogWeakEtag(data: PublicWikilinkCatalogResBody): String = etagSeedBuilder.buildWikilinkCatalogWeakEtag(data)
+
+    fun buildBacklinksWeakEtag(
+        id: Long,
+        data: PublicPostBacklinksResBody,
+    ): String = etagSeedBuilder.buildBacklinksWeakEtag(id, data)
 }

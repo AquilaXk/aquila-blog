@@ -113,8 +113,138 @@ class ImageUploadAdmissionValidator(
         if (normalizedDeclaredType != null && normalizedDeclaredType != detected.contentType) {
             throw invalidImage()
         }
+        if (detected.contentType == WEBP_CONTENT_TYPE) {
+            preScreenWebpContainer(path)
+        }
         return detected
     }
+
+    private fun preScreenWebpContainer(path: Path) {
+        val fileSize = Files.size(path)
+        if (fileSize < WEBP_MIN_FILE_BYTES) throw invalidImage()
+
+        BufferedInputStream(Files.newInputStream(path), IO_BUFFER_BYTES).use { input ->
+            preScreenWebpStream(input, fileSize)
+        }
+    }
+
+    internal fun preScreenWebpStream(
+        input: InputStream,
+        fileSize: Long,
+    ) {
+        if (fileSize < WEBP_MIN_FILE_BYTES) throw invalidImage()
+        val riffHeader = ByteArray(RIFF_HEADER_BYTES)
+        if (readFully(input, riffHeader, RIFF_HEADER_BYTES) != RIFF_HEADER_BYTES) {
+            throw invalidImage()
+        }
+        if (readInt32BE(riffHeader, 0) != RIFF_WORD || readInt32BE(riffHeader, 8) != WEBP_WORD) {
+            throw invalidImage()
+        }
+        val riffPayloadSize = readUint32LE(riffHeader, 4)
+        val maxAvailablePayload = fileSize - RIFF_CHUNK_HEADER_BYTES
+        // Allow at most 1 missing RIFF pad byte at EOF (matching real single-frame WebP streams) while failing closed on truncated containers.
+        if (riffPayloadSize < WEBP_MIN_RIFF_PAYLOAD_BYTES || riffPayloadSize > maxAvailablePayload + 1L) {
+            throw invalidImage()
+        }
+        val riffEnd = minOf(fileSize, RIFF_CHUNK_HEADER_BYTES.toLong() + riffPayloadSize)
+
+        val chunkHeader = ByteArray(RIFF_CHUNK_HEADER_BYTES)
+        val payloadHead = ByteArray(WEBP_VP8X_PAYLOAD_BYTES)
+        var offset = RIFF_HEADER_BYTES.toLong()
+        var chunkCount = 0
+        var sawImageChunk = false
+
+        while (offset + RIFF_CHUNK_HEADER_BYTES <= riffEnd) {
+            chunkCount += 1
+            if (chunkCount > MAX_PNG_CHUNKS) throw invalidImage()
+
+            if (readFully(input, chunkHeader, RIFF_CHUNK_HEADER_BYTES) != RIFF_CHUNK_HEADER_BYTES) {
+                throw invalidImage()
+            }
+            val chunkFourCc = readInt32BE(chunkHeader, 0)
+            val chunkSize = readUint32LE(chunkHeader, 4)
+            val remainingInRiff = riffEnd - offset - RIFF_CHUNK_HEADER_BYTES
+            if (chunkSize > remainingInRiff + 1L) {
+                throw invalidImage()
+            }
+            val paddedChunkSize = chunkSize + (chunkSize and 1L)
+            val bytesToConsume = minOf(paddedChunkSize, remainingInRiff)
+
+            if (chunkFourCc == WEBP_ANIM_CHUNK_WORD || chunkFourCc == WEBP_ANMF_CHUNK_WORD) {
+                throw invalidImage()
+            }
+            if (chunkCount == 1 && !isFirstWebpChunk(chunkFourCc)) {
+                throw invalidImage()
+            }
+
+            var consumed = 0L
+            when (chunkFourCc) {
+                WEBP_VP8_CHUNK_WORD -> {
+                    if (chunkSize < WEBP_VP8_HEADER_BYTES) throw invalidImage()
+                    if (readFully(input, payloadHead, WEBP_VP8_HEADER_BYTES) != WEBP_VP8_HEADER_BYTES) {
+                        throw invalidImage()
+                    }
+                    consumed = WEBP_VP8_HEADER_BYTES.toLong()
+                    // RFC 6386 frame tag bit 0: 0=keyframe, 1=interframe; bytes 3..5: 0x9D 0x01 0x2A
+                    if (
+                        (payloadHead[0].toInt() and 0x01) != 0 ||
+                        (payloadHead[3].toInt() and 0xFF) != 0x9D ||
+                        (payloadHead[4].toInt() and 0xFF) != 0x01 ||
+                        (payloadHead[5].toInt() and 0xFF) != 0x2A
+                    ) {
+                        throw invalidImage()
+                    }
+                    val width = (payloadHead[6].toInt() and 0xFF) or ((payloadHead[7].toInt() and 0x3F) shl 8)
+                    val height = (payloadHead[8].toInt() and 0xFF) or ((payloadHead[9].toInt() and 0x3F) shl 8)
+                    validateBounds(width, height)
+                    sawImageChunk = true
+                }
+                WEBP_VP8L_CHUNK_WORD -> {
+                    if (chunkSize < WEBP_VP8L_HEADER_BYTES) throw invalidImage()
+                    if (readFully(input, payloadHead, WEBP_VP8L_HEADER_BYTES) != WEBP_VP8L_HEADER_BYTES) {
+                        throw invalidImage()
+                    }
+                    consumed = WEBP_VP8L_HEADER_BYTES.toLong()
+                    if ((payloadHead[0].toInt() and 0xFF) != WEBP_VP8L_SIGNATURE_BYTE) {
+                        throw invalidImage()
+                    }
+                    val packedDims = readInt32LE(payloadHead, 1)
+                    val width = (packedDims and 0x3FFF) + 1
+                    val height = ((packedDims ushr 14) and 0x3FFF) + 1
+                    validateBounds(width, height)
+                    sawImageChunk = true
+                }
+                WEBP_VP8X_CHUNK_WORD -> {
+                    if (chunkCount != 1 || chunkSize != WEBP_VP8X_PAYLOAD_BYTES.toLong()) {
+                        throw invalidImage()
+                    }
+                    if (readFully(input, payloadHead, WEBP_VP8X_PAYLOAD_BYTES) != WEBP_VP8X_PAYLOAD_BYTES) {
+                        throw invalidImage()
+                    }
+                    consumed = WEBP_VP8X_PAYLOAD_BYTES.toLong()
+                    if ((payloadHead[0].toInt() and WEBP_VP8X_ANIMATION_FLAG) != 0) {
+                        throw invalidImage()
+                    }
+                    val canvasWidth = readUint24LE(payloadHead, 4) + 1
+                    val canvasHeight = readUint24LE(payloadHead, 7) + 1
+                    validateBounds(canvasWidth, canvasHeight)
+                    sawImageChunk = true
+                }
+            }
+
+            if (bytesToConsume > consumed) {
+                skipExact(input, bytesToConsume - consumed)
+            }
+            offset += RIFF_CHUNK_HEADER_BYTES + bytesToConsume
+        }
+
+        if (!sawImageChunk) throw invalidImage()
+    }
+
+    private fun isFirstWebpChunk(fourCc: Int): Boolean =
+        fourCc == WEBP_VP8_CHUNK_WORD ||
+            fourCc == WEBP_VP8L_CHUNK_WORD ||
+            fourCc == WEBP_VP8X_CHUNK_WORD
 
     private fun <T> decodeWithConcurrencyLimit(block: () -> T): T {
         var acquired = false
@@ -223,6 +353,20 @@ class ImageUploadAdmissionValidator(
         private const val GIF8_WORD = 0x4749_4638
         private const val RIFF_WORD = 0x5249_4646
         private const val WEBP_WORD = 0x5745_4250
+        private const val WEBP_VP8_CHUNK_WORD = 0x5650_3820
+        private const val WEBP_VP8L_CHUNK_WORD = 0x5650_384C
+        private const val WEBP_VP8X_CHUNK_WORD = 0x5650_3858
+        private const val WEBP_ANIM_CHUNK_WORD = 0x414E_494D
+        private const val WEBP_ANMF_CHUNK_WORD = 0x414E_4D46
+        private const val RIFF_HEADER_BYTES = 12
+        private const val RIFF_CHUNK_HEADER_BYTES = 8
+        private const val WEBP_MIN_FILE_BYTES = 20L
+        private const val WEBP_MIN_RIFF_PAYLOAD_BYTES = 12L
+        private const val WEBP_VP8_HEADER_BYTES = 10
+        private const val WEBP_VP8L_HEADER_BYTES = 5
+        private const val WEBP_VP8L_SIGNATURE_BYTE = 0x2F
+        private const val WEBP_VP8X_PAYLOAD_BYTES = 10
+        private const val WEBP_VP8X_ANIMATION_FLAG = 0x02
 
         private const val JPEG_CONTENT_TYPE = "image/jpeg"
         private const val PNG_CONTENT_TYPE = "image/png"
@@ -318,6 +462,28 @@ class ImageUploadAdmissionValidator(
             bytes: ByteArray,
             offset: Int,
         ): Long = readInt32BE(bytes, offset).toLong() and 0xFFFF_FFFFL
+
+        fun readInt32LE(
+            bytes: ByteArray,
+            offset: Int,
+        ): Int =
+            (bytes[offset].toInt() and 0xFF) or
+                ((bytes[offset + 1].toInt() and 0xFF) shl 8) or
+                ((bytes[offset + 2].toInt() and 0xFF) shl 16) or
+                ((bytes[offset + 3].toInt() and 0xFF) shl 24)
+
+        fun readUint32LE(
+            bytes: ByteArray,
+            offset: Int,
+        ): Long = readInt32LE(bytes, offset).toLong() and 0xFFFF_FFFFL
+
+        fun readUint24LE(
+            bytes: ByteArray,
+            offset: Int,
+        ): Int =
+            (bytes[offset].toInt() and 0xFF) or
+                ((bytes[offset + 1].toInt() and 0xFF) shl 8) or
+                ((bytes[offset + 2].toInt() and 0xFF) shl 16)
 
         fun readInt64BE(
             bytes: ByteArray,

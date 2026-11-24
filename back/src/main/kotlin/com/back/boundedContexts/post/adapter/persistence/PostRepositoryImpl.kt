@@ -4,8 +4,10 @@ import com.back.boundedContexts.member.domain.shared.Member
 import com.back.boundedContexts.post.domain.Post
 import com.back.boundedContexts.post.domain.PostAttr
 import com.back.boundedContexts.post.dto.PostInteractionReadStateDto
+import com.back.boundedContexts.post.dto.PublicBacklinkCandidateProjection
 import com.back.boundedContexts.post.dto.PublicPostDetailContentCacheDto
 import com.back.boundedContexts.post.dto.PublicSitemapPostItemDto
+import com.back.boundedContexts.post.dto.PublicWikilinkCatalogItemDto
 import com.back.boundedContexts.post.model.PostSummarySource
 import com.back.boundedContexts.post.model.QPost.post
 import com.back.boundedContexts.post.model.QPostTagIndex.postTagIndex
@@ -203,6 +205,69 @@ class PostRepositoryImpl(
             .map { tuple ->
                 PublicSitemapPostItemDto(
                     id = tuple.get(post.id)!!,
+                    createdAt = tuple.get(post.createdAt)!!,
+                    modifiedAt = tuple.get(post.modifiedAt)!!,
+                )
+            }
+    }
+
+    override fun findPublicWikilinkCatalogItems(limit: Int): List<PublicWikilinkCatalogItemDto> {
+        val safeLimit = limit.coerceIn(1, MAX_WIKILINK_CATALOG_LIMIT)
+        return queryFactory
+            .select(
+                post.id,
+                post.title,
+                post.createdAt,
+            ).from(post)
+            .where(
+                post.deletedAt.isNull,
+                post.published.isTrue,
+                post.listed.isTrue,
+                post.isTempDraft.isFalse,
+            ).orderBy(post.createdAt.desc(), post.id.desc())
+            .limit(safeLimit.toLong())
+            .fetch()
+            .map { tuple ->
+                PublicWikilinkCatalogItemDto(
+                    id = tuple.get(post.id)!!,
+                    title = tuple.get(post.title)!!,
+                    createdAt = tuple.get(post.createdAt)!!,
+                )
+            }
+    }
+
+    override fun findPublicBacklinkCandidates(
+        targetPostId: Long,
+        limit: Int,
+    ): List<PublicBacklinkCandidateProjection> {
+        if (targetPostId <= 0L) return emptyList()
+        val safeLimit = limit.coerceIn(1, MAX_BACKLINK_CANDIDATE_LIMIT)
+        val pathToken = "/posts/$targetPostId"
+        return queryFactory
+            .select(
+                post.id,
+                post.title,
+                post.summaryText,
+                post.content,
+                post.createdAt,
+                post.modifiedAt,
+            ).from(post)
+            .where(
+                post.deletedAt.isNull,
+                post.published.isTrue,
+                post.listed.isTrue,
+                post.isTempDraft.isFalse,
+                post.id.ne(targetPostId),
+                post.content.contains("[[").or(post.content.contains(pathToken)),
+            ).orderBy(post.createdAt.desc(), post.id.desc())
+            .limit(safeLimit.toLong())
+            .fetch()
+            .map { tuple ->
+                PublicBacklinkCandidateProjection(
+                    id = tuple.get(post.id)!!,
+                    title = tuple.get(post.title)!!,
+                    summaryText = tuple.get(post.summaryText),
+                    content = tuple.get(post.content)!!,
                     createdAt = tuple.get(post.createdAt)!!,
                     modifiedAt = tuple.get(post.modifiedAt)!!,
                 )
@@ -744,6 +809,19 @@ class PostRepositoryImpl(
         updateClause.where(post.id.eq(targetPost.id)).execute()
     }
 
+    override fun updateHitCountById(
+        postId: Long,
+        hitCount: Int,
+    ) {
+        updatePostCounterColumnById(
+            postId = postId,
+            counterColumn = "hit_count",
+            attrColumn = "hit_count_attr_id",
+            attrName = "hitCount",
+            counterValue = hitCount,
+        )
+    }
+
     override fun updateLikesCount(
         targetPost: Post,
         likesCount: Int,
@@ -761,6 +839,50 @@ class PostRepositoryImpl(
             updateClause.set(post.likesCountAttr, likesCountAttr)
         }
         updateClause.where(post.id.eq(targetPost.id)).execute()
+    }
+
+    override fun updateLikesCountById(
+        postId: Long,
+        likesCount: Int,
+    ) {
+        updatePostCounterColumnById(
+            postId = postId,
+            counterColumn = "likes_count",
+            attrColumn = "likes_count_attr_id",
+            attrName = "likesCount",
+            counterValue = likesCount,
+        )
+    }
+
+    private fun updatePostCounterColumnById(
+        postId: Long,
+        counterColumn: String,
+        attrColumn: String,
+        attrName: String,
+        counterValue: Int,
+    ) {
+        entityManager
+            ?.createNativeQuery(
+                """
+                update post
+                set $counterColumn = :counterValue,
+                    $attrColumn = coalesce(
+                        $attrColumn,
+                        (
+                            select a.id
+                            from post_attr a
+                            where a.subject_id = :postId
+                              and a.name = :attrName
+                            order by a.id asc
+                            limit 1
+                        )
+                    )
+                where id = :postId
+                """.trimIndent(),
+            )?.setParameter("counterValue", counterValue)
+            ?.setParameter("postId", postId)
+            ?.setParameter("attrName", attrName)
+            ?.executeUpdate()
     }
 
     private fun syncLoadedCounterState(
@@ -829,6 +951,8 @@ class PostRepositoryImpl(
         private const val FLAG_PGROONGA_SPECIAL = 1
         private const val FLAG_WHITESPACE = 2
         private const val MAX_PUBLIC_SITEMAP_LIMIT = 10_000
+        private const val MAX_WIKILINK_CATALOG_LIMIT = 5_000
+        private const val MAX_BACKLINK_CANDIDATE_LIMIT = 200
         private val ASCII_SEARCH_CHAR_FLAGS =
             ByteArray(128).apply {
                 for (c in "\"'()\\+-*~<>:@^$?[]{}|") {

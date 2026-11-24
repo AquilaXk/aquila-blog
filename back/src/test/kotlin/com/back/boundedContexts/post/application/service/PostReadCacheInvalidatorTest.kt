@@ -111,10 +111,13 @@ class PostReadCacheInvalidatorTest {
         }
         put(PostQueryCacheNames.TAGS, "public")
         put(PostQueryCacheNames.SITEMAP, 10000)
+        put(PostQueryCacheNames.WIKILINK_CATALOG, "public")
+        put(PostQueryCacheNames.BACKLINKS, 77L)
         put(PostQueryCacheNames.DETAIL_PUBLIC_SNAPSHOT, 77L)
         put(PostQueryCacheNames.DETAIL_PUBLIC_META, 77L)
         put(PostQueryCacheNames.DETAIL_PUBLIC_CONTENT, 77L)
         put(PostQueryCacheNames.DETAIL_PUBLIC_NEGATIVE, 77L)
+        put(PostQueryCacheNames.ADJACENT_POSTS, 77L)
 
         // when
         invalidator.invalidate(
@@ -186,10 +189,13 @@ class PostReadCacheInvalidatorTest {
         }
         assertThat(get(PostQueryCacheNames.TAGS, "public")).isNull()
         assertThat(get(PostQueryCacheNames.SITEMAP, 10000)).isNull()
+        assertThat(get(PostQueryCacheNames.WIKILINK_CATALOG, "public")).isNull()
+        assertThat(get(PostQueryCacheNames.BACKLINKS, 77L)).isNull()
         assertThat(get(PostQueryCacheNames.DETAIL_PUBLIC_SNAPSHOT, 77L)).isNull()
         assertThat(get(PostQueryCacheNames.DETAIL_PUBLIC_META, 77L)).isNull()
         assertThat(get(PostQueryCacheNames.DETAIL_PUBLIC_CONTENT, 77L)).isNull()
         assertThat(get(PostQueryCacheNames.DETAIL_PUBLIC_NEGATIVE, 77L)).isNull()
+        assertThat(get(PostQueryCacheNames.ADJACENT_POSTS, 77L)).isNull()
         assertThat(meterRegistry.find("post.read.cache.evict").counters()).isNotEmpty
     }
 
@@ -203,6 +209,7 @@ class PostReadCacheInvalidatorTest {
         put(PostQueryCacheNames.DETAIL_PUBLIC_META, 101L)
         put(PostQueryCacheNames.DETAIL_PUBLIC_CONTENT, 101L)
         put(PostQueryCacheNames.DETAIL_PUBLIC_NEGATIVE, 101L)
+        put(PostQueryCacheNames.ADJACENT_POSTS, 101L)
 
         // when
         invalidator.invalidate(
@@ -224,6 +231,7 @@ class PostReadCacheInvalidatorTest {
         assertThat(get(PostQueryCacheNames.DETAIL_PUBLIC_META, 101L)).isNull()
         assertThat(get(PostQueryCacheNames.DETAIL_PUBLIC_CONTENT, 101L)).isNull()
         assertThat(get(PostQueryCacheNames.DETAIL_PUBLIC_NEGATIVE, 101L)).isNull()
+        assertThat(get(PostQueryCacheNames.ADJACENT_POSTS, 101L)).isNull()
     }
 
     @Test
@@ -443,6 +451,8 @@ class PostReadCacheInvalidatorTest {
                 .build()
         val redisInvalidator = PostReadCacheInvalidator(redisCacheManager, SimpleMeterRegistry())
 
+        redisCacheManager.getCache(PostQueryCacheNames.ITEMS)!!.put("page=1:size=30:sort=CREATED_AT:kw=_", "v")
+        redisCacheManager.getCache(PostQueryCacheNames.ITEMS)!!.put("page=1:size=30:sort=HIT_COUNT:kw=_", "v")
         redisCacheManager.getCache(PostQueryCacheNames.FEED)!!.put("page=1:size=30:sort=CREATED_AT", "v")
         redisCacheManager.getCache(PostQueryCacheNames.FEED)!!.put("page=2:size=30:sort=HIT_COUNT", "v")
         redisCacheManager.getCache(PostQueryCacheNames.FEED_CURSOR_FIRST)!!.put("size=30:sort=CREATED_AT", "v")
@@ -464,6 +474,7 @@ class PostReadCacheInvalidatorTest {
         redisInvalidator.invalidateRankedSortHotPages("hit", listOf(PostSearchSortType1.HIT_COUNT))
 
         assertThat(cleanedPatterns).containsExactly(
+            PostQueryCacheNames.ITEMS to "${PostQueryCacheNames.ITEMS}::*:sort=HIT_COUNT:*",
             PostQueryCacheNames.FEED to "${PostQueryCacheNames.FEED}::*:sort=HIT_COUNT",
             PostQueryCacheNames.FEED_CURSOR_FIRST to "${PostQueryCacheNames.FEED_CURSOR_FIRST}::*:sort=HIT_COUNT",
             PostQueryCacheNames.BOOTSTRAP to "${PostQueryCacheNames.BOOTSTRAP}::*:sort=HIT_COUNT:*",
@@ -472,6 +483,7 @@ class PostReadCacheInvalidatorTest {
             PostQueryCacheNames.SEARCH to "${PostQueryCacheNames.SEARCH}::*:sort=HIT_COUNT:*",
         )
         assertThat(store.keys).containsExactly(
+            "${PostQueryCacheNames.ITEMS}::page=1:size=30:sort=CREATED_AT:kw=_",
             "${PostQueryCacheNames.FEED}::page=1:size=30:sort=CREATED_AT",
             "${PostQueryCacheNames.FEED_CURSOR_FIRST}::size=30:sort=CREATED_AT",
             "${PostQueryCacheNames.BOOTSTRAP}::size=30:sort=CREATED_AT:tag=_",
@@ -592,6 +604,7 @@ class PostReadCacheInvalidatorTest {
         ConcurrentMapCacheManager(
             PostQueryCacheNames.ADMIN_POSTS_FIRST_PAGE,
             PostQueryCacheNames.FEED,
+            PostQueryCacheNames.ITEMS,
             PostQueryCacheNames.EXPLORE,
             PostQueryCacheNames.FEED_CURSOR_FIRST,
             PostQueryCacheNames.EXPLORE_CURSOR_FIRST,
@@ -600,6 +613,8 @@ class PostReadCacheInvalidatorTest {
             PostQueryCacheNames.SEARCH_NEGATIVE,
             PostQueryCacheNames.TAGS,
             PostQueryCacheNames.SITEMAP,
+            PostQueryCacheNames.WIKILINK_CATALOG,
+            PostQueryCacheNames.BACKLINKS,
             PostQueryCacheNames.DETAIL_PUBLIC_SNAPSHOT,
             PostQueryCacheNames.DETAIL_PUBLIC_META,
             PostQueryCacheNames.DETAIL_PUBLIC_CONTENT,

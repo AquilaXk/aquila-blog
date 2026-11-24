@@ -11,4 +11,12 @@ interface PostLikeRepositoryCustom {
         liker: Member,
         post: Post,
     ): Long?
+
+    /**
+     * @return 신규 좋아요 row id, 이미 존재하면 null
+     */
+    fun insertIfAbsentByIds(
+        likerId: Long,
+        postId: Long,
+    ): Long?
 }

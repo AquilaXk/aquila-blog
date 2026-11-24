@@ -8,8 +8,10 @@ import com.back.boundedContexts.post.dto.CursorFeedPageDto
 import com.back.boundedContexts.post.dto.FeedPostDto
 import com.back.boundedContexts.post.dto.PostDto
 import com.back.boundedContexts.post.dto.PostWithContentDto
+import com.back.boundedContexts.post.dto.PublicPostBacklinksResBody
 import com.back.boundedContexts.post.dto.PublicPostsBootstrapDto
 import com.back.boundedContexts.post.dto.PublicSitemapPostsResBody
+import com.back.boundedContexts.post.dto.PublicWikilinkCatalogResBody
 import com.back.boundedContexts.post.dto.TagCountDto
 import com.back.global.web.application.Rq
 import com.back.standard.dto.page.PageDto
@@ -19,7 +21,6 @@ import jakarta.servlet.http.HttpServletResponse
 import jakarta.validation.constraints.Min
 import jakarta.validation.constraints.Positive
 import org.springframework.http.ResponseEntity
-import org.springframework.transaction.annotation.Transactional
 import org.springframework.web.bind.annotation.*
 
 internal fun postExploreCursorSurrogateKeys(normalizedTag: String): Set<String> =
@@ -292,6 +293,25 @@ class ApiV1PostPublicReadController(
         )
     }
 
+    @GetMapping("/wikilink-catalog")
+    fun getWikilinkCatalog(
+        request: HttpServletRequest,
+        response: HttpServletResponse,
+    ): ResponseEntity<PublicWikilinkCatalogResBody> {
+        val startedAtNanos = System.nanoTime()
+        val data = postPublicReadQueryUseCase.getPublicWikilinkCatalog()
+        val weakEtag = postPublicReadResponseFactory.buildWikilinkCatalogWeakEtag(data)
+        return postPublicReadResponseFactory.respondWithWeakEtag(
+            request = request,
+            response = response,
+            cachePolicy = PostPublicReadCachePolicies.WIKILINK_CATALOG,
+            surrogateKeys = setOf(PostCacheTags.LIST, PostCacheTags.SITEMAP),
+            weakEtag = weakEtag,
+            startedAtNanos = startedAtNanos,
+            body = data,
+        )
+    }
+
     @GetMapping("/bootstrap")
     fun getBootstrap(
         request: HttpServletRequest,
@@ -337,17 +357,59 @@ class ApiV1PostPublicReadController(
     }
 
     @GetMapping
-    @Transactional(readOnly = true)
     fun getItems(
+        request: HttpServletRequest,
+        response: HttpServletResponse,
         @RequestParam(defaultValue = "1") page: Int,
         @RequestParam(defaultValue = "30") pageSize: Int,
         @RequestParam(defaultValue = "") kw: String,
         @RequestParam(defaultValue = "CREATED_AT") sort: PostSearchSortType1,
-    ): PageDto<PostDto> {
+    ): ResponseEntity<PageDto<PostDto>> {
+        val startedAtNanos = System.nanoTime()
         val validPage = normalizePublicPage(page)
         val validPageSize = pageSize.coerceIn(1, 30)
-        val postPage = postUseCase.findPagedByKw(postSearchIntentResolver.normalizeKeyword(kw), sort, validPage, validPageSize)
-        return postWebDtoAssembler.makePostDtoPage(postPage)
+        val normalizedKw = postSearchIntentResolver.normalizeKeyword(kw)
+        val data = postPublicReadQueryUseCase.getPublicItems(validPage, validPageSize, normalizedKw, sort)
+        val surrogateKeys =
+            if (normalizedKw.isBlank()) {
+                setOf(PostCacheTags.LIST, PostCacheTags.FEED)
+            } else {
+                setOf(PostCacheTags.LIST, PostCacheTags.SEARCH)
+            }
+        val cachePolicy =
+            if (normalizedKw.isBlank()) {
+                PostPublicReadCachePolicies.FEED
+            } else {
+                postPublicReadResponseFactory.resolveSearchReadCachePolicy(normalizedKw)
+            }
+        if (cachePolicy.noStore) {
+            return postPublicReadResponseFactory.respondNoStore(
+                response = response,
+                cachePolicy = cachePolicy,
+                surrogateKeys = surrogateKeys,
+                startedAtNanos = startedAtNanos,
+                originDescription = "items-no-store",
+                body = data,
+            )
+        }
+        val weakEtag =
+            postPublicReadResponseFactory.buildPostDtoPageWeakEtag(
+                source = "items",
+                page = validPage,
+                pageSize = validPageSize,
+                sort = sort,
+                kw = normalizedKw,
+                data = data,
+            )
+        return postPublicReadResponseFactory.respondWithWeakEtag(
+            request = request,
+            response = response,
+            cachePolicy = cachePolicy,
+            surrogateKeys = surrogateKeys,
+            weakEtag = weakEtag,
+            startedAtNanos = startedAtNanos,
+            body = data,
+        )
     }
 
     @GetMapping("/{id}")
@@ -392,6 +454,26 @@ class ApiV1PostPublicReadController(
             response = response,
             cachePolicy = PostPublicReadCachePolicies.ADJACENT,
             surrogateKeys = setOf(PostCacheTags.LIST, PostCacheTags.DETAIL),
+            weakEtag = weakEtag,
+            startedAtNanos = startedAtNanos,
+            body = data,
+        )
+    }
+
+    @GetMapping("/{id}/backlinks")
+    fun getBacklinks(
+        request: HttpServletRequest,
+        response: HttpServletResponse,
+        @PathVariable @Positive id: Long,
+    ): ResponseEntity<PublicPostBacklinksResBody> {
+        val startedAtNanos = System.nanoTime()
+        val data = postPublicReadQueryUseCase.getPublicBacklinks(id)
+        val weakEtag = postPublicReadResponseFactory.buildBacklinksWeakEtag(id, data)
+        return postPublicReadResponseFactory.respondWithWeakEtag(
+            request = request,
+            response = response,
+            cachePolicy = PostPublicReadCachePolicies.BACKLINKS,
+            surrogateKeys = setOf(PostCacheTags.LIST, PostCacheTags.DETAIL, PostCacheTags.byPostId(id)),
             weakEtag = weakEtag,
             startedAtNanos = startedAtNanos,
             body = data,

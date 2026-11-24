@@ -21,6 +21,12 @@ interface PostAttrRepositoryCustom {
         delta: Int = 1,
     ): Int
 
+    fun incrementIntValueBySubjectId(
+        subjectId: Long,
+        name: String,
+        delta: Int = 1,
+    ): Int
+
     fun findRecentlyModifiedByName(
         name: String,
         modifiedAfter: Instant,

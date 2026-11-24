@@ -268,6 +268,7 @@ custom:
       system-admin-health-summary-v1: ${CUSTOM__CACHE__SYSTEM_ADMIN_HEALTH_SUMMARY_TTL_SECONDS:5}
       post-admin-posts-first-page-v2: ${CUSTOM__CACHE__POST_ADMIN_POSTS_FIRST_PAGE_TTL_SECONDS:8}
       post-bootstrap-v2: ${CUSTOM__CACHE__POST_BOOTSTRAP_TTL_SECONDS:8}
+      post-items-v1: ${CUSTOM__CACHE__POST_ITEMS_TTL_SECONDS:8}
       post-feed-v5: ${CUSTOM__CACHE__POST_FEED_TTL_SECONDS:8}
       post-feed-cursor-first-v2: ${CUSTOM__CACHE__POST_FEED_CURSOR_FIRST_TTL_SECONDS:8}
       post-explore-v5: ${CUSTOM__CACHE__POST_EXPLORE_TTL_SECONDS:8}
@@ -276,6 +277,8 @@ custom:
       post-search-negative-v1: ${CUSTOM__CACHE__POST_SEARCH_NEGATIVE_TTL_SECONDS:20}
       post-tags-v4: ${CUSTOM__CACHE__POST_TAGS_TTL_SECONDS:12}
       post-sitemap-v1: ${CUSTOM__CACHE__POST_SITEMAP_TTL_SECONDS:12}
+      post-wikilink-catalog-v1: ${CUSTOM__CACHE__POST_WIKILINK_CATALOG_TTL_SECONDS:12}
+      post-backlinks-v1: ${CUSTOM__CACHE__POST_BACKLINKS_TTL_SECONDS:15}
       post-detail-public-snapshot-v2: ${CUSTOM__CACHE__POST_DETAIL_PUBLIC_SNAPSHOT_TTL_SECONDS:20}
       post-detail-public-meta-v2: ${CUSTOM__CACHE__POST_DETAIL_PUBLIC_META_TTL_SECONDS:15}
       post-detail-public-content-v2: ${CUSTOM__CACHE__POST_DETAIL_PUBLIC_CONTENT_TTL_SECONDS:15}

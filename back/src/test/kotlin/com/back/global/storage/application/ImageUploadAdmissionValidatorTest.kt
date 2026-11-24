@@ -384,6 +384,160 @@ class ImageUploadAdmissionValidatorTest {
         assertThat(permits.get()).isEqualTo(2)
     }
 
+    @Test
+    @DisplayName("WebP 헤더 선검증은 디코더 진입 전에 VP8X 애니메이션·ANIM/ANMF 청크·초대형 차원을 거부한다")
+    fun `preScreen rejects animated and oversized webp headers before imageio decode`() {
+        val validator = ImageUploadAdmissionValidator()
+        val readerCalled = AtomicBoolean(false)
+        val failIfCalledReaders: (javax.imageio.stream.ImageInputStream) -> Iterator<javax.imageio.ImageReader> = {
+            readerCalled.set(true)
+            emptyList<javax.imageio.ImageReader>().iterator()
+        }
+
+        val animatedVp8x = buildWebpBytes("VP8X", vp8xPayload(flags = 0x02, width = 120, height = 80))
+        val animatedVp8xFile = tempDir.resolve("animated-flag.webp")
+        Files.write(animatedVp8xFile, animatedVp8x)
+        assertThatThrownBy {
+            validator.validateWithReaders(animatedVp8xFile, "image/webp", failIfCalledReaders)
+        }.isInstanceOf(AppException::class.java)
+        assertThat(readerCalled.get()).isFalse()
+
+        val forgedVp8xWithAnim =
+            buildWebpBytes(
+                "VP8X" to vp8xPayload(flags = 0x00, width = 120, height = 80),
+                "ANIM" to ByteArray(6),
+            )
+        val forgedAnimFile = tempDir.resolve("forged-anim.webp")
+        Files.write(forgedAnimFile, forgedVp8xWithAnim)
+        assertThatThrownBy {
+            validator.validateWithReaders(forgedAnimFile, "image/webp", failIfCalledReaders)
+        }.isInstanceOf(AppException::class.java)
+        assertThat(readerCalled.get()).isFalse()
+
+        val oversizedVp8x = buildWebpBytes("VP8X", vp8xPayload(flags = 0x00, width = 5000, height = 5000))
+        val oversizedVp8xFile = tempDir.resolve("oversized-vp8x.webp")
+        Files.write(oversizedVp8xFile, oversizedVp8x)
+        assertThatThrownBy {
+            validator.validateWithReaders(oversizedVp8xFile, "image/webp", failIfCalledReaders)
+        }.isInstanceOf(AppException::class.java)
+        assertThat(readerCalled.get()).isFalse()
+
+        val oversizedVp8l = buildWebpBytes("VP8L", vp8lPayload(width = 5000, height = 100))
+        val oversizedVp8lFile = tempDir.resolve("oversized-vp8l.webp")
+        Files.write(oversizedVp8lFile, oversizedVp8l)
+        assertThatThrownBy {
+            validator.validateWithReaders(oversizedVp8lFile, "image/webp", failIfCalledReaders)
+        }.isInstanceOf(AppException::class.java)
+        assertThat(readerCalled.get()).isFalse()
+
+        val oversizedVp8 = buildWebpBytes("VP8 ", vp8Payload(width = 4097, height = 100))
+        val oversizedVp8File = tempDir.resolve("oversized-vp8.webp")
+        Files.write(oversizedVp8File, oversizedVp8)
+        assertThatThrownBy {
+            validator.validateWithReaders(oversizedVp8File, "image/webp", failIfCalledReaders)
+        }.isInstanceOf(AppException::class.java)
+        assertThat(readerCalled.get()).isFalse()
+
+        val validStaticVp8x =
+            buildWebpBytes(
+                "VP8X" to vp8xPayload(flags = 0x10, width = 640, height = 480),
+                "VP8L" to vp8lPayload(width = 640, height = 480),
+            )
+        validator.preScreenWebpStream(java.io.ByteArrayInputStream(validStaticVp8x), validStaticVp8x.size.toLong())
+
+        val validVp8 = buildWebpBytes("VP8 ", vp8Payload(width = 320, height = 240))
+        validator.preScreenWebpStream(java.io.ByteArrayInputStream(validVp8), validVp8.size.toLong())
+
+        val truncatedRiff = validVp8.copyOf(validVp8.size - 2)
+        assertThatThrownBy {
+            validator.preScreenWebpStream(java.io.ByteArrayInputStream(truncatedRiff), truncatedRiff.size.toLong())
+        }.isInstanceOf(AppException::class.java)
+    }
+
+    private fun buildWebpBytes(
+        chunkId: String,
+        payload: ByteArray,
+    ): ByteArray = buildWebpBytes(chunkId to payload)
+
+    private fun buildWebpBytes(vararg chunks: Pair<String, ByteArray>): ByteArray {
+        val body = ByteArrayOutputStream()
+        body.write("WEBP".toByteArray(Charsets.US_ASCII))
+        chunks.forEach { (id, payload) ->
+            body.write(id.toByteArray(Charsets.US_ASCII))
+            writeInt32LE(body, payload.size)
+            body.write(payload)
+            if ((payload.size and 1) == 1) body.write(0)
+        }
+        val bodyBytes = body.toByteArray()
+        val full = ByteArrayOutputStream()
+        full.write("RIFF".toByteArray(Charsets.US_ASCII))
+        writeInt32LE(full, bodyBytes.size)
+        full.write(bodyBytes)
+        return full.toByteArray()
+    }
+
+    private fun vp8xPayload(
+        flags: Int,
+        width: Int,
+        height: Int,
+    ): ByteArray {
+        val wMinus1 = width - 1
+        val hMinus1 = height - 1
+        return byteArrayOf(
+            flags.toByte(),
+            0,
+            0,
+            0,
+            (wMinus1 and 0xFF).toByte(),
+            ((wMinus1 ushr 8) and 0xFF).toByte(),
+            ((wMinus1 ushr 16) and 0xFF).toByte(),
+            (hMinus1 and 0xFF).toByte(),
+            ((hMinus1 ushr 8) and 0xFF).toByte(),
+            ((hMinus1 ushr 16) and 0xFF).toByte(),
+        )
+    }
+
+    private fun vp8lPayload(
+        width: Int,
+        height: Int,
+    ): ByteArray {
+        val bits = ((height - 1) shl 14) or (width - 1)
+        return byteArrayOf(
+            0x2F,
+            (bits and 0xFF).toByte(),
+            ((bits ushr 8) and 0xFF).toByte(),
+            ((bits ushr 16) and 0xFF).toByte(),
+            ((bits ushr 24) and 0xFF).toByte(),
+        )
+    }
+
+    private fun vp8Payload(
+        width: Int,
+        height: Int,
+    ): ByteArray =
+        byteArrayOf(
+            0x10,
+            0x00,
+            0x00,
+            0x9D.toByte(),
+            0x01,
+            0x2A,
+            (width and 0xFF).toByte(),
+            ((width ushr 8) and 0x3F).toByte(),
+            (height and 0xFF).toByte(),
+            ((height ushr 8) and 0x3F).toByte(),
+        )
+
+    private fun writeInt32LE(
+        out: ByteArrayOutputStream,
+        value: Int,
+    ) {
+        out.write(value and 0xFF)
+        out.write((value ushr 8) and 0xFF)
+        out.write((value ushr 16) and 0xFF)
+        out.write((value ushr 24) and 0xFF)
+    }
+
     private fun rasterBytes(
         format: String,
         width: Int,

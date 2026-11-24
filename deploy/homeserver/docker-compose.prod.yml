@@ -68,6 +68,8 @@ services:
     command: tunnel --no-autoupdate run --token ${CF_TUNNEL_TOKEN}
     depends_on:
       - caddy
+    security_opt: *no-new-privileges
+    cap_drop: *cap-drop-all
     networks:
       - edge
 
@@ -87,6 +89,10 @@ services:
       - caddy_config:/config
     env_file:
       - ./.env.caddy.prod
+    security_opt: *no-new-privileges
+    cap_drop: *cap-drop-all
+    cap_add:
+      - NET_BIND_SERVICE
     networks:
       - edge
       - app
@@ -98,6 +104,8 @@ services:
     logging: *default-logging
     volumes:
       - uptime_kuma_data:/app/data
+    security_opt: *no-new-privileges
+    cap_drop: *cap-drop-all
     networks:
       - observe
 
@@ -120,6 +128,8 @@ services:
       - back_green
       - back_worker
       - postgres_exporter
+    security_opt: *no-new-privileges
+    cap_drop: *cap-drop-all
     networks:
       - observe
       - app
@@ -248,6 +258,8 @@ services:
       OPERATIONS_ALERT_EMAIL_TO: ${OPERATIONS_ALERT_EMAIL_TO:?OPERATIONS_ALERT_EMAIL_TO is required}
     volumes:
       - alertmanager_data:/alertmanager
+    security_opt: *no-new-privileges
+    cap_drop: *cap-drop-all
     networks:
       - observe
 
@@ -263,6 +275,8 @@ services:
       DATA_SOURCE_PASS: ${PROD___POSTGRES_EXPORTER__PASSWORD:?PROD___POSTGRES_EXPORTER__PASSWORD is required}
     depends_on:
       - db_1
+    security_opt: *no-new-privileges
+    cap_drop: *cap-drop-all
     networks:
       - observe
       - data
@@ -330,6 +344,8 @@ services:
       - caddy
       - prometheus
       - loki
+    security_opt: *no-new-privileges
+    cap_drop: *cap-drop-all
     networks:
       - observe
 
@@ -342,6 +358,8 @@ services:
     volumes:
       - ./monitoring/loki/loki-config.yml:/etc/loki/loki-config.yml:ro
       - loki_data:/loki
+    security_opt: *no-new-privileges
+    cap_drop: *cap-drop-all
     networks:
       - observe
 
@@ -397,6 +415,8 @@ services:
       timeout: 10s
       retries: 5
       start_period: 20s
+    security_opt: *no-new-privileges
+    cap_drop: *cap-drop-all
     networks:
       - observe
 
@@ -729,6 +749,14 @@ services:
       TZ: Asia/Seoul
     volumes:
       - db_data:/var/lib/postgresql
+    security_opt: *no-new-privileges
+    cap_drop: *cap-drop-all
+    cap_add:
+      - CHOWN
+      - DAC_OVERRIDE
+      - FOWNER
+      - SETGID
+      - SETUID
     networks:
       - data
 
@@ -742,6 +770,13 @@ services:
       --requirepass ${PROD___SPRING__DATA__REDIS__PASSWORD}
     volumes:
       - redis_data:/data
+    security_opt: *no-new-privileges
+    cap_drop: *cap-drop-all
+    cap_add:
+      - CHOWN
+      - DAC_OVERRIDE
+      - SETGID
+      - SETUID
     networks:
       - data
 
@@ -764,6 +799,14 @@ services:
         target: /data
         bind:
           create_host_path: false
+    security_opt: *no-new-privileges
+    cap_drop: *cap-drop-all
+    cap_add:
+      - CHOWN
+      - DAC_OVERRIDE
+      - FOWNER
+      - SETGID
+      - SETUID
     networks:
       data:
         aliases:

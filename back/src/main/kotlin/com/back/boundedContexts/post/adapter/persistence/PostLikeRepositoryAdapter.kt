@@ -15,6 +15,11 @@ class PostLikeRepositoryAdapter(
         post: Post,
     ): Long? = postLikeRepository.insertIfAbsent(liker, post)
 
+    override fun insertIfAbsentByIds(
+        likerId: Long,
+        postId: Long,
+    ): Long? = postLikeRepository.insertIfAbsentByIds(likerId, postId)
+
     override fun save(postLike: PostLike): PostLike = postLikeRepository.save(postLike)
 
     override fun delete(postLike: PostLike) = postLikeRepository.delete(postLike)
@@ -23,6 +28,11 @@ class PostLikeRepositoryAdapter(
         liker: Member,
         post: Post,
     ): Int = postLikeRepository.deleteByLikerAndPost(liker, post)
+
+    override fun deleteByLikerIdAndPostId(
+        likerId: Long,
+        postId: Long,
+    ): Int = postLikeRepository.deleteByLikerIdAndPostId(likerId, postId)
 
     override fun findByLikerAndPost(
         liker: Member,
@@ -40,6 +50,8 @@ class PostLikeRepositoryAdapter(
     ): List<PostLike> = postLikeRepository.findByLikerAndPostIn(liker, posts)
 
     override fun countByPost(post: Post): Long = postLikeRepository.countByPost(post)
+
+    override fun countByPostId(postId: Long): Long = postLikeRepository.countByPostId(postId)
 
     override fun countByPostIdIn(postIds: Collection<Long>): Map<Long, Long> {
         if (postIds.isEmpty()) return emptyMap()

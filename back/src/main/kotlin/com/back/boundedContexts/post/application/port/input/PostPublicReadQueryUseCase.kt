@@ -3,9 +3,12 @@ package com.back.boundedContexts.post.application.port.input
 import com.back.boundedContexts.post.dto.AdjacentPostsDto
 import com.back.boundedContexts.post.dto.CursorFeedPageDto
 import com.back.boundedContexts.post.dto.FeedPostDto
+import com.back.boundedContexts.post.dto.PostDto
 import com.back.boundedContexts.post.dto.PostWithContentDto
+import com.back.boundedContexts.post.dto.PublicPostBacklinksResBody
 import com.back.boundedContexts.post.dto.PublicPostsBootstrapDto
 import com.back.boundedContexts.post.dto.PublicSitemapPostsResBody
+import com.back.boundedContexts.post.dto.PublicWikilinkCatalogResBody
 import com.back.boundedContexts.post.dto.TagCountDto
 import com.back.standard.dto.page.PageDto
 import com.back.standard.dto.post.type1.PostSearchSortType1
@@ -45,6 +48,13 @@ interface PostPublicReadQueryUseCase {
         sort: PostSearchSortType1,
     ): PageDto<FeedPostDto>
 
+    fun getPublicItems(
+        page: Int,
+        pageSize: Int,
+        kw: String,
+        sort: PostSearchSortType1,
+    ): PageDto<PostDto> = error("getPublicItems not implemented")
+
     fun getPublicPostDetail(id: Long): PostWithContentDto
 
     fun getPublicRelatedByAuthor(
@@ -64,4 +74,8 @@ interface PostPublicReadQueryUseCase {
     fun getPublicSitemap(limit: Int): PublicSitemapPostsResBody
 
     fun getAdjacentPosts(id: Long): AdjacentPostsDto
+
+    fun getPublicWikilinkCatalog(): PublicWikilinkCatalogResBody = error("getPublicWikilinkCatalog not implemented")
+
+    fun getPublicBacklinks(id: Long): PublicPostBacklinksResBody = error("getPublicBacklinks not implemented")
 }

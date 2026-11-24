@@ -783,6 +783,33 @@ class ApiV1AdmPostControllerTest : BaseAdmPostControllerWebMvcTest() {
                 jsonPath("$.data.content") { value("복원된 본문") }
                 jsonPath("$.data.tempDraft") { value(false) }
             }
+
+        given(postUseCase.restorePostRevisionForAdmin(anyNonNull(), eqNonNull(42L), eqNonNull(51L), eqNonNull(3L)))
+            .willReturn(restored)
+        mvc
+            .post("/post/api/v1/adm/posts/42/revisions/51/restore?expectedVersion=3") {
+                with(user(securityUser))
+            }.andExpect {
+                status { isOk() }
+                jsonPath("$.resultCode") { value("200-1") }
+            }
+
+        given(postUseCase.restorePostRevisionForAdmin(anyNonNull(), eqNonNull(42L), eqNonNull(51L), eqNonNull(2L)))
+            .willThrow(
+                com.back.global.exception.application.AppException(
+                    com.back.global.exception.application.ErrorCode.POST_CONCURRENT_EDIT,
+                    "다른 세션에서 이미 수정되었습니다. 최신 글을 다시 불러온 뒤 수정해주세요.",
+                ),
+            )
+        mvc
+            .post("/post/api/v1/adm/posts/42/revisions/51/restore") {
+                with(user(securityUser))
+                contentType = org.springframework.http.MediaType.APPLICATION_JSON
+                content = """{"expectedVersion":2}"""
+            }.andExpect {
+                status { isConflict() }
+                jsonPath("$.resultCode") { value("409-10") }
+            }
     }
 
     @Test

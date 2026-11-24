@@ -20,6 +20,12 @@ class PostCounterService(
     private val memberAttrRepository: MemberAttrRepositoryPort,
     private val postLikeRepository: PostLikeRepositoryPort,
 ) {
+    fun incrementHit(postId: Long): Int {
+        val updatedHitCount = postAttrRepository.incrementIntValueBySubjectId(postId, HIT_COUNT)
+        postRepository.updateHitCountById(postId, updatedHitCount)
+        return updatedHitCount
+    }
+
     fun incrementHit(post: Post) {
         val updatedHitCount = postAttrRepository.incrementIntValue(post, HIT_COUNT)
         post.hitCount = updatedHitCount
@@ -31,9 +37,49 @@ class PostCounterService(
         postRepository.updateHitCount(post, updatedHitCount, refreshedAttr)
     }
 
+    fun incrementLike(postId: Long): Int {
+        val updatedLikesCount = postAttrRepository.incrementIntValueBySubjectId(postId, LIKES_COUNT)
+        postRepository.updateLikesCountById(postId, updatedLikesCount)
+        return updatedLikesCount
+    }
+
     fun incrementLike(post: Post) {
         val updatedLikesCount = postAttrRepository.incrementIntValue(post, LIKES_COUNT)
         applyLikesCount(post, updatedLikesCount)
+    }
+
+    fun decrementLike(
+        postId: Long,
+        minLikesCount: Int = postLikeRepository.countByPostId(postId).toInt().coerceAtLeast(0),
+    ): Int {
+        val safeFloor = minLikesCount.coerceAtLeast(0)
+        var updatedLikesCount = postAttrRepository.incrementIntValueBySubjectId(postId, LIKES_COUNT, -1)
+        if (updatedLikesCount < safeFloor) {
+            updatedLikesCount =
+                postAttrRepository
+                    .incrementIntValueBySubjectId(postId, LIKES_COUNT, safeFloor - updatedLikesCount)
+                    .coerceAtLeast(safeFloor)
+        }
+        postRepository.updateLikesCountById(postId, updatedLikesCount)
+        return updatedLikesCount
+    }
+
+    fun likePostByMember(
+        postId: Long,
+        memberId: Long,
+    ): Int? {
+        val insertedId = postLikeRepository.insertIfAbsentByIds(memberId, postId) ?: return null
+        if (insertedId <= 0L) return null
+        return incrementLike(postId)
+    }
+
+    fun unlikePostByMember(
+        postId: Long,
+        memberId: Long,
+    ): Int? {
+        val deletedRows = postLikeRepository.deleteByLikerIdAndPostId(memberId, postId)
+        if (deletedRows <= 0) return null
+        return decrementLike(postId)
     }
 
     fun decrementLike(post: Post) {

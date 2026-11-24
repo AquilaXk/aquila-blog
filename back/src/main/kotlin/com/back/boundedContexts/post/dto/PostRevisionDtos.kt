@@ -1,5 +1,6 @@
 package com.back.boundedContexts.post.dto
 
+import jakarta.validation.constraints.Min
 import java.time.Instant
 
 /**
@@ -22,4 +23,9 @@ data class PostRevisionSnapshotDto(
     val content: String,
     val summaryText: String?,
     val createdAt: Instant,
+)
+
+data class AdmPostRevisionRestoreRequest(
+    @field:Min(0)
+    val expectedVersion: Long? = null,
 )

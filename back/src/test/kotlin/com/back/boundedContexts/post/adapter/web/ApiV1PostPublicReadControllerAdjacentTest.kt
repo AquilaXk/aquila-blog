@@ -10,12 +10,16 @@ import com.back.boundedContexts.post.application.support.PostCacheTags
 import com.back.boundedContexts.post.domain.Post
 import com.back.boundedContexts.post.dto.AdjacentPostsDto
 import com.back.boundedContexts.post.dto.FeedPostDto
+import com.back.boundedContexts.post.dto.PostDto
 import com.back.boundedContexts.post.dto.PostWithContentDto
 import com.back.boundedContexts.post.model.PostSummarySource
 import com.back.global.app.AppConfig
 import com.back.global.exception.application.AppException
 import com.back.global.exception.application.ErrorCode
 import com.back.global.web.application.Rq
+import com.back.standard.dto.page.PageDto
+import com.back.standard.dto.page.PagedResult
+import com.back.standard.dto.post.type1.PostSearchSortType1
 import com.back.standard.util.Ut
 import org.assertj.core.api.Assertions.assertThat
 import org.assertj.core.api.Assertions.assertThatThrownBy
@@ -240,12 +244,18 @@ class ApiV1PostPublicReadControllerAdjacentTest {
         assertThat(firstResult.nextPost?.id).isEqualTo(60L)
         org.mockito.Mockito
             .verify(postUseCase, org.mockito.Mockito.times(1))
+            .findPublicDetailById(50L)
+        org.mockito.Mockito
+            .verify(postUseCase, org.mockito.Mockito.times(1))
             .findAdjacentPublicPosts(curPost.createdAt, 50L)
 
-        // 2) 두 번째 조회: 캐시 히트 -> postUseCase.findAdjacentPublicPosts 추가 호출 0회 (verify times 1 유지)
+        // 2) 두 번째 조회: 캐시 히트 -> adjacent DB 조회 0회
         val cachedResult = service.getAdjacentPosts(50L)
         assertThat(cachedResult.previousPost?.id).isEqualTo(40L)
         assertThat(cachedResult.nextPost?.id).isEqualTo(60L)
+        org.mockito.Mockito
+            .verify(postUseCase, org.mockito.Mockito.times(1))
+            .findPublicDetailById(50L)
         org.mockito.Mockito
             .verify(postUseCase, org.mockito.Mockito.times(1))
             .findAdjacentPublicPosts(curPost.createdAt, 50L)
@@ -306,6 +316,148 @@ class ApiV1PostPublicReadControllerAdjacentTest {
         val nextOnly = AdjacentPostsDto(nextPost = feedPostDto(2L, "다음"))
         assertThat(nextOnly.previousPost).isNull()
         assertThat(nextOnly.nextPost).isNotNull
+    }
+
+    @Test
+    @DisplayName("GET /post/api/v1/posts getItems는 query service 캐시와 weak ETag/304 응답을 사용한다")
+    fun getItemsUsesCachedQueryAndWeakEtag() {
+        val postDto = PostDto(createPost(id = 77L, listed = true))
+        val pageDto = PageDto(PagedResult(content = listOf(postDto), page = 1, pageSize = 30, totalElements = 1L))
+        given(postSearchIntentResolver.normalizeKeyword("")).willReturn("")
+        given(postPublicReadQueryUseCase.getPublicItems(1, 30, "", PostSearchSortType1.CREATED_AT)).willReturn(pageDto)
+
+        val response = MockHttpServletResponse()
+        val firstEntity = controller.getItems(MockHttpServletRequest(), response, 1, 30, "", PostSearchSortType1.CREATED_AT)
+        assertThat(firstEntity.statusCode.value()).isEqualTo(200)
+        val etag = response.getHeader("ETag")
+        assertThat(etag).startsWith("W/\"")
+        assertThat(response.getHeader("Surrogate-Key")).contains(PostCacheTags.LIST, PostCacheTags.FEED)
+
+        val notModifiedReq =
+            MockHttpServletRequest().apply {
+                addHeader("If-None-Match", etag!!)
+            }
+        val notModifiedRes = MockHttpServletResponse()
+        val secondEntity = controller.getItems(notModifiedReq, notModifiedRes, 1, 30, "", PostSearchSortType1.CREATED_AT)
+        assertThat(secondEntity.statusCode.value()).isEqualTo(304)
+    }
+
+    @Test
+    @DisplayName("GET /post/api/v1/posts/wikilink-catalog는 weak ETag/304와 카탈로그 캐시 조회를 처리한다")
+    fun wikilinkCatalogEndpointAndServiceWorkEndToEnd() {
+        val now = Instant.parse("2026-08-09T12:00:00Z")
+        val items =
+            listOf(
+                com.back.boundedContexts.post.dto.PublicWikilinkCatalogItemDto(
+                    id = 11L,
+                    title = "Kotlin Cache",
+                    createdAt = now,
+                ),
+            )
+        val catalogBody =
+            com.back.boundedContexts.post.dto.PublicWikilinkCatalogResBody(
+                items = items,
+            )
+        given(postPublicReadQueryUseCase.getPublicWikilinkCatalog()).willReturn(catalogBody)
+
+        val response = MockHttpServletResponse()
+        val entity = controller.getWikilinkCatalog(MockHttpServletRequest(), response)
+        assertThat(entity.statusCode.value()).isEqualTo(200)
+        assertThat(entity.body!!.items).hasSize(1)
+        val etag = response.getHeader("ETag")
+        assertThat(etag).startsWith("W/\"")
+        assertThat(response.getHeader("Surrogate-Key")).contains(PostCacheTags.LIST, PostCacheTags.SITEMAP)
+
+        val secondReq = MockHttpServletRequest().apply { addHeader("If-None-Match", etag!!) }
+        val secondRes = MockHttpServletResponse()
+        assertThat(controller.getWikilinkCatalog(secondReq, secondRes).statusCode.value()).isEqualTo(304)
+
+        val cacheManager =
+            org.springframework.cache.concurrent.ConcurrentMapCacheManager(
+                PostQueryCacheNames.WIKILINK_CATALOG,
+            )
+        val service = createService(cacheManager)
+        given(postUseCase.getPublicWikilinkCatalogItems(5_000)).willReturn(items)
+        val loaded = service.getPublicWikilinkCatalog()
+        assertThat(loaded.items.map { it.id }).containsExactly(11L)
+    }
+
+    @Test
+    @DisplayName("백링크 서비스·컨트롤러는 위키링크 매칭, 요약 폴백, 캐시 적중, 음수 캐시 404, weak ETag/304를 처리한다")
+    fun backlinksServiceAndControllerHandleMatchCacheNegativeAndEtag() {
+        val now = Instant.parse("2026-08-09T12:00:00Z")
+        val targetPost = createPost(id = 42L, listed = true)
+        val backlinkRes =
+            com.back.boundedContexts.post.dto.PublicPostBacklinksResBody(
+                items =
+                    listOf(
+                        com.back.boundedContexts.post.dto.PublicPostBacklinkItemDto(
+                            id = 100L,
+                            title = "참조 글",
+                            summary = "명시 요약",
+                            createdAt = now,
+                            modifiedAt = now,
+                        ),
+                    ),
+            )
+        given(postPublicReadQueryUseCase.getPublicBacklinks(42L)).willReturn(backlinkRes)
+
+        val res = MockHttpServletResponse()
+        val first = controller.getBacklinks(MockHttpServletRequest(), res, 42L)
+        assertThat(first.statusCode.value()).isEqualTo(200)
+        val etag = res.getHeader("ETag")
+        assertThat(etag).startsWith("W/\"")
+        assertThat(res.getHeader("Surrogate-Key")).contains(PostCacheTags.LIST, PostCacheTags.DETAIL, PostCacheTags.byPostId(42L))
+
+        val req304 = MockHttpServletRequest().apply { addHeader("If-None-Match", etag!!) }
+        assertThat(controller.getBacklinks(req304, MockHttpServletResponse(), 42L).statusCode.value()).isEqualTo(304)
+
+        val cacheManager =
+            org.springframework.cache.concurrent.ConcurrentMapCacheManager(
+                PostQueryCacheNames.DETAIL_PUBLIC_NEGATIVE,
+                PostQueryCacheNames.DETAIL_PUBLIC_META,
+                PostQueryCacheNames.BACKLINKS,
+            )
+        val service = createService(cacheManager)
+        given(postUseCase.isPublicDetailReadable(42L)).willReturn(true)
+        given(postUseCase.findPublicDetailById(42L)).willReturn(targetPost)
+        val candidates =
+            (1L..25L).map { idx ->
+                com.back.boundedContexts.post.dto.PublicBacklinkCandidateProjection(
+                    id = 100L + idx,
+                    title = "후보 $idx",
+                    summaryText = if (idx == 1L) "직접 요약" else "",
+                    content =
+                        when {
+                            idx == 1L -> "본문 [[글 42]]"
+                            idx <= 21L -> "실제 백엔드 아키텍처와 캐시 무효화 설계를 다룹니다. [link](/posts/42)"
+                            else -> "관련 없음"
+                        },
+                    createdAt = now,
+                    modifiedAt = now,
+                )
+            }
+        given(postUseCase.findPublicBacklinkCandidates(42L, 200)).willReturn(candidates)
+
+        val computed = service.getPublicBacklinks(42L)
+        assertThat(computed.items).hasSize(20)
+        assertThat(computed.items.first().summary).isEqualTo("직접 요약")
+        assertThat(computed.items[1].summary).isNotBlank()
+
+        val cachedHit = service.getPublicBacklinks(42L)
+        assertThat(cachedHit).isEqualTo(computed)
+        org.mockito.Mockito
+            .verify(postUseCase, org.mockito.Mockito.times(1))
+            .findPublicBacklinkCandidates(42L, 200)
+
+        given(postUseCase.isPublicDetailReadable(999L)).willReturn(false)
+        assertThatThrownBy { service.getPublicBacklinks(999L) }
+            .isInstanceOf(com.back.global.exception.application.AppException::class.java)
+        assertThatThrownBy { service.getPublicBacklinks(999L) }
+            .isInstanceOf(com.back.global.exception.application.AppException::class.java)
+        org.mockito.Mockito
+            .verify(postUseCase, org.mockito.Mockito.times(1))
+            .isPublicDetailReadable(999L)
     }
 
     private fun createService(cacheManager: CacheManager = NoOpCacheManager()) =

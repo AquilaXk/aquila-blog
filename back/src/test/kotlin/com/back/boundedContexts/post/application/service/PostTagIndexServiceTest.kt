@@ -115,6 +115,17 @@ class PostTagIndexServiceTest {
         then(postTagIndexRepository).shouldHaveNoInteractions()
     }
 
+    @Test
+    @DisplayName("대소문자만 다른 중복 태그는 최초 표기를 유지하고 단일 태그로 정규화한다")
+    fun deduplicatesCaseVariantsPreservingFirstCasing() {
+        val post = testPost(content = "tags: Spring Boot, spring boot, SPRING BOOT, Kotlin, kotlin\n\n본문")
+
+        val syncedTags = service.syncPostTags(post)
+
+        assertThat(syncedTags).containsExactly("Spring Boot", "Kotlin")
+        then(postTagIndexRepository).should().replacePostTags(post.id, listOf("Spring Boot", "Kotlin"))
+    }
+
     private fun testPost(
         id: Long = 10,
         content: String,

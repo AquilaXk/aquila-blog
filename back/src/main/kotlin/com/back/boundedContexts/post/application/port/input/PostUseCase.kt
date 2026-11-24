@@ -8,8 +8,10 @@ import com.back.boundedContexts.post.dto.PostInteractionReadStateDto
 import com.back.boundedContexts.post.dto.PostRevisionSnapshotDto
 import com.back.boundedContexts.post.dto.PostRevisionSummaryDto
 import com.back.boundedContexts.post.dto.PostWithContentDto
+import com.back.boundedContexts.post.dto.PublicBacklinkCandidateProjection
 import com.back.boundedContexts.post.dto.PublicPostDetailContentCacheDto
 import com.back.boundedContexts.post.dto.PublicSitemapPostItemDto
+import com.back.boundedContexts.post.dto.PublicWikilinkCatalogItemDto
 import com.back.boundedContexts.post.dto.TagCountDto
 import com.back.boundedContexts.post.model.PostSummaryMode
 import com.back.standard.dto.page.PagedResult
@@ -73,9 +75,25 @@ interface PostUseCase {
 
     fun incrementHit(post: Post)
 
+    fun incrementHit(postId: Long): Int = error("incrementHit(postId) not implemented")
+
     fun incrementLike(post: Post)
 
+    fun incrementLike(postId: Long): Int = error("incrementLike(postId) not implemented")
+
     fun decrementLike(post: Post)
+
+    fun decrementLike(postId: Long): Int = error("decrementLike(postId) not implemented")
+
+    fun likePost(
+        postId: Long,
+        memberId: Long,
+    ): Int = error("likePost(postId, memberId) not implemented")
+
+    fun unlikePost(
+        postId: Long,
+        memberId: Long,
+    ): Int = error("unlikePost(postId, memberId) not implemented")
 
     fun findPagedByKw(
         kw: String,
@@ -88,6 +106,12 @@ interface PostUseCase {
         page: Int,
         pageSize: Int,
     ): PagedResult<Post>
+
+    fun findRecommendedExplorePage(
+        page: Int,
+        pageSize: Int,
+        preloadedTagCounts: List<TagCountDto>?,
+    ): PagedResult<Post> = findRecommendedExplorePage(page, pageSize)
 
     fun findPagedByKwForAdmin(
         kw: String,
@@ -173,6 +197,13 @@ interface PostUseCase {
 
     fun getPublicSitemapItems(limit: Int): List<PublicSitemapPostItemDto>
 
+    fun getPublicWikilinkCatalogItems(limit: Int): List<PublicWikilinkCatalogItemDto> = emptyList()
+
+    fun findPublicBacklinkCandidates(
+        targetPostId: Long,
+        limit: Int,
+    ): List<PublicBacklinkCandidateProjection> = emptyList()
+
     fun getPostRevisionsForAdmin(postId: Long): List<PostRevisionSummaryDto>
 
     fun getPostRevisionSnapshotForAdmin(
@@ -185,4 +216,11 @@ interface PostUseCase {
         postId: Long,
         revisionId: Long,
     ): Post
+
+    fun restorePostRevisionForAdmin(
+        actor: Member,
+        postId: Long,
+        revisionId: Long,
+        expectedVersion: Long?,
+    ): Post = error("restorePostRevisionForAdmin with expectedVersion not implemented")
 }

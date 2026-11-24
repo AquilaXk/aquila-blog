@@ -19,8 +19,10 @@ import com.back.boundedContexts.post.dto.PostPreviewExtractor
 import com.back.boundedContexts.post.dto.PostRevisionSnapshotDto
 import com.back.boundedContexts.post.dto.PostRevisionSummaryDto
 import com.back.boundedContexts.post.dto.PostWithContentDto
+import com.back.boundedContexts.post.dto.PublicBacklinkCandidateProjection
 import com.back.boundedContexts.post.dto.PublicPostDetailContentCacheDto
 import com.back.boundedContexts.post.dto.PublicSitemapPostItemDto
+import com.back.boundedContexts.post.dto.PublicWikilinkCatalogItemDto
 import com.back.boundedContexts.post.dto.TagCountDto
 import com.back.boundedContexts.post.event.PostDeletedEvent
 import com.back.boundedContexts.post.event.PostModifiedEvent
@@ -29,6 +31,7 @@ import com.back.boundedContexts.post.model.PostSummaryMode
 import com.back.boundedContexts.post.model.PostSummarySource
 import com.back.global.exception.application.AppException
 import com.back.global.exception.application.ErrorCode
+import com.back.global.security.application.ContentHtmlTrustState
 import com.back.global.security.application.HtmlContentSanitizer
 import com.back.global.storage.application.UploadedFileRetentionService
 import com.back.global.storage.application.UploadedFileUrlCodec
@@ -268,9 +271,7 @@ class PostApplicationService(
         postHydrationService.hydratePostAttrs(post)
         val currentVersion = post.version ?: 0L
         val wasTempDraft = postTempDraftService.isTempDraft(post)
-        if (expectedVersion != currentVersion) {
-            throw AppException(ErrorCode.POST_CONCURRENT_EDIT, "다른 세션에서 이미 수정되었습니다. 최신 글을 다시 불러온 뒤 수정해주세요.")
-        }
+        verifyExpectedVersion(currentVersion, expectedVersion)
 
         val previousTitle = post.title
         val previousContent = post.content
@@ -577,6 +578,14 @@ class PostApplicationService(
     }
 
     @Transactional
+    override fun incrementHit(postId: Long): Int {
+        val hitCount = postCounterService.incrementHit(postId)
+        postHitSideEffectQueue.enqueue(postId)
+        invalidatePublicDetailCountersAfterCommit(postId, "hit")
+        return hitCount
+    }
+
+    @Transactional
     override fun incrementLike(post: Post) {
         postCounterService.incrementLike(post)
         postHitSideEffectQueue.enqueue(post.id, "like")
@@ -584,10 +593,52 @@ class PostApplicationService(
     }
 
     @Transactional
+    override fun incrementLike(postId: Long): Int {
+        val likesCount = postCounterService.incrementLike(postId)
+        postHitSideEffectQueue.enqueue(postId, "like")
+        invalidatePublicDetailCountersAfterCommit(postId, "like")
+        return likesCount
+    }
+
+    @Transactional
     override fun decrementLike(post: Post) {
         postCounterService.decrementLike(post)
         postHitSideEffectQueue.enqueue(post.id, "unlike")
         invalidatePublicDetailCountersAfterCommit(post.id, "unlike")
+    }
+
+    @Transactional
+    override fun decrementLike(postId: Long): Int {
+        val likesCount = postCounterService.decrementLike(postId)
+        postHitSideEffectQueue.enqueue(postId, "unlike")
+        invalidatePublicDetailCountersAfterCommit(postId, "unlike")
+        return likesCount
+    }
+
+    @Transactional
+    override fun likePost(
+        postId: Long,
+        memberId: Long,
+    ): Int {
+        postCounterService.likePostByMember(postId, memberId)?.let { updated ->
+            postHitSideEffectQueue.enqueue(postId, "like")
+            invalidatePublicDetailCountersAfterCommit(postId, "like")
+            return updated
+        }
+        return (postRepository.findInteractionReadStateById(postId)?.likesCount ?: 0).coerceAtLeast(0)
+    }
+
+    @Transactional
+    override fun unlikePost(
+        postId: Long,
+        memberId: Long,
+    ): Int {
+        postCounterService.unlikePostByMember(postId, memberId)?.let { updated ->
+            postHitSideEffectQueue.enqueue(postId, "unlike")
+            invalidatePublicDetailCountersAfterCommit(postId, "unlike")
+            return updated
+        }
+        return (postRepository.findInteractionReadStateById(postId)?.likesCount ?: 0).coerceAtLeast(0)
     }
 
     override fun findPagedByKw(
@@ -640,6 +691,12 @@ class PostApplicationService(
     override fun findRecommendedExplorePage(
         page: Int,
         pageSize: Int,
+    ): PagedResult<Post> = findRecommendedExplorePage(page, pageSize, null)
+
+    override fun findRecommendedExplorePage(
+        page: Int,
+        pageSize: Int,
+        preloadedTagCounts: List<TagCountDto>?,
     ): PagedResult<Post> {
         val safePage = page.coerceAtLeast(1)
         val safePageSize = pageSize.coerceIn(1, 100)
@@ -672,7 +729,7 @@ class PostApplicationService(
 
         return postRecommendRankingService.rerank(
             candidates = candidateResult.content,
-            tagCounts = getPublicTagCounts(),
+            tagCounts = preloadedTagCounts ?: getPublicTagCounts(),
             page = safePage,
             pageSize = safePageSize,
             candidateTotalElements = candidateResult.totalElements,
@@ -1072,6 +1129,7 @@ class PostApplicationService(
     ): com.back.boundedContexts.post.dto.AdmPostBulkActionResBody {
         val distinctIds = ids.distinct()
         val processedIds = mutableListOf<Long>()
+        val pendingVisibilityChanges = mutableListOf<BulkVisibilityChange>()
         val activePostsById =
             when (action) {
                 com.back.boundedContexts.post.dto.AdmPostBulkActionType.DELETE,
@@ -1112,66 +1170,185 @@ class PostApplicationService(
                     }
                 }
                 com.back.boundedContexts.post.dto.AdmPostBulkActionType.PUBLISH_LISTED -> {
-                    val post = activePostsById[id]
-                    if (post != null && post.deletedAt == null) {
-                        modify(
-                            actor = actor,
-                            post = post,
-                            title = post.title,
-                            content = post.content,
-                            published = true,
-                            listed = true,
-                            expectedVersion = post.version ?: 0L,
-                            contentHtml = null,
-                            summary = null,
-                            summaryMode = null,
-                        )
-                        processedIds.add(id)
-                    }
+                    collectBulkVisibilityChange(
+                        actor = actor,
+                        post = activePostsById[id],
+                        targetPublished = true,
+                        targetListed = true,
+                        processedIds = processedIds,
+                        pendingChanges = pendingVisibilityChanges,
+                    )
                 }
                 com.back.boundedContexts.post.dto.AdmPostBulkActionType.PUBLISH_UNLISTED -> {
-                    val post = activePostsById[id]
-                    if (post != null && post.deletedAt == null) {
-                        modify(
-                            actor = actor,
-                            post = post,
-                            title = post.title,
-                            content = post.content,
-                            published = true,
-                            listed = false,
-                            expectedVersion = post.version ?: 0L,
-                            contentHtml = null,
-                            summary = null,
-                            summaryMode = null,
-                        )
-                        processedIds.add(id)
-                    }
+                    collectBulkVisibilityChange(
+                        actor = actor,
+                        post = activePostsById[id],
+                        targetPublished = true,
+                        targetListed = false,
+                        processedIds = processedIds,
+                        pendingChanges = pendingVisibilityChanges,
+                    )
                 }
                 com.back.boundedContexts.post.dto.AdmPostBulkActionType.UNPUBLISH_PRIVATE -> {
-                    val post = activePostsById[id]
-                    if (post != null && post.deletedAt == null) {
-                        modify(
-                            actor = actor,
-                            post = post,
-                            title = post.title,
-                            content = post.content,
-                            published = false,
-                            listed = false,
-                            expectedVersion = post.version ?: 0L,
-                            contentHtml = null,
-                            summary = null,
-                            summaryMode = null,
-                        )
-                        processedIds.add(id)
-                    }
+                    collectBulkVisibilityChange(
+                        actor = actor,
+                        post = activePostsById[id],
+                        targetPublished = false,
+                        targetListed = false,
+                        processedIds = processedIds,
+                        pendingChanges = pendingVisibilityChanges,
+                    )
                 }
             }
         }
+
+        flushBulkVisibilityChanges(actor, pendingVisibilityChanges)
 
         return com.back.boundedContexts.post.dto.AdmPostBulkActionResBody(
             processedCount = processedIds.size,
             ids = processedIds,
         )
+    }
+
+    private data class BulkVisibilityChange(
+        val post: Post,
+        val wasPublished: Boolean,
+        val wasPublic: Boolean,
+        val isPublic: Boolean,
+        val tags: List<String>,
+    )
+
+    private fun collectBulkVisibilityChange(
+        actor: Member,
+        post: Post?,
+        targetPublished: Boolean,
+        targetListed: Boolean,
+        processedIds: MutableList<Long>,
+        pendingChanges: MutableList<BulkVisibilityChange>,
+    ) {
+        if (post == null || post.deletedAt != null) return
+        if (postTempDraftService.isTempDraft(post)) {
+            modify(
+                actor = actor,
+                post = post,
+                title = post.title,
+                content = post.content,
+                published = targetPublished,
+                listed = targetListed,
+                expectedVersion = post.version ?: 0L,
+                contentHtml = null,
+                summary = null,
+                summaryMode = null,
+            )
+            processedIds.add(post.id)
+            return
+        }
+
+        if (post.published == targetPublished && post.listed == targetListed) {
+            processedIds.add(post.id)
+            return
+        }
+
+        val wasPublished = post.published
+        val wasPublic = isPubliclyListed(post)
+        post.modify(
+            title = post.title,
+            content = post.content,
+            published = targetPublished,
+            listed = targetListed,
+        )
+        postRepository.save(post)
+        val isPublic = isPubliclyListed(post)
+        val tags =
+            if (wasPublic || isPublic) {
+                postTagIndexService.extractNormalizedTags(post.content)
+            } else {
+                emptyList()
+            }
+        pendingChanges.add(
+            BulkVisibilityChange(
+                post = post,
+                wasPublished = wasPublished,
+                wasPublic = wasPublic,
+                isPublic = isPublic,
+                tags = tags,
+            ),
+        )
+        processedIds.add(post.id)
+    }
+
+    private fun flushBulkVisibilityChanges(
+        actor: Member,
+        changes: List<BulkVisibilityChange>,
+    ) {
+        if (changes.isEmpty()) return
+        postRepository.flush()
+        postHydrationService.hydrateMembersPublishedProfileWorkspaces(changes.map { it.post.author })
+
+        val mergedTargets = linkedSetOf<PostReadCacheInvalidationTarget>()
+        val mergedBeforeTags = linkedSetOf<String>()
+        val mergedAfterTags = linkedSetOf<String>()
+
+        changes.forEachIndexed { index, change ->
+            val affectsPublicRead = change.wasPublic || change.isPublic
+            val scope =
+                if (affectsPublicRead) {
+                    PostReadCacheInvalidationScope.PublicPostModified(setOf(PostPublicChangeImpact.LISTING_VISIBILITY))
+                } else if (change.wasPublished || change.post.published) {
+                    PostReadCacheInvalidationScope.AdminPostListAndDetail
+                } else {
+                    PostReadCacheInvalidationScope.AdminPostListOnly
+                }
+            val beforeTags = if (change.wasPublic && !change.isPublic) change.tags else emptyList()
+            val afterTags = if (change.isPublic) change.tags else emptyList()
+            mergedTargets.addAll(scope.targets())
+            mergedBeforeTags.addAll(beforeTags)
+            mergedAfterTags.addAll(afterTags)
+
+            val command =
+                PostWriteSideEffectCommand(
+                    postId = change.post.id,
+                    previousContent = null,
+                    currentContent = null,
+                    deletedContent = null,
+                    beforeTags = beforeTags,
+                    afterTags = afterTags,
+                    cacheInvalidationScope = scope,
+                    evictReason = "bulk-visibility",
+                    recommendationAction = recommendationActionFor(change.isPublic),
+                )
+            val event =
+                PostModifiedEvent(
+                    UUID.randomUUID(),
+                    PostDto(change.post),
+                    MemberDto(actor),
+                    beforeTags,
+                    afterTags,
+                    wasPublic = change.wasPublished,
+                )
+            taskFacade.addToQueue(command.toTaskPayload(event))
+
+            val isLast = index == changes.lastIndex
+            if (!isLast) {
+                if (scope.evicts(PostReadCacheInvalidationTarget.DETAIL)) {
+                    invalidateReadCacheAfterCommit(
+                        command.copy(
+                            beforeTags = emptyList(),
+                            afterTags = emptyList(),
+                            cacheInvalidationScope = PostReadCacheInvalidationScope.DetailOnly,
+                        ),
+                    )
+                }
+            } else {
+                invalidateReadCacheAfterCommit(
+                    command.copy(
+                        beforeTags = mergedBeforeTags.toList(),
+                        afterTags = mergedAfterTags.toList(),
+                        cacheInvalidationScope = PostReadCacheInvalidationScope.fromTargets(mergedTargets),
+                    ),
+                )
+            }
+        }
     }
 
     private fun resolveLifecycleCacheInvalidationScope(
@@ -1359,8 +1536,20 @@ class PostApplicationService(
     override fun getPublicSitemapItems(limit: Int): List<PublicSitemapPostItemDto> = postRepository.findPublicSitemapItems(limit)
 
     @Transactional(readOnly = true)
+    override fun getPublicWikilinkCatalogItems(limit: Int): List<PublicWikilinkCatalogItemDto> =
+        postRepository.findPublicWikilinkCatalogItems(limit)
+
+    @Transactional(readOnly = true)
+    override fun findPublicBacklinkCandidates(
+        targetPostId: Long,
+        limit: Int,
+    ): List<PublicBacklinkCandidateProjection> = postRepository.findPublicBacklinkCandidates(targetPostId, limit)
+
+    @Transactional(readOnly = true)
     override fun getPostRevisionsForAdmin(postId: Long): List<PostRevisionSummaryDto> {
-        postRepository.findById(postId).getOrNull().getOrThrow()
+        if (!postRepository.existsById(postId)) {
+            throw NoSuchElementException()
+        }
         return postRevisionRepository?.findSummariesByPostId(postId, MAX_REVISIONS_PER_POST) ?: emptyList()
     }
 
@@ -1369,7 +1558,9 @@ class PostApplicationService(
         postId: Long,
         revisionId: Long,
     ): PostRevisionSnapshotDto {
-        postRepository.findById(postId).getOrNull().getOrThrow()
+        if (!postRepository.existsById(postId)) {
+            throw NoSuchElementException()
+        }
         return postRevisionRepository?.findByPostIdAndRevisionId(postId, revisionId)
             ?: throw AppException(ErrorCode.NOT_FOUND, "해당 글의 리비전을 찾을 수 없습니다.")
     }
@@ -1382,91 +1573,169 @@ class PostApplicationService(
         actor: Member,
         postId: Long,
         revisionId: Long,
+    ): Post = restorePostRevisionForAdmin(actor, postId, revisionId, expectedVersion = null)
+
+    @Transactional
+    override fun restorePostRevisionForAdmin(
+        actor: Member,
+        postId: Long,
+        revisionId: Long,
+        expectedVersion: Long?,
     ): Post {
         val post = postRepository.findById(postId).getOrNull().getOrThrow()
         postHydrationService.hydratePostAttrs(post)
         postHydrationService.hydrateMembersPublishedProfileWorkspaces(listOf(post.author))
+        val currentVersion = post.version ?: 0L
+        if (expectedVersion != null) {
+            verifyExpectedVersion(currentVersion, expectedVersion)
+        }
         val targetRevision =
             postRevisionRepository?.findByPostIdAndRevisionId(postId, revisionId)
                 ?: throw AppException(ErrorCode.NOT_FOUND, "해당 글의 리비전을 찾을 수 없습니다.")
 
-        val previousTitle = post.title
-        val previousContent = post.content
-        val previousContentHtml = post.contentHtml
-        val previousContentHtmlHash = post.contentHtmlHash
-        val previousContentHtmlSanitizerPolicyVersion = post.contentHtmlSanitizerPolicyVersion
-        val previousContentHtmlTrustState = post.contentHtmlTrustState
-        val previousSummaryText = post.summaryText
-        val previousSummarySource = post.summarySource
-        val wasPublic = isPubliclyListed(post)
-        val wasPublished = post.published
-        val previousTags = postTagIndexService.extractNormalizedTags(previousContent)
+        val beforeState = captureRevisionRestoreBeforeState(post)
+        val afterState = applyRestoredRevisionContent(post, targetRevision, expectedVersion, currentVersion)
+        enqueueRevisionRestoreSideEffects(actor, post, beforeState, afterState)
+
+        logger.info("post_revision_restore_completed postId={} revisionId={} actorId={}", post.id, revisionId, actor.id)
+        return post
+    }
+
+    private fun verifyExpectedVersion(
+        currentVersion: Long,
+        expectedVersion: Long,
+    ) {
+        if (expectedVersion != currentVersion) {
+            throw AppException(ErrorCode.POST_CONCURRENT_EDIT, "다른 세션에서 이미 수정되었습니다. 최신 글을 다시 불러온 뒤 수정해주세요.")
+        }
+    }
+
+    private fun captureRevisionRestoreBeforeState(post: Post): RevisionRestoreBeforeState =
+        RevisionRestoreBeforeState(
+            title = post.title,
+            content = post.content,
+            contentHtml = post.contentHtml,
+            contentHtmlHash = post.contentHtmlHash,
+            contentHtmlSanitizerPolicyVersion = post.contentHtmlSanitizerPolicyVersion,
+            contentHtmlTrustState = post.contentHtmlTrustState,
+            summaryText = post.summaryText,
+            summarySource = post.summarySource,
+            wasPublic = isPubliclyListed(post),
+            wasPublished = post.published,
+            tags = postTagIndexService.extractNormalizedTags(post.content),
+        )
+
+    private fun applyRestoredRevisionContent(
+        post: Post,
+        targetRevision: PostRevisionSnapshotDto,
+        expectedVersion: Long?,
+        currentVersion: Long,
+    ): RevisionRestoreAfterState {
         val thumbnail = PostPreviewExtractor.extractThumbnail(targetRevision.content)
         val restoredHtmlTrust = HtmlContentSanitizer.sanitizeForPersistence(null)
+        try {
+            post.modify(
+                title = targetRevision.title,
+                content = targetRevision.content,
+                contentHtml = restoredHtmlTrust.contentHtml,
+                contentHtmlHash = restoredHtmlTrust.contentHtmlHash,
+                contentHtmlSanitizerPolicyVersion = restoredHtmlTrust.contentHtmlSanitizerPolicyVersion,
+                contentHtmlTrustState = restoredHtmlTrust.contentHtmlTrustState,
+                thumbnail = thumbnail,
+            )
+            applyRestoredRevisionSummary(post, targetRevision)
+            postRepository.flush()
+            val afterTags = postTagIndexService.syncPostTags(post)
+            val currentAttachmentKeys = UploadedFileUrlCodec.extractPartitionedObjectKeysFromContent(post.content)
+            postRepository.syncImageReferences(post.id, currentAttachmentKeys.allKeys())
+            recordPostRevision(post)
+            return RevisionRestoreAfterState(
+                tags = afterTags,
+                attachmentKeys = currentAttachmentKeys,
+            )
+        } catch (exception: ObjectOptimisticLockingFailureException) {
+            logger.warn(
+                "post_revision_restore_optimistic_lock_conflict postId={} expectedVersion={} currentVersion={}",
+                post.id,
+                expectedVersion,
+                currentVersion,
+                exception,
+            )
+            throw AppException(ErrorCode.POST_CONCURRENT_EDIT, "다른 세션에서 이미 수정되었습니다. 최신 글을 다시 불러온 뒤 수정해주세요.")
+        }
+    }
 
-        post.modify(
-            title = targetRevision.title,
-            content = targetRevision.content,
-            contentHtml = restoredHtmlTrust.contentHtml,
-            contentHtmlHash = restoredHtmlTrust.contentHtmlHash,
-            contentHtmlSanitizerPolicyVersion = restoredHtmlTrust.contentHtmlSanitizerPolicyVersion,
-            contentHtmlTrustState = restoredHtmlTrust.contentHtmlTrustState,
-            thumbnail = thumbnail,
-        )
-        applyRestoredRevisionSummary(post, targetRevision)
-        postRepository.flush()
-        val afterTags = postTagIndexService.syncPostTags(post)
-        val currentAttachmentKeys = UploadedFileUrlCodec.extractPartitionedObjectKeysFromContent(post.content)
-        postRepository.syncImageReferences(post.id, currentAttachmentKeys.allKeys())
-        recordPostRevision(post)
-
+    private fun enqueueRevisionRestoreSideEffects(
+        actor: Member,
+        post: Post,
+        beforeState: RevisionRestoreBeforeState,
+        afterState: RevisionRestoreAfterState,
+    ) {
         val isPublic = isPubliclyListed(post)
         val contentHtmlChanged =
-            previousContentHtml != post.contentHtml ||
-                previousContentHtmlHash != post.contentHtmlHash ||
-                previousContentHtmlSanitizerPolicyVersion != post.contentHtmlSanitizerPolicyVersion ||
-                previousContentHtmlTrustState != post.contentHtmlTrustState
+            beforeState.contentHtml != post.contentHtml ||
+                beforeState.contentHtmlHash != post.contentHtmlHash ||
+                beforeState.contentHtmlSanitizerPolicyVersion != post.contentHtmlSanitizerPolicyVersion ||
+                beforeState.contentHtmlTrustState != post.contentHtmlTrustState
+        val cacheInvalidationScope =
+            if (beforeState.wasPublic || isPublic) {
+                PostReadCacheInvalidationScope.PublicPostModified(
+                    buildPublicPostChangeImpacts(
+                        listingVisibilityChanged = beforeState.wasPublic != isPublic,
+                        titleChanged = beforeState.title != post.title,
+                        contentChanged = beforeState.content != post.content || contentHtmlChanged,
+                        tagChanged = beforeState.tags != afterState.tags,
+                        summaryChanged =
+                            beforeState.summaryText != post.summaryText || beforeState.summarySource != post.summarySource,
+                    ),
+                )
+            } else if (beforeState.wasPublished || post.published) {
+                PostReadCacheInvalidationScope.AdminPostListAndDetail
+            } else {
+                PostReadCacheInvalidationScope.AdminPostListOnly
+            }
         enqueuePostWriteSideEffect(
             PostWriteSideEffectCommand(
                 postId = post.id,
-                previousContent = previousContent,
+                previousContent = beforeState.content,
                 currentContent = post.content,
                 deletedContent = null,
-                beforeTags = previousTags,
-                afterTags = afterTags,
-                cacheInvalidationScope =
-                    if (wasPublic || isPublic) {
-                        PostReadCacheInvalidationScope.PublicPostModified(
-                            buildPublicPostChangeImpacts(
-                                listingVisibilityChanged = wasPublic != isPublic,
-                                titleChanged = previousTitle != post.title,
-                                contentChanged = previousContent != post.content || contentHtmlChanged,
-                                tagChanged = previousTags != afterTags,
-                                summaryChanged =
-                                    previousSummaryText != post.summaryText || previousSummarySource != post.summarySource,
-                            ),
-                        )
-                    } else if (wasPublished || post.published) {
-                        PostReadCacheInvalidationScope.AdminPostListAndDetail
-                    } else {
-                        PostReadCacheInvalidationScope.AdminPostListOnly
-                    },
+                beforeTags = beforeState.tags,
+                afterTags = afterState.tags,
+                cacheInvalidationScope = cacheInvalidationScope,
                 evictReason = "restore-revision",
                 recommendationAction = recommendationActionFor(isPublic),
-                preExtractedCurrentKeys = currentAttachmentKeys,
+                preExtractedCurrentKeys = afterState.attachmentKeys,
             ),
             PostModifiedEvent(
                 UUID.randomUUID(),
                 PostDto(post),
                 MemberDto(actor),
-                previousTags,
-                afterTags,
-                wasPublic = wasPublished,
+                beforeState.tags,
+                afterState.tags,
+                wasPublic = beforeState.wasPublished,
             ),
         )
-        logger.info("post_revision_restore_completed postId={} revisionId={} actorId={}", post.id, revisionId, actor.id)
-        return post
     }
+
+    private data class RevisionRestoreBeforeState(
+        val title: String,
+        val content: String,
+        val contentHtml: String?,
+        val contentHtmlHash: String?,
+        val contentHtmlSanitizerPolicyVersion: String?,
+        val contentHtmlTrustState: ContentHtmlTrustState?,
+        val summaryText: String?,
+        val summarySource: PostSummarySource,
+        val wasPublic: Boolean,
+        val wasPublished: Boolean,
+        val tags: List<String>,
+    )
+
+    private data class RevisionRestoreAfterState(
+        val tags: List<String>,
+        val attachmentKeys: UploadedFileUrlCodec.PartitionedObjectKeys,
+    )
 
     private fun recordPostRevision(post: Post) {
         postRevisionRepository?.appendAndTrimRevisions(

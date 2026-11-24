@@ -17,6 +17,7 @@ import com.back.boundedContexts.post.domain.postMixin.HIT_COUNT
 import com.back.boundedContexts.post.domain.postMixin.LIKES_COUNT
 import com.back.boundedContexts.post.dto.AdmDeletedPostSnapshotDto
 import com.back.boundedContexts.post.dto.AdmPostBulkActionType
+import com.back.boundedContexts.post.dto.PostInteractionReadStateDto
 import com.back.boundedContexts.post.event.PostDeletedEvent
 import com.back.boundedContexts.post.model.PostSummaryMode
 import com.back.global.app.AppConfig
@@ -149,6 +150,33 @@ class PostApplicationServiceDeleteResilienceTest {
             postTempDraftService = postTempDraftService,
             postHitSideEffectQueue = postHitSideEffectQueue,
         )
+
+    @Test
+    @DisplayName("likePost와 unlikePost는 PostLike 영속 여부에 따라 경량 카운터를 멱등하게 증감하고 부수효과를 적재한다")
+    fun likeAndUnlikePostPersistPostLikeIdempotently() {
+        given(postLikeRepository.insertIfAbsentByIds(7L, 201L)).willReturn(501L, null)
+        given(postAttrRepository.incrementIntValueBySubjectId(201L, LIKES_COUNT, 1)).willReturn(1)
+        given(postRepository.findInteractionReadStateById(201L)).willReturn(
+            PostInteractionReadStateDto(id = 201L, authorId = 1L, published = true, hitCount = 3, likesCount = 1),
+        )
+        given(postLikeRepository.deleteByLikerIdAndPostId(7L, 201L)).willReturn(1, 0)
+        given(postLikeRepository.countByPostId(201L)).willReturn(0L)
+        given(postAttrRepository.incrementIntValueBySubjectId(201L, LIKES_COUNT, -1)).willReturn(0)
+
+        assertThat(service.likePost(201L, 7L)).isEqualTo(1)
+        assertThat(service.likePost(201L, 7L)).isEqualTo(1)
+        then(postAttrRepository).should(times(1)).incrementIntValueBySubjectId(201L, LIKES_COUNT, 1)
+        then(postRepository).should(times(1)).updateLikesCountById(201L, 1)
+
+        given(postRepository.findInteractionReadStateById(201L)).willReturn(
+            PostInteractionReadStateDto(id = 201L, authorId = 1L, published = true, hitCount = 3, likesCount = 0),
+        )
+        assertThat(service.unlikePost(201L, 7L)).isEqualTo(0)
+        assertThat(service.unlikePost(201L, 7L)).isEqualTo(0)
+        then(postAttrRepository).should(times(1)).incrementIntValueBySubjectId(201L, LIKES_COUNT, -1)
+        then(postRepository).should(times(1)).updateLikesCountById(201L, 0)
+        then(postRepository).should(never()).findById(201L)
+    }
 
     @Test
     @DisplayName("findPublicDetailById는 작성자 프로필과 함께 카운터 PostAttr를 배치 조회해 hydrate한다")
@@ -581,6 +609,8 @@ class PostApplicationServiceDeleteResilienceTest {
             then(cacheManager).should().getCache(PostQueryCacheNames.DETAIL_PUBLIC_META)
             then(cacheManager).should().getCache(PostQueryCacheNames.DETAIL_PUBLIC_CONTENT)
             then(cacheManager).should().getCache(PostQueryCacheNames.DETAIL_PUBLIC_NEGATIVE)
+            then(cacheManager).should().getCache(PostQueryCacheNames.ADJACENT_POSTS)
+            then(cacheManager).should().getCache(PostQueryCacheNames.BACKLINKS)
         }
         then(cacheManager).should().getCache(PostQueryCacheNames.ADMIN_POSTS_FIRST_PAGE)
         then(cacheManager).shouldHaveNoMoreInteractions()
@@ -743,6 +773,191 @@ class PostApplicationServiceDeleteResilienceTest {
         assertThat(domainEvent.actorDto.modifiedAt).isEqualTo(fixedNow)
     }
 
+    @Test
+    @DisplayName("bulkActionForAdmin PUBLISH_LISTED는 이미 공개된 글의 불필요한 재저장을 건너뛰고 가시성 변경 항목만 배치 플러시·캐시 병합 무효화한다")
+    fun bulkPublishListedSkipsAlreadyMatchingVisibilityAndBatchesFlush() {
+        val author = member(1, "작성자")
+        val alreadyListed =
+            Post(id = 41L, author = author, title = "이미 공개", content = "tags: spring\n\n본문", published = true, listed = true).apply {
+                createdAt = Instant.now()
+                modifiedAt = createdAt
+            }
+        val draftPrivate =
+            Post(id = 42L, author = author, title = "비공개 글 1", content = "tags: kotlin\n\n본문", published = false, listed = false).apply {
+                createdAt = Instant.now()
+                modifiedAt = createdAt
+            }
+        val unlistedPublic =
+            Post(id = 43L, author = author, title = "링크 공개 글 2", content = "tags: java\n\n본문", published = true, listed = false).apply {
+                createdAt = Instant.now()
+                modifiedAt = createdAt
+            }
+        val revisionRepository =
+            mock(com.back.boundedContexts.post.application.port.output.PostRevisionRepositoryPort::class.java)
+        val feedCache = mock(org.springframework.cache.Cache::class.java)
+        given(cacheManager.getCache(PostQueryCacheNames.FEED)).willReturn(feedCache)
+        given(postRepository.findAllByIds(listOf(41L, 42L, 43L))).willReturn(listOf(alreadyListed, draftPrivate, unlistedPublic))
+        given(postRepository.save(draftPrivate)).willReturn(draftPrivate)
+        given(postRepository.save(unlistedPublic)).willReturn(unlistedPublic)
+
+        val serviceWithRevisions =
+            PostApplicationService(
+                postRepository = postRepository,
+                postWriteRequestIdempotencyRepository = postWriteRequestIdempotencyRepository,
+                memberRepository = memberRepository,
+                secureTipPort = secureTipPort,
+                uploadedFileRetentionService = uploadedFileRetentionService,
+                postRecommendRankingService = postRecommendRankingService,
+                postKeywordSearchPipelineService = postKeywordSearchPipelineService,
+                taskFacade = taskFacade,
+                objectMapper = objectMapper,
+                postHydrationService = postHydrationService,
+                postCounterService = postCounterService,
+                postTagIndexService = postTagIndexService,
+                postTempDraftService = postTempDraftService,
+                postHitSideEffectQueue = postHitSideEffectQueue,
+                postReadCacheInvalidator = postReadCacheInvalidator,
+                postRevisionRepository = revisionRepository,
+            )
+
+        val result = serviceWithRevisions.bulkActionForAdmin(author, listOf(41L, 42L, 43L), AdmPostBulkActionType.PUBLISH_LISTED)
+
+        assertThat(result.processedCount).isEqualTo(3)
+        assertThat(result.ids).containsExactly(41L, 42L, 43L)
+        assertThat(draftPrivate.published).isTrue()
+        assertThat(draftPrivate.listed).isTrue()
+        assertThat(unlistedPublic.published).isTrue()
+        assertThat(unlistedPublic.listed).isTrue()
+
+        then(postRepository).should(never()).save(alreadyListed)
+        then(postRepository).should(times(1)).save(draftPrivate)
+        then(postRepository).should(times(1)).save(unlistedPublic)
+        then(postRepository).should(never()).saveAndFlush(alreadyListed)
+        then(postRepository).should(never()).saveAndFlush(draftPrivate)
+        then(postRepository).should(never()).saveAndFlush(unlistedPublic)
+        then(postRepository).should(times(1)).flush()
+        verifyNoInteractions(revisionRepository)
+        then(cacheManager).should(times(1)).getCache(PostQueryCacheNames.FEED)
+        assertThat(postWriteSideEffectTasks()).hasSize(2)
+    }
+
+    @Test
+    @DisplayName("리비전 목록·스냅샷 조회는 findById CLOB 로딩 대신 existsById로 존재 여부만 확인한다")
+    fun revisionReadChecksExistenceWithoutLoadingPostClob() {
+        val revisionRepository =
+            mock(com.back.boundedContexts.post.application.port.output.PostRevisionRepositoryPort::class.java)
+        val createdAt = Instant.parse("2026-11-20T00:00:00Z")
+        val summary =
+            com.back.boundedContexts.post.dto.PostRevisionSummaryDto(
+                id = 91L,
+                postId = 77L,
+                title = "제목",
+                summaryText = "요약",
+                contentLength = 10,
+                createdAt = createdAt,
+            )
+        val snapshot =
+            com.back.boundedContexts.post.dto.PostRevisionSnapshotDto(
+                id = 91L,
+                postId = 77L,
+                authorId = 1L,
+                title = "제목",
+                content = "본문",
+                summaryText = "요약",
+                createdAt = createdAt,
+            )
+        given(postRepository.existsById(77L)).willReturn(true)
+        given(postRepository.existsById(88L)).willReturn(false)
+        given(revisionRepository.findSummariesByPostId(77L, 20)).willReturn(listOf(summary))
+        given(revisionRepository.findByPostIdAndRevisionId(77L, 91L)).willReturn(snapshot)
+
+        val serviceWithRevisions =
+            PostApplicationService(
+                postRepository = postRepository,
+                postWriteRequestIdempotencyRepository = postWriteRequestIdempotencyRepository,
+                memberRepository = memberRepository,
+                secureTipPort = secureTipPort,
+                uploadedFileRetentionService = uploadedFileRetentionService,
+                postRecommendRankingService = postRecommendRankingService,
+                postKeywordSearchPipelineService = postKeywordSearchPipelineService,
+                taskFacade = taskFacade,
+                objectMapper = objectMapper,
+                postHydrationService = postHydrationService,
+                postCounterService = postCounterService,
+                postTagIndexService = postTagIndexService,
+                postTempDraftService = postTempDraftService,
+                postHitSideEffectQueue = postHitSideEffectQueue,
+                postRevisionRepository = revisionRepository,
+            )
+
+        assertThat(serviceWithRevisions.getPostRevisionsForAdmin(77L)).containsExactly(summary)
+        assertThat(serviceWithRevisions.getPostRevisionSnapshotForAdmin(77L, 91L)).isEqualTo(snapshot)
+        assertThatThrownBy { serviceWithRevisions.getPostRevisionsForAdmin(88L) }
+            .isInstanceOf(NoSuchElementException::class.java)
+        assertThatThrownBy { serviceWithRevisions.getPostRevisionSnapshotForAdmin(88L, 91L) }
+            .isInstanceOf(NoSuchElementException::class.java)
+
+        then(postRepository).should(never()).findById(77L)
+        then(postRepository).should(never()).findById(88L)
+    }
+
+    @Test
+    @DisplayName("restorePostRevisionForAdmin은 expectedVersion 불일치 또는 낙관적 락 충돌 시 POST_CONCURRENT_EDIT 예외를 발생시킨다")
+    fun restorePostRevisionForAdminRejectsVersionMismatchAndOptimisticLockConflict() {
+        val author = member(1L, "작성자")
+        val post =
+            Post(id = 77L, author = author, title = "원본", content = "원본 본문", published = false, listed = false).apply {
+                version = 4L
+            }
+        val revisionRepository = mock(com.back.boundedContexts.post.application.port.output.PostRevisionRepositoryPort::class.java)
+        val snapshot =
+            com.back.boundedContexts.post.dto.PostRevisionSnapshotDto(
+                id = 91L,
+                postId = 77L,
+                authorId = 1L,
+                title = "복원 제목",
+                content = "복원 본문",
+                summaryText = null,
+                createdAt = Instant.now(),
+            )
+        given(postRepository.findById(77L)).willReturn(Optional.of(post))
+        given(revisionRepository.findByPostIdAndRevisionId(77L, 91L)).willReturn(snapshot)
+        given(postRepository.flush()).willThrow(org.springframework.orm.ObjectOptimisticLockingFailureException(Post::class.java, 77L))
+
+        val serviceWithRevisions =
+            PostApplicationService(
+                postRepository = postRepository,
+                postWriteRequestIdempotencyRepository = postWriteRequestIdempotencyRepository,
+                memberRepository = memberRepository,
+                secureTipPort = secureTipPort,
+                uploadedFileRetentionService = uploadedFileRetentionService,
+                postRecommendRankingService = postRecommendRankingService,
+                postKeywordSearchPipelineService = postKeywordSearchPipelineService,
+                taskFacade = taskFacade,
+                objectMapper = objectMapper,
+                postHydrationService = postHydrationService,
+                postCounterService = postCounterService,
+                postTagIndexService = postTagIndexService,
+                postTempDraftService = postTempDraftService,
+                postHitSideEffectQueue = postHitSideEffectQueue,
+                postRevisionRepository = revisionRepository,
+            )
+
+        assertThatThrownBy {
+            serviceWithRevisions.restorePostRevisionForAdmin(author, 77L, 91L, expectedVersion = 3L)
+        }.isInstanceOf(AppException::class.java)
+            .extracting("errorCode")
+            .isEqualTo(ErrorCode.POST_CONCURRENT_EDIT)
+
+        then(revisionRepository).should(never()).findByPostIdAndRevisionId(77L, 91L)
+
+        assertThatThrownBy {
+            serviceWithRevisions.restorePostRevisionForAdmin(author, 77L, 91L, expectedVersion = 4L)
+        }.isInstanceOf(AppException::class.java)
+            .extracting("errorCode")
+            .isEqualTo(ErrorCode.POST_CONCURRENT_EDIT)
+    }
+
     private fun capturePostWriteSideEffectPayload(): PostWriteSideEffectPayload {
         val task = postWriteSideEffectTasks().single()
         return decodePostWritePayload(task)
@@ -779,6 +994,25 @@ class PostApplicationServiceDeleteResilienceTest {
                 retryPolicy = TaskRetryPolicy("post write", 5, 10, 2.0, 300),
                 schemaVersion = 2,
                 sensitivity = TaskPayloadSensitivity.PERSONAL,
+            ),
+        )
+        registry.register(
+            PostHitSideEffectPayload.TASK_TYPE,
+            TaskHandlerEntry.withCurrentDecoder(
+                taskType = PostHitSideEffectPayload.TASK_TYPE,
+                payloadClass = PostHitSideEffectPayload::class.java,
+                handlerMethod =
+                    TaskHandlerMethod(
+                        bean = mock(PostHitSideEffectHandler::class.java),
+                        method =
+                            PostHitSideEffectHandler::class.java.getDeclaredMethod(
+                                "handle",
+                                PostHitSideEffectPayload::class.java,
+                            ),
+                    ),
+                retryPolicy = TaskRetryPolicy("post hit", 3, 5, 2.0, 60),
+                schemaVersion = 2,
+                sensitivity = TaskPayloadSensitivity.PUBLIC,
             ),
         )
         return registry

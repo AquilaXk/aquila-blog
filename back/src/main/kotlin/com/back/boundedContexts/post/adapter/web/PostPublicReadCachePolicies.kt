@@ -102,4 +102,18 @@ object PostPublicReadCachePolicies {
             sharedMaxAgeSeconds = 45,
             staleWhileRevalidateSeconds = 45,
         )
+    val WIKILINK_CATALOG =
+        PublicReadCachePolicy(
+            name = "wikilink-catalog-max60-smax300-swr300",
+            maxAgeSeconds = 60,
+            sharedMaxAgeSeconds = 300,
+            staleWhileRevalidateSeconds = 300,
+        )
+    val BACKLINKS =
+        PublicReadCachePolicy(
+            name = "backlinks-max15-smax45-swr45",
+            maxAgeSeconds = 15,
+            sharedMaxAgeSeconds = 45,
+            staleWhileRevalidateSeconds = 45,
+        )
 }

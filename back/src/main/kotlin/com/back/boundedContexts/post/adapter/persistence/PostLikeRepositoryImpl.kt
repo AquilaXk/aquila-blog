@@ -12,8 +12,13 @@ class PostLikeRepositoryImpl : PostLikeRepositoryCustom {
     override fun insertIfAbsent(
         liker: Member,
         post: Post,
+    ): Long? = insertIfAbsentByIds(liker.id, post.id)
+
+    override fun insertIfAbsentByIds(
+        likerId: Long,
+        postId: Long,
     ): Long? {
-        findExistingLikeId(liker.id, post.id)?.let { return null }
+        findExistingLikeId(likerId, postId)?.let { return null }
 
         val result =
             entityManager
@@ -35,8 +40,8 @@ class PostLikeRepositoryImpl : PostLikeRepositoryCustom {
                     on conflict (liker_id, post_id) do nothing
                     returning id
                     """.trimIndent(),
-                ).setParameter("likerId", liker.id)
-                .setParameter("postId", post.id)
+                ).setParameter("likerId", likerId)
+                .setParameter("postId", postId)
                 .resultList
                 .firstOrNull()
 

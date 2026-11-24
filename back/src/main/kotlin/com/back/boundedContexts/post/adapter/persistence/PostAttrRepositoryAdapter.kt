@@ -26,6 +26,12 @@ class PostAttrRepositoryAdapter(
         delta: Int,
     ): Int = postAttrRepository.incrementIntValue(subject, name, delta)
 
+    override fun incrementIntValueBySubjectId(
+        subjectId: Long,
+        name: String,
+        delta: Int,
+    ): Int = postAttrRepository.incrementIntValueBySubjectId(subjectId, name, delta)
+
     override fun findRecentlyModifiedByName(
         name: String,
         modifiedAfter: Instant,

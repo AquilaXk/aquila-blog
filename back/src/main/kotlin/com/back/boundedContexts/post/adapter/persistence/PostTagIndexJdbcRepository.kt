@@ -51,7 +51,7 @@ class PostTagIndexJdbcRepository(
                 .asSequence()
                 .map(String::trim)
                 .filter(String::isNotBlank)
-                .distinct()
+                .distinctBy(String::lowercase)
                 .toList()
 
         val source = findPostSourceForUpdate(postId)

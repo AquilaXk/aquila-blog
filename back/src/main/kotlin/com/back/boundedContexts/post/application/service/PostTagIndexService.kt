@@ -34,7 +34,7 @@ class PostTagIndexService(
             .tags
             .map(::normalizeTag)
             .filter(String::isNotBlank)
-            .distinct()
+            .distinctBy(String::lowercase)
 
     private fun normalizeTag(tag: String): String =
         tag.trim().also { normalizedTag ->

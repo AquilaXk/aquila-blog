@@ -7,6 +7,7 @@ import com.back.boundedContexts.post.application.port.input.PostUseCase
 import com.back.boundedContexts.post.dto.AdmDeletedPostDto
 import com.back.boundedContexts.post.dto.AdmPostBulkActionRequest
 import com.back.boundedContexts.post.dto.AdmPostBulkActionResBody
+import com.back.boundedContexts.post.dto.AdmPostRevisionRestoreRequest
 import com.back.boundedContexts.post.dto.PostDto
 import com.back.boundedContexts.post.dto.PostRevisionSnapshotDto
 import com.back.boundedContexts.post.dto.PostRevisionSummaryDto
@@ -20,6 +21,7 @@ import io.swagger.v3.oas.annotations.Operation
 import io.swagger.v3.oas.annotations.security.SecurityRequirement
 import io.swagger.v3.oas.annotations.tags.Tag
 import jakarta.validation.Valid
+import jakarta.validation.constraints.Min
 import jakarta.validation.constraints.Positive
 import org.springframework.security.core.annotation.AuthenticationPrincipal
 import org.springframework.transaction.annotation.Transactional
@@ -195,9 +197,17 @@ class ApiV1AdmPostController(
         @AuthenticationPrincipal securityUser: SecurityUser,
         @PathVariable @Positive id: Long,
         @PathVariable @Positive revisionId: Long,
+        @RequestParam(required = false) @Min(0) expectedVersion: Long? = null,
+        @Valid @RequestBody(required = false) request: AdmPostRevisionRestoreRequest? = null,
     ): RsData<PostWithContentDto> {
         val actor = resolveAdminActor(securityUser)
-        val restoredPost = postUseCase.restorePostRevisionForAdmin(actor, id, revisionId)
+        val resolvedExpectedVersion = expectedVersion ?: request?.expectedVersion
+        val restoredPost =
+            if (resolvedExpectedVersion == null) {
+                postUseCase.restorePostRevisionForAdmin(actor, id, revisionId)
+            } else {
+                postUseCase.restorePostRevisionForAdmin(actor, id, revisionId, resolvedExpectedVersion)
+            }
         val dto =
             PostWithContentDto(restoredPost).apply {
                 tempDraft = postUseCase.isTempDraft(restoredPost)

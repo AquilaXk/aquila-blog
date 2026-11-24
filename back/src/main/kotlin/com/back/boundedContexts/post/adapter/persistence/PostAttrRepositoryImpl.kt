@@ -48,8 +48,14 @@ class PostAttrRepositoryImpl : PostAttrRepositoryCustom {
         subject: Post,
         name: String,
         delta: Int,
+    ): Int = incrementIntValueBySubjectId(subject.id, name, delta)
+
+    override fun incrementIntValueBySubjectId(
+        subjectId: Long,
+        name: String,
+        delta: Int,
     ): Int {
-        val updatedValues = updateIntValue(subject.id, name, delta)
+        val updatedValues = updateIntValue(subjectId, name, delta)
         if (updatedValues.isNotEmpty()) return updatedValues.max()
 
         return (
@@ -75,7 +81,7 @@ class PostAttrRepositoryImpl : PostAttrRepositoryCustom {
                         modified_at = CURRENT_TIMESTAMP
                     returning int_value
                     """.trimIndent(),
-                ).setParameter("subjectId", subject.id)
+                ).setParameter("subjectId", subjectId)
                 .setParameter("name", name)
                 .setParameter("delta", delta)
                 .singleResult as Number

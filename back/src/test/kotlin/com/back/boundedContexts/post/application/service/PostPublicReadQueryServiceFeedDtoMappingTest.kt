@@ -13,6 +13,7 @@ import com.back.boundedContexts.post.domain.postMixin.LIKES_COUNT
 import com.back.boundedContexts.post.dto.PublicPostDetailContentCacheDto
 import com.back.boundedContexts.post.dto.PublicPostDetailMetaCacheDto
 import com.back.boundedContexts.post.dto.PublicPostDetailSnapshotCacheDto
+import com.back.boundedContexts.post.dto.TagCountDto
 import com.back.global.app.AppConfig
 import com.back.global.exception.application.AppException
 import com.back.standard.dto.page.PagedResult
@@ -678,6 +679,7 @@ class PostPublicReadQueryServiceFeedDtoMappingTest {
 
         assertThat(detail.id).isEqualTo(77L)
         assertThat(detail.content).isEqualTo("warm snapshot")
+        then(postUseCase).should(never()).findPublicDetailById(77L)
         then(negativeCache).should(never()).evict(77L)
     }
 
@@ -788,6 +790,11 @@ class PostPublicReadQueryServiceFeedDtoMappingTest {
         assertThat(PostPublicReadQueryService.shouldBypassSearchCache(11, "kotlin")).isTrue()
         assertThat(PostPublicReadQueryService.shouldBypassSearchCache(1, "a".repeat(25))).isTrue()
 
+        assertThat(PostPublicReadQueryService.shouldBypassItemsCache(1, "   ")).isFalse()
+        assertThat(PostPublicReadQueryService.shouldBypassItemsCache(1, "kotlin")).isFalse()
+        assertThat(PostPublicReadQueryService.shouldBypassItemsCache(11, "")).isTrue()
+        assertThat(PostPublicReadQueryService.shouldBypassItemsCache(1, "a".repeat(25))).isTrue()
+
         assertThat(PostPublicReadQueryService.isFirstCursorRequest(null)).isTrue()
         assertThat(PostPublicReadQueryService.isFirstCursorRequest("  ")).isTrue()
         assertThat(PostPublicReadQueryService.isFirstCursorRequest("cursor-token")).isFalse()
@@ -892,6 +899,92 @@ class PostPublicReadQueryServiceFeedDtoMappingTest {
                 clock = CURSOR_TEST_CLOCK,
             )
         }.isInstanceOf(IllegalArgumentException::class.java)
+    }
+
+    @Test
+    @DisplayName("RECOMMENDED explore 조회는 캐시된 POST_TAGS 결과를 findRecommendedExplorePage에 전달한다")
+    fun recommendedExploreUsesCachedTagCountsWithoutRequeryingUncachedTags() {
+        val postUseCase = mock(PostUseCase::class.java)
+        val meterRegistry = SimpleMeterRegistry()
+        val cacheManager =
+            ConcurrentMapCacheManager(
+                PostQueryCacheNames.TAGS,
+                PostQueryCacheNames.EXPLORE,
+            )
+        val service = createService(postUseCase, meterRegistry, cacheManager = cacheManager)
+        val cachedTags = listOf(TagCountDto("kotlin", 4))
+        val post = postByAuthor(id = 44L)
+        given(postUseCase.getPublicTagCounts()).willReturn(cachedTags)
+        given(postUseCase.findRecommendedExplorePage(1, 10, cachedTags))
+            .willReturn(
+                PagedResult(
+                    content = listOf(post),
+                    page = 1,
+                    pageSize = 10,
+                    totalElements = 1,
+                ),
+            )
+
+        cacheManager.getCache(PostQueryCacheNames.TAGS)?.put("public", cachedTags)
+        val exploreResult =
+            service.getPublicExplore(
+                page = 1,
+                pageSize = 10,
+                kw = "",
+                tag = "",
+                sort = PostSearchSortType1.CREATED_AT,
+            )
+
+        assertThat(exploreResult.content.map { it.id }).containsExactly(44L)
+        then(postUseCase).should(never()).getPublicTagCounts()
+        then(postUseCase).should(times(1)).findRecommendedExplorePage(1, 10, cachedTags)
+    }
+
+    @Test
+    @DisplayName("RECOMMENDED explore 조회는 POST_TAGS 캐시 읽기·쓰기 RuntimeException 시 500 대신 DB 조회로 Fail-Open 복구한다")
+    fun recommendedExploreFailsOpenWhenTagsCacheReadOrWriteThrows() {
+        val postUseCase = mock(PostUseCase::class.java)
+        val meterRegistry = SimpleMeterRegistry()
+        val failingTagsCache = mock(Cache::class.java)
+        val cacheManager = mock(CacheManager::class.java)
+        given(cacheManager.getCache(PostQueryCacheNames.TAGS)).willReturn(failingTagsCache)
+        given(failingTagsCache.get("public")).willThrow(IllegalStateException("redis read down"))
+        doThrow(IllegalStateException("redis write down")).`when`(failingTagsCache).put(
+            "public",
+            listOf(TagCountDto("kotlin", 4)),
+        )
+
+        val service = createService(postUseCase, meterRegistry, cacheManager = cacheManager)
+        val fallbackTags = listOf(TagCountDto("kotlin", 4))
+        val post = postByAuthor(id = 45L)
+        given(postUseCase.getPublicTagCounts()).willReturn(fallbackTags)
+        given(postUseCase.findRecommendedExplorePage(1, 10, fallbackTags))
+            .willReturn(
+                PagedResult(
+                    content = listOf(post),
+                    page = 1,
+                    pageSize = 10,
+                    totalElements = 1,
+                ),
+            )
+
+        val exploreResult =
+            service.getPublicExplore(
+                page = 1,
+                pageSize = 10,
+                kw = "",
+                tag = "",
+                sort = PostSearchSortType1.CREATED_AT,
+            )
+
+        assertThat(exploreResult.content.map { it.id }).containsExactly(45L)
+        then(postUseCase).should(times(1)).getPublicTagCounts()
+        then(postUseCase).should(times(1)).findRecommendedExplorePage(1, 10, fallbackTags)
+        assertThat(
+            meterRegistry
+                .counter("post.read.cache.write.failure", "cache", PostQueryCacheNames.TAGS, "operation", "put")
+                .count(),
+        ).isEqualTo(1.0)
     }
 
     private fun createService(

@@ -112,4 +112,39 @@ class PostTagIndexJdbcRepositoryTest {
             any<RowMapper<PostTagIndexRepositoryPort.TagCountRow>>(),
         )
     }
+
+    @Test
+    @DisplayName("replacePostTags는 대소문자만 다른 태그를 최초 표기 기준으로 중복 제거한다")
+    fun replacePostTagsDeduplicatesCaseInsensitivelyPreservingFirstCasing() {
+        val jdbcTemplate = mock(JdbcTemplate::class.java)
+        `when`(
+            jdbcTemplate.query(
+                anyString(),
+                any<RowMapper<PostTagIndexRepositoryPort.LockedPostSource>>(),
+                eq(12L),
+            ),
+        ).thenReturn(listOf(PostTagIndexRepositoryPort.LockedPostSource("content", deleted = false)))
+        `when`(jdbcTemplate.update(anyString(), eq(12L))).thenReturn(1)
+
+        var insertedTags: List<String> = emptyList()
+        `when`(
+            jdbcTemplate.batchUpdate(
+                anyString(),
+                anyList(),
+                anyInt(),
+                any<ParameterizedPreparedStatementSetter<String>>(),
+            ),
+        ).thenAnswer { invocation ->
+            @Suppress("UNCHECKED_CAST")
+            insertedTags = invocation.getArgument<List<String>>(1)
+            arrayOf(intArrayOf(1, 1))
+        }
+
+        val repository = PostTagIndexJdbcRepository(jdbcTemplate)
+        repository.replacePostTags(12L, listOf("Spring Boot", "spring boot", "SPRING BOOT", "Postgres", "postgres"))
+
+        org.assertj.core.api.Assertions
+            .assertThat(insertedTags)
+            .containsExactly("Spring Boot", "Postgres")
+    }
 }

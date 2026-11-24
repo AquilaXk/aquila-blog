@@ -7,8 +7,10 @@ import com.back.boundedContexts.post.dto.AdmDeletedPostDto
 import com.back.boundedContexts.post.dto.AdmDeletedPostSnapshotDto
 import com.back.boundedContexts.post.dto.AdmPostFacetCounts
 import com.back.boundedContexts.post.dto.PostInteractionReadStateDto
+import com.back.boundedContexts.post.dto.PublicBacklinkCandidateProjection
 import com.back.boundedContexts.post.dto.PublicPostDetailContentCacheDto
 import com.back.boundedContexts.post.dto.PublicSitemapPostItemDto
+import com.back.boundedContexts.post.dto.PublicWikilinkCatalogItemDto
 import com.back.standard.dto.post.type1.PostSearchSortType1
 import java.time.Instant
 import java.util.Optional
@@ -136,6 +138,13 @@ interface PostRepositoryPort {
 
     fun findPublicSitemapItems(limit: Int): List<PublicSitemapPostItemDto>
 
+    fun findPublicWikilinkCatalogItems(limit: Int): List<PublicWikilinkCatalogItemDto> = emptyList()
+
+    fun findPublicBacklinkCandidates(
+        targetPostId: Long,
+        limit: Int,
+    ): List<PublicBacklinkCandidateProjection> = emptyList()
+
     fun findInteractionReadStateById(id: Long): PostInteractionReadStateDto?
 
     fun existsImageReference(
@@ -162,9 +171,19 @@ interface PostRepositoryPort {
         hitCountAttr: PostAttr?,
     )
 
+    fun updateHitCountById(
+        postId: Long,
+        hitCount: Int,
+    ) {}
+
     fun updateLikesCount(
         post: Post,
         likesCount: Int,
         likesCountAttr: PostAttr?,
     )
+
+    fun updateLikesCountById(
+        postId: Long,
+        likesCount: Int,
+    ) {}
 }

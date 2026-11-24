@@ -4,8 +4,10 @@ import com.back.boundedContexts.member.domain.shared.Member
 import com.back.boundedContexts.post.domain.Post
 import com.back.boundedContexts.post.domain.PostAttr
 import com.back.boundedContexts.post.dto.PostInteractionReadStateDto
+import com.back.boundedContexts.post.dto.PublicBacklinkCandidateProjection
 import com.back.boundedContexts.post.dto.PublicPostDetailContentCacheDto
 import com.back.boundedContexts.post.dto.PublicSitemapPostItemDto
+import com.back.boundedContexts.post.dto.PublicWikilinkCatalogItemDto
 import com.back.standard.dto.post.type1.PostSearchSortType1
 import org.springframework.data.domain.Page
 import org.springframework.data.domain.Pageable
@@ -72,6 +74,13 @@ interface PostRepositoryCustom {
 
     fun findPublicSitemapItems(limit: Int): List<PublicSitemapPostItemDto>
 
+    fun findPublicWikilinkCatalogItems(limit: Int): List<PublicWikilinkCatalogItemDto>
+
+    fun findPublicBacklinkCandidates(
+        targetPostId: Long,
+        limit: Int,
+    ): List<PublicBacklinkCandidateProjection>
+
     fun findInteractionReadStateById(id: Long): PostInteractionReadStateDto?
 
     fun updateHitCount(
@@ -80,9 +89,19 @@ interface PostRepositoryCustom {
         hitCountAttr: PostAttr?,
     )
 
+    fun updateHitCountById(
+        postId: Long,
+        hitCount: Int,
+    )
+
     fun updateLikesCount(
         targetPost: Post,
         likesCount: Int,
         likesCountAttr: PostAttr?,
+    )
+
+    fun updateLikesCountById(
+        postId: Long,
+        likesCount: Int,
     )
 }

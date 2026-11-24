@@ -60,3 +60,22 @@ test("runtime stage extraction is not fooled by a lowercase final FROM", () => {
   assert.doesNotMatch(runtimeStage, /apk add --no-cache wget\b/)
   assert.deepEqual([...runtimeStage.matchAll(/^USER\s+(\S+)/gim)], [])
 })
+
+test("backend runtime stage uses pinned JRE instead of full JDK", () => {
+  const dockerfile = readFileSync(backendDockerfilePath, "utf8")
+  const runtimeStage = runtimeStageOf(dockerfile)
+
+  assert.match(runtimeStage, /^eclipse-temurin:25-jre@sha256:[a-f0-9]{64}/m)
+})
+
+test("production compose drops all Linux capabilities and sets no-new-privileges on every service", () => {
+  const compose = readFileSync(path.join(repoRoot, "deploy/homeserver/docker-compose.prod.yml"), "utf8")
+  const servicesSection = compose.slice(compose.indexOf("\nservices:\n") + 1, compose.indexOf("\nvolumes:\n"))
+  const blocks = servicesSection.split(/\n(?=  [a-z0-9_]+:\n)/).filter((block) => /^  [a-z0-9_]+:/m.test(block))
+  assert.ok(blocks.length >= 20)
+  for (const block of blocks) {
+    const name = block.match(/^  ([a-z0-9_]+):/m)?.[1]
+    assert.match(block, /security_opt:\s*\*no-new-privileges/, `${name} missing security_opt: *no-new-privileges`)
+    assert.match(block, /cap_drop:\s*\*cap-drop-all/, `${name} missing cap_drop: *cap-drop-all`)
+  }
+})

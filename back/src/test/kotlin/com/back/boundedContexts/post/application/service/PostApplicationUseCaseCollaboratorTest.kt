@@ -78,6 +78,30 @@ class PostApplicationUseCaseCollaboratorTest {
     }
 
     @Test
+    fun `lightweight id counter methods update counters and enforce persisted post like floor`() {
+        val postRepository = mock(PostRepositoryPort::class.java)
+        val postAttrRepository = mock(PostAttrRepositoryPort::class.java)
+        val memberAttrRepository = mock(MemberAttrRepositoryPort::class.java)
+        val postLikeRepository = mock(PostLikeRepositoryPort::class.java)
+        val service = PostCounterService(postRepository, postAttrRepository, memberAttrRepository, postLikeRepository)
+
+        given(postAttrRepository.incrementIntValueBySubjectId(99L, "hitCount", 1)).willReturn(14)
+        given(postAttrRepository.incrementIntValueBySubjectId(99L, LIKES_COUNT, 1)).willReturn(5)
+        given(postAttrRepository.incrementIntValueBySubjectId(99L, LIKES_COUNT, -1)).willReturn(1)
+        given(postAttrRepository.incrementIntValueBySubjectId(99L, LIKES_COUNT, 2)).willReturn(3)
+
+        assertThat(service.incrementHit(99L)).isEqualTo(14)
+        then(postRepository).should().updateHitCountById(99L, 14)
+
+        assertThat(service.incrementLike(99L)).isEqualTo(5)
+        then(postRepository).should().updateLikesCountById(99L, 5)
+
+        assertThat(service.decrementLike(99L, minLikesCount = 3)).isEqualTo(3)
+        then(postAttrRepository).should().incrementIntValueBySubjectId(99L, LIKES_COUNT, 2)
+        then(postRepository).should().updateLikesCountById(99L, 3)
+    }
+
+    @Test
     fun `post counter initializes a missing member post count from persisted posts`() {
         val postRepository = mock(PostRepositoryPort::class.java)
         val postAttrRepository = mock(PostAttrRepositoryPort::class.java)

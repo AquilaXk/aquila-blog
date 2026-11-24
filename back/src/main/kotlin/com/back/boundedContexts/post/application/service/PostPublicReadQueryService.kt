@@ -7,12 +7,16 @@ import com.back.boundedContexts.post.dto.AdjacentPostsDto
 import com.back.boundedContexts.post.dto.CursorFeedPageDto
 import com.back.boundedContexts.post.dto.FeedPostDto
 import com.back.boundedContexts.post.dto.FeedPostDtoMappingFailureType
+import com.back.boundedContexts.post.dto.PostDto
 import com.back.boundedContexts.post.dto.PostWithContentDto
+import com.back.boundedContexts.post.dto.PublicPostBacklinkItemDto
+import com.back.boundedContexts.post.dto.PublicPostBacklinksResBody
 import com.back.boundedContexts.post.dto.PublicPostDetailContentCacheDto
 import com.back.boundedContexts.post.dto.PublicPostDetailMetaCacheDto
 import com.back.boundedContexts.post.dto.PublicPostDetailSnapshotCacheDto
 import com.back.boundedContexts.post.dto.PublicPostsBootstrapDto
 import com.back.boundedContexts.post.dto.PublicSitemapPostsResBody
+import com.back.boundedContexts.post.dto.PublicWikilinkCatalogResBody
 import com.back.boundedContexts.post.dto.TagCountDto
 import com.back.global.exception.application.AppException
 import com.back.global.exception.application.ErrorCode
@@ -22,6 +26,7 @@ import com.back.standard.dto.post.type1.PostSearchSortType1
 import io.micrometer.core.instrument.MeterRegistry
 import io.micrometer.core.instrument.Tag
 import org.slf4j.LoggerFactory
+import org.springframework.beans.factory.ObjectProvider
 import org.springframework.beans.factory.annotation.Value
 import org.springframework.cache.Cache
 import org.springframework.cache.CacheManager
@@ -50,6 +55,7 @@ class PostPublicReadQueryService(
     @Value("\${custom.post.read.detail-content-cache-max-chars:120000}") detailContentCacheMaxChars: Int,
     @Value("\${custom.post.read.detail-snapshot-cache-max-chars:180000}") detailSnapshotCacheMaxChars: Int,
     clock: Clock,
+    private val selfProvider: ObjectProvider<PostPublicReadQueryUseCase>? = null,
 ) : PostPublicReadQueryUseCase {
     private val logger = LoggerFactory.getLogger(PostPublicReadQueryService::class.java)
     private val cursorCodec =
@@ -141,13 +147,19 @@ class PostPublicReadQueryService(
             "explore",
             "page=$page size=$pageSize sort=${sort.name} kw=${kw.trim().take(80)} tag=${tag.trim().take(80)}",
         ) {
+            val normalizedKw = kw.trim()
+            val normalizedTag = tag.trim()
+            val preloadedTagCounts =
+                if (normalizedTag.isBlank() && normalizedKw.isBlank() && sort == PostSearchSortType1.CREATED_AT) {
+                    resolveCachedPublicTagCounts()
+                } else {
+                    null
+                }
             postReadBulkheadService.withExplorePermit {
-                val normalizedKw = kw.trim()
-                val normalizedTag = tag.trim()
                 val postPage =
                     if (normalizedTag.isBlank()) {
                         if (normalizedKw.isBlank() && sort == PostSearchSortType1.CREATED_AT) {
-                            postUseCase.findRecommendedExplorePage(page, pageSize)
+                            postUseCase.findRecommendedExplorePage(page, pageSize, preloadedTagCounts)
                         } else {
                             postUseCase.findPagedByKw(normalizedKw, sort, page, pageSize)
                         }
@@ -246,6 +258,35 @@ class PostPublicReadQueryService(
         }
 
     @Transactional(readOnly = true)
+    @Cacheable(
+        cacheNames = [PostQueryCacheNames.ITEMS],
+        key =
+            "'page=' + #page + ':size=' + #pageSize + ':sort=' + #sort.name()" +
+                " + ':kw=' + T(com.back.boundedContexts.post.application.service.PostPublicReadQueryService).toCacheKeyToken(#kw)",
+        condition =
+            "!T(com.back.boundedContexts.post.application.service.PostPublicReadQueryService)" +
+                ".shouldBypassItemsCache(#page, #kw)",
+        sync = true,
+    )
+    override fun getPublicItems(
+        page: Int,
+        pageSize: Int,
+        kw: String,
+        sort: PostSearchSortType1,
+    ): PageDto<PostDto> =
+        runReadQuery(
+            "items",
+            "page=$page size=$pageSize sort=${sort.name} kw=${kw.trim().take(80)}",
+        ) {
+            val executeQuery: (() -> PageDto<PostDto>) -> PageDto<PostDto> =
+                if (kw.isBlank()) postReadBulkheadService::withFeedPermit else postReadBulkheadService::withSearchPermit
+            executeQuery {
+                val postPage = postUseCase.findPagedByKw(kw, sort, page, pageSize)
+                PageDto(postPage.map(::PostDto))
+            }
+        }
+
+    @Transactional(readOnly = true)
     override fun getPublicPostDetail(id: Long): PostWithContentDto =
         runReadQuery("detail", "id=$id") {
             postReadBulkheadService.withDetailPermit {
@@ -329,6 +370,61 @@ class PostPublicReadQueryService(
             }
         }
 
+    private fun resolveCachedPublicTagCounts(): List<TagCountDto> {
+        val cache =
+            try {
+                cacheManager.getCache(PostQueryCacheNames.TAGS)
+            } catch (exception: RuntimeException) {
+                logger.warn("tag_cache_lookup_failed cache={}", PostQueryCacheNames.TAGS, exception)
+                null
+            }
+        if (cache != null) {
+            try {
+                val cachedRaw = cache.get("public")?.get()
+                if (cachedRaw is List<*>) {
+                    val typed = cachedRaw.filterIsInstance<TagCountDto>()
+                    if (typed.size == cachedRaw.size) {
+                        return typed
+                    }
+                    logger.warn(
+                        "tag_cache_value_mismatch cache={} key=public valueType={} -> evict",
+                        PostQueryCacheNames.TAGS,
+                        cachedRaw::class.java.name,
+                    )
+                    runCatching { cache.evict("public") }
+                    recordCacheResult(PostQueryCacheNames.TAGS, "evict_mismatch")
+                } else if (cachedRaw != null) {
+                    logger.warn(
+                        "tag_cache_value_mismatch cache={} key=public valueType={} -> evict",
+                        PostQueryCacheNames.TAGS,
+                        cachedRaw::class.java.name,
+                    )
+                    runCatching { cache.evict("public") }
+                    recordCacheResult(PostQueryCacheNames.TAGS, "evict_mismatch")
+                }
+            } catch (exception: RuntimeException) {
+                logger.warn(
+                    "tag_cache_read_failed cache={} key=public -> fallback query",
+                    PostQueryCacheNames.TAGS,
+                    exception,
+                )
+                runCatching { cache.evict("public") }
+                recordCacheResult(PostQueryCacheNames.TAGS, "evict_error")
+            }
+        }
+        val proxied = selfProvider?.ifAvailable
+        if (proxied != null && proxied !== this) {
+            return proxied.getPublicTagCounts()
+        }
+        val loaded = getPublicTagCounts()
+        if (cache != null) {
+            recordCacheWriteFailureSafe(PostQueryCacheNames.TAGS, "put") {
+                cache.put("public", loaded)
+            }
+        }
+        return loaded
+    }
+
     @Transactional(readOnly = true)
     @Cacheable(
         cacheNames = [PostQueryCacheNames.BOOTSTRAP],
@@ -388,6 +484,67 @@ class PostPublicReadQueryService(
             postReadBulkheadService.withFeedPermit {
                 PublicSitemapPostsResBody(items = postUseCase.getPublicSitemapItems(limit))
             }
+        }
+
+    @Transactional(readOnly = true)
+    @Cacheable(
+        cacheNames = [PostQueryCacheNames.WIKILINK_CATALOG],
+        key = "'public'",
+        sync = true,
+    )
+    override fun getPublicWikilinkCatalog(): PublicWikilinkCatalogResBody =
+        runReadQuery("wikilink-catalog", "public=true") {
+            postReadBulkheadService.withFeedPermit {
+                PublicWikilinkCatalogResBody(
+                    items = postUseCase.getPublicWikilinkCatalogItems(WIKILINK_CATALOG_LIMIT),
+                )
+            }
+        }
+
+    @Transactional(readOnly = true)
+    override fun getPublicBacklinks(id: Long): PublicPostBacklinksResBody =
+        runReadQuery("backlinks", "id=$id") {
+            if (isDetailNegativeCached(id)) {
+                throw AppException(ErrorCode.NOT_FOUND, "존재하지 않는 글입니다.")
+            }
+            if (!postUseCase.isPublicDetailReadable(id)) {
+                markDetailNegativeCache(id)
+                throw AppException(ErrorCode.NOT_FOUND, "존재하지 않는 글입니다.")
+            }
+            readCachedBacklinks(id)?.let { cached ->
+                return@runReadQuery cached
+            }
+            val (meta, _) = getOrLoadPublicPostDetailMeta(id)
+            val normalizedTargetTitle = PostWikilinkScanner.normalizeTargetKey(meta.title)
+            val candidates =
+                postReadBulkheadService.withExplorePermit {
+                    postUseCase.findPublicBacklinkCandidates(id, BACKLINK_CANDIDATES_LIMIT)
+                }
+            val backlinks =
+                candidates
+                    .asSequence()
+                    .filter { candidate ->
+                        PostWikilinkScanner.referencesTargetPost(
+                            markdown = candidate.content,
+                            targetPostId = id,
+                            normalizedTargetTitle = normalizedTargetTitle,
+                        )
+                    }.take(MAX_BACKLINKS_RESULT)
+                    .map { candidate ->
+                        val resolvedSummary =
+                            candidate.summaryText?.trim()?.takeIf { it.isNotBlank() }
+                                ?: PostSummaryResolver.resolveAutomatic(candidate.title, candidate.content).text
+                        PublicPostBacklinkItemDto(
+                            id = candidate.id,
+                            title = candidate.title,
+                            summary = resolvedSummary,
+                            createdAt = candidate.createdAt,
+                            modifiedAt = candidate.modifiedAt,
+                        )
+                    }.toList()
+            val body = PublicPostBacklinksResBody(items = backlinks)
+            cacheBacklinks(id, body)
+            body
         }
 
     @Transactional(readOnly = true)
@@ -700,6 +857,42 @@ class PostPublicReadQueryService(
         return null
     }
 
+    private fun readCachedBacklinks(id: Long): PublicPostBacklinksResBody? {
+        val cache = cacheManager.getCache(PostQueryCacheNames.BACKLINKS) ?: return null
+        return try {
+            val cached = cache.get(id, PublicPostBacklinksResBody::class.java)
+            recordCacheResult(PostQueryCacheNames.BACKLINKS, if (cached != null) "hit" else "miss")
+            cached
+        } catch (exception: RuntimeException) {
+            logger.warn(
+                "backlinks_cache_read_failed cache={} key={} -> evict",
+                PostQueryCacheNames.BACKLINKS,
+                id,
+                exception,
+            )
+            runCatching { cache.evict(id) }
+            recordCacheResult(PostQueryCacheNames.BACKLINKS, "evict_error")
+            null
+        }
+    }
+
+    private fun cacheBacklinks(
+        id: Long,
+        body: PublicPostBacklinksResBody,
+    ) {
+        val cache = cacheManager.getCache(PostQueryCacheNames.BACKLINKS) ?: return
+        val written =
+            recordCacheWriteFailureSafe(PostQueryCacheNames.BACKLINKS, "put") {
+                cache.put(id, body)
+            }
+        if (!written) return
+        recordCacheResult(PostQueryCacheNames.BACKLINKS, "put")
+        recordCachePayloadSize(PostQueryCacheNames.BACKLINKS, estimateBacklinksPayloadSize(body))
+    }
+
+    private fun estimateBacklinksPayloadSize(body: PublicPostBacklinksResBody): Int =
+        body.items.sumOf { item -> item.title.length + item.summary.length + 64 } + 64
+
     private fun getOrLoadPublicPostDetailMeta(id: Long): Pair<PublicPostDetailMetaCacheDto, Post?> {
         val metaCache = cacheManager.getCache(PostQueryCacheNames.DETAIL_PUBLIC_META)
         val cached = metaCache?.get(id, PublicPostDetailMetaCacheDto::class.java)
@@ -926,6 +1119,15 @@ class PostPublicReadQueryService(
         }
 
         @JvmStatic
+        fun shouldBypassItemsCache(
+            page: Int,
+            kw: String,
+        ): Boolean {
+            val normalizedKw = normalizeCacheToken(kw)
+            return page > MAX_CACHEABLE_PAGE || normalizedKw.length > MAX_CACHEABLE_KW_LENGTH
+        }
+
+        @JvmStatic
         fun isFirstCursorRequest(cursor: String?): Boolean = cursor.isNullOrBlank()
 
         @JvmStatic
@@ -953,5 +1155,8 @@ class PostPublicReadQueryService(
         private const val MAX_CACHE_KEY_LOG_LENGTH = 120
         private const val MAX_CACHE_VALUE_LOG_LENGTH = 80
         private const val MAX_CURSOR_PAGE_SIZE = 30
+        private const val WIKILINK_CATALOG_LIMIT = 5_000
+        private const val BACKLINK_CANDIDATES_LIMIT = 200
+        private const val MAX_BACKLINKS_RESULT = 20
     }
 }

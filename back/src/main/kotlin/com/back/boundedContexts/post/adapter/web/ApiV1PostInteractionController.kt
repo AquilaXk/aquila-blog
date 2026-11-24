@@ -8,7 +8,6 @@ import com.back.global.exception.application.ErrorCode
 import com.back.global.rsData.RsData
 import com.back.global.web.application.IpAddressNormalizer
 import com.back.global.web.application.Rq
-import com.back.standard.extensions.getOrThrow
 import jakarta.validation.constraints.Positive
 import org.springframework.web.bind.annotation.DeleteMapping
 import org.springframework.web.bind.annotation.PathVariable
@@ -31,9 +30,7 @@ class ApiV1PostInteractionController(
         val state = findReadableInteractionState(id)
         val hitCount =
             if (postHitDedupUseCase.shouldCountHit(id, resolveViewerKey())) {
-                val post = postUseCase.findById(id).getOrThrow()
-                postUseCase.incrementHit(post)
-                post.hitCount
+                postUseCase.incrementHit(id)
             } else {
                 state.hitCount
             }
@@ -49,19 +46,22 @@ class ApiV1PostInteractionController(
         @PathVariable @Positive id: Long,
     ): RsData<PostLikeToggleResBody> {
         val state = findReadableInteractionState(id)
-        val viewerKey = resolveViewerKey()
+        val actor = rq.actorOrNull
         val likesCount =
-            if (postHitDedupUseCase.markLikedIfAbsent(id, viewerKey)) {
-                try {
-                    val post = postUseCase.findById(id).getOrThrow()
-                    postUseCase.incrementLike(post)
-                    post.likesCount
-                } catch (ex: Throwable) {
-                    postHitDedupUseCase.unmarkLikedIfPresent(id, viewerKey)
-                    throw ex
-                }
+            if (actor != null) {
+                postUseCase.likePost(id, actor.id)
             } else {
-                state.likesCount
+                val viewerKey = resolveAnonymousViewerKey()
+                if (postHitDedupUseCase.markLikedIfAbsent(id, viewerKey)) {
+                    try {
+                        postUseCase.incrementLike(id)
+                    } catch (ex: Throwable) {
+                        postHitDedupUseCase.unmarkLikedIfPresent(id, viewerKey)
+                        throw ex
+                    }
+                } else {
+                    state.likesCount
+                }
             }
         return RsData(
             "200-1",
@@ -78,19 +78,22 @@ class ApiV1PostInteractionController(
         @PathVariable @Positive id: Long,
     ): RsData<PostLikeToggleResBody> {
         val state = findReadableInteractionState(id)
-        val viewerKey = resolveViewerKey()
+        val actor = rq.actorOrNull
         val likesCount =
-            if (postHitDedupUseCase.unmarkLikedIfPresent(id, viewerKey)) {
-                try {
-                    val post = postUseCase.findById(id).getOrThrow()
-                    postUseCase.decrementLike(post)
-                    post.likesCount
-                } catch (ex: Throwable) {
-                    postHitDedupUseCase.markLikedIfAbsent(id, viewerKey)
-                    throw ex
-                }
+            if (actor != null) {
+                postUseCase.unlikePost(id, actor.id)
             } else {
-                state.likesCount
+                val viewerKey = resolveAnonymousViewerKey()
+                if (postHitDedupUseCase.unmarkLikedIfPresent(id, viewerKey)) {
+                    try {
+                        postUseCase.decrementLike(id)
+                    } catch (ex: Throwable) {
+                        postHitDedupUseCase.markLikedIfAbsent(id, viewerKey)
+                        throw ex
+                    }
+                } else {
+                    state.likesCount
+                }
             }
         return RsData(
             "200-1",
@@ -116,6 +119,11 @@ class ApiV1PostInteractionController(
     private fun resolveViewerKey(): String =
         rq.actorOrNull
             ?.let { "member:${it.id}" }
-            ?: IpAddressNormalizer.normalizeRateLimitKeyOrNull(rq.clientIp)?.let { "anon:$it" }
+            ?: resolveAnonymousViewerKey()
+
+    private fun resolveAnonymousViewerKey(): String =
+        IpAddressNormalizer
+            .normalizeRateLimitKeyOrNull(rq.clientIp)
+            ?.let { "anon:$it" }
             ?: ""
 }

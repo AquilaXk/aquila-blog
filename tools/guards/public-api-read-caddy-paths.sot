@@ -2,6 +2,7 @@
 /post/api/v1/posts
 /post/api/v1/posts/*
 /post/api/v1/posts/*/adjacent
+/post/api/v1/posts/*/backlinks
 /post/api/v1/posts/*/content
 /post/api/v1/posts/*/meta
 /post/api/v1/posts/bootstrap
@@ -13,4 +14,5 @@
 /post/api/v1/posts/search
 /post/api/v1/posts/sitemap
 /post/api/v1/posts/tags
+/post/api/v1/posts/wikilink-catalog
 /system/api/v1/public/cloud/files/*/playback

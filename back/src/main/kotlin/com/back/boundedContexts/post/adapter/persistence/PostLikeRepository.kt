@@ -32,7 +32,17 @@ interface PostLikeRepository :
         post: Post,
     ): Int
 
+    @Modifying(flushAutomatically = true)
+    @Query("delete from PostLike pl where pl.liker.id = :likerId and pl.post.id = :postId")
+    fun deleteByLikerIdAndPostId(
+        likerId: Long,
+        postId: Long,
+    ): Int
+
     fun countByPost(post: Post): Long
+
+    @Query("select count(pl) from PostLike pl where pl.post.id = :postId")
+    fun countByPostId(postId: Long): Long
 
     @Query("select pl.post.id, count(pl) from PostLike pl where pl.post.id in :postIds group by pl.post.id")
     fun countGroupedByPostIdIn(postIds: Collection<Long>): List<Array<Any>>

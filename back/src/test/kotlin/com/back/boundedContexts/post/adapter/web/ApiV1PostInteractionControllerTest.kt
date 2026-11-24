@@ -29,77 +29,93 @@ class ApiV1PostInteractionControllerTest {
     private val controller = ApiV1PostInteractionController(postUseCase, postHitDedupUseCase, rq)
 
     @Test
-    @DisplayName("좋아요 반영 중 DB 증가가 실패하면 Redis 좋아요 상태를 보상 취소하고 예외를 재전파한다")
+    @DisplayName("익명 좋아요 반영 중 DB 증가가 실패하면 Redis 좋아요 상태를 보상 취소하고 예외를 재전파한다")
     fun likeCompensatesRedisStateWhenIncrementLikeFails() {
-        val post = publicPost(id = 10L, likesCount = 3)
         given(postUseCase.findInteractionReadStateById(10L)).willReturn(publicState(id = 10L, likesCount = 3))
-        given(postUseCase.findById(10L)).willReturn(post)
         given(rq.actorOrNull).willReturn(null)
         given(rq.clientIp).willReturn("203.0.113.50")
         val expectedViewerKey = "anon:203.0.113.50"
         given(postHitDedupUseCase.markLikedIfAbsent(10L, expectedViewerKey)).willReturn(true)
         val failure = IllegalStateException("db failure")
-        doThrow(failure).`when`(postUseCase).incrementLike(post)
+        doThrow(failure).`when`(postUseCase).incrementLike(10L)
 
         assertThatThrownBy { controller.like(10L) }
             .isSameAs(failure)
 
         verify(postHitDedupUseCase).unmarkLikedIfPresent(10L, expectedViewerKey)
+        verify(postUseCase, never()).findById(10L)
     }
 
     @Test
-    @DisplayName("좋아요 취소 반영 중 DB 감소가 실패하면 Redis 좋아요 상태를 보상 복구하고 예외를 재전파한다")
+    @DisplayName("익명 좋아요 취소 반영 중 DB 감소가 실패하면 Redis 좋아요 상태를 보상 복구하고 예외를 재전파한다")
     fun unlikeCompensatesRedisStateWhenDecrementLikeFails() {
-        val actor = member(id = 7L)
-        val post = publicPost(id = 11L, likesCount = 4)
         given(postUseCase.findInteractionReadStateById(11L)).willReturn(publicState(id = 11L, likesCount = 4))
-        given(postUseCase.findById(11L)).willReturn(post)
-        given(rq.actorOrNull).willReturn(actor)
-        val expectedViewerKey = "member:7"
+        given(rq.actorOrNull).willReturn(null)
+        given(rq.clientIp).willReturn("203.0.113.51")
+        val expectedViewerKey = "anon:203.0.113.51"
         given(postHitDedupUseCase.unmarkLikedIfPresent(11L, expectedViewerKey)).willReturn(true)
         val failure = IllegalStateException("db failure")
-        doThrow(failure).`when`(postUseCase).decrementLike(post)
+        doThrow(failure).`when`(postUseCase).decrementLike(11L)
 
         assertThatThrownBy { controller.unlike(11L) }
             .isSameAs(failure)
 
         verify(postHitDedupUseCase).markLikedIfAbsent(11L, expectedViewerKey)
+        verify(postUseCase, never()).findById(11L)
     }
 
     @Test
-    @DisplayName("좋아요와 좋아요 취소 및 조회수는 dedup 결과에 따라 카운터 반영 여부를 결정한다")
+    @DisplayName("인증 회원 좋아요와 좋아요 취소는 Redis TTL과 무관하게 PostLike 영속 경로를 사용한다")
+    fun memberLikeAndUnlikeUseDurablePostLikePath() {
+        val actor = member(id = 7L)
+        given(postUseCase.findInteractionReadStateById(16L)).willReturn(publicState(id = 16L, likesCount = 4))
+        given(rq.actorOrNull).willReturn(actor)
+        given(postUseCase.likePost(16L, 7L)).willReturn(5)
+        given(postUseCase.unlikePost(16L, 7L)).willReturn(4)
+
+        assertThat(controller.like(16L).data).isEqualTo(PostLikeToggleResBody(liked = true, likesCount = 5))
+        assertThat(controller.unlike(16L).data).isEqualTo(PostLikeToggleResBody(liked = false, likesCount = 4))
+
+        verify(postUseCase).likePost(16L, 7L)
+        verify(postUseCase).unlikePost(16L, 7L)
+        verifyNoInteractions(postHitDedupUseCase)
+        verify(postUseCase, never()).findById(16L)
+    }
+
+    @Test
+    @DisplayName("좋아요와 좋아요 취소 및 조회수는 dedup 결과에 따라 경량 카운터 반영 여부를 결정한다")
     fun interactionsRespectDedupDecision() {
-        val post = publicPost(id = 12L, likesCount = 2, hitCount = 5)
         given(postUseCase.findInteractionReadStateById(12L)).willReturn(publicState(id = 12L, likesCount = 2, hitCount = 5))
-        given(postUseCase.findById(12L)).willReturn(post)
+        given(postUseCase.incrementHit(12L)).willReturn(6)
+        given(postUseCase.incrementLike(12L)).willReturn(3)
+        given(postUseCase.decrementLike(12L)).willReturn(2)
         given(rq.actorOrNull).willReturn(null)
         given(rq.clientIp).willReturn("203.0.113.51")
         val viewerKey = "anon:203.0.113.51"
 
         given(postHitDedupUseCase.shouldCountHit(12L, viewerKey)).willReturn(true, false)
+        assertThat(controller.incrementHit(12L).data.hitCount).isEqualTo(6)
         assertThat(controller.incrementHit(12L).data.hitCount).isEqualTo(5)
-        assertThat(controller.incrementHit(12L).data.hitCount).isEqualTo(5)
-        verify(postUseCase).incrementHit(post)
+        verify(postUseCase).incrementHit(12L)
 
         given(postHitDedupUseCase.markLikedIfAbsent(12L, viewerKey)).willReturn(true, false)
+        assertThat(controller.like(12L).data).isEqualTo(PostLikeToggleResBody(liked = true, likesCount = 3))
         assertThat(controller.like(12L).data).isEqualTo(PostLikeToggleResBody(liked = true, likesCount = 2))
-        assertThat(controller.like(12L).data).isEqualTo(PostLikeToggleResBody(liked = true, likesCount = 2))
-        verify(postUseCase).incrementLike(post)
+        verify(postUseCase).incrementLike(12L)
         verify(postHitDedupUseCase, never()).unmarkLikedIfPresent(12L, viewerKey)
 
         given(postHitDedupUseCase.unmarkLikedIfPresent(12L, viewerKey)).willReturn(true, false)
         assertThat(controller.unlike(12L).data).isEqualTo(PostLikeToggleResBody(liked = false, likesCount = 2))
         assertThat(controller.unlike(12L).data).isEqualTo(PostLikeToggleResBody(liked = false, likesCount = 2))
-        verify(postUseCase).decrementLike(post)
-        verify(postUseCase, times(3)).findById(12L)
+        verify(postUseCase).decrementLike(12L)
+        verify(postUseCase, never()).findById(12L)
     }
 
     @Test
     @DisplayName("익명 viewer key는 User-Agent 변조와 무관하게 정규화 IP와 IPv6 /64 프리픽스만 사용하고 잘못된 IP는 빈 키를 반환한다")
     fun anonymousViewerKeyIgnoresUserAgentNormalizesIpv6AndRejectsInvalidIp() {
-        val post = publicPost(id = 14L, likesCount = 0, hitCount = 1)
         given(postUseCase.findInteractionReadStateById(14L)).willReturn(publicState(id = 14L, likesCount = 0, hitCount = 1))
-        given(postUseCase.findById(14L)).willReturn(post)
+        given(postUseCase.incrementHit(14L)).willReturn(2)
         given(rq.actorOrNull).willReturn(null)
         given(rq.clientIp).willReturn("[2001:db8:1:2:aaaa::1]:443", "2001:db8:1:2:bbbb::9", "invalid-ip")
         given(rq.userAgent).willReturn("Agent-A", "Agent-B", "Agent-C")
@@ -111,8 +127,8 @@ class ApiV1PostInteractionControllerTest {
         controller.incrementHit(14L)
         controller.incrementHit(14L)
 
-        verify(postUseCase).incrementHit(post)
-        verify(postUseCase, times(1)).findById(14L)
+        verify(postUseCase).incrementHit(14L)
+        verify(postUseCase, never()).findById(14L)
         verify(postHitDedupUseCase).shouldCountHit(14L, "")
     }
 

@@ -928,8 +928,27 @@
               "format": "int64",
               "exclusiveMinimum": 0
             }
+          },
+          {
+            "name": "expectedVersion",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "format": "int64",
+              "minimum": 0
+            }
           }
         ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AdmPostRevisionRestoreRequest"
+              }
+            }
+          }
+        },
         "responses": {
           "200": {
             "description": "OK",
@@ -1864,6 +1883,38 @@
         }
       }
     },
+    "/post/api/v1/posts/{id}/backlinks": {
+      "get": {
+        "tags": [
+          "api-v-1-post-public-read-controller"
+        ],
+        "operationId": "getBacklinks",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64",
+              "exclusiveMinimum": 0
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublicPostBacklinksResBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/post/api/v1/posts/{id}/adjacent": {
       "get": {
         "tags": [
@@ -1889,6 +1940,26 @@
               "*/*": {
                 "schema": {
                   "$ref": "#/components/schemas/AdjacentPostsDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/post/api/v1/posts/wikilink-catalog": {
+      "get": {
+        "tags": [
+          "api-v-1-post-public-read-controller"
+        ],
+        "operationId": "getWikilinkCatalog",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublicWikilinkCatalogResBody"
                 }
               }
             }
@@ -4530,6 +4601,19 @@
           }
         }
       },
+      "AdmPostRevisionRestoreRequest": {
+        "type": "object",
+        "properties": {
+          "expectedVersion": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64",
+            "minimum": 0
+          }
+        }
+      },
       "AdmPostBulkActionRequest": {
         "type": "object",
         "description": "관리자 글 일괄 처리 요청",
@@ -5669,6 +5753,40 @@
           }
         }
       },
+      "PublicPostBacklinkItemDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "title": {
+            "type": "string"
+          },
+          "summary": {
+            "type": "string"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "modifiedAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "PublicPostBacklinksResBody": {
+        "type": "object",
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PublicPostBacklinkItemDto"
+            }
+          }
+        }
+      },
       "AdjacentPostsDto": {
         "type": "object",
         "properties": {
@@ -5775,6 +5893,33 @@
           "summary",
           "summarySource"
         ]
+      },
+      "PublicWikilinkCatalogItemDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "title": {
+            "type": "string"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "PublicWikilinkCatalogResBody": {
+        "type": "object",
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PublicWikilinkCatalogItemDto"
+            }
+          }
+        }
       },
       "TagCountDto": {
         "type": "object",

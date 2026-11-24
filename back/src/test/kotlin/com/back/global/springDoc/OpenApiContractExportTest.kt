@@ -310,6 +310,8 @@ class OpenApiContractExportTest : BaseControllerIntegrationTest() {
             "MIRROR_FORCE_DISABLE",
         )
         assertThat(openApiNode.path("paths").has("/post/api/v1/posts/sitemap")).isTrue()
+        assertThat(openApiNode.path("paths").has("/post/api/v1/posts/wikilink-catalog")).isTrue()
+        assertThat(openApiNode.path("paths").has("/post/api/v1/posts/{id}/backlinks")).isTrue()
         assertThat(openApiNode.path("paths").has("/post/api/v1/adm/posts/{id}/revisions")).isTrue()
         assertThat(openApiNode.path("paths").has("/post/api/v1/adm/posts/{id}/revisions/{revisionId}/restore")).isTrue()
 

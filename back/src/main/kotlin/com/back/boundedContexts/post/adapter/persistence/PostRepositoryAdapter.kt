@@ -9,8 +9,10 @@ import com.back.boundedContexts.post.dto.AdmDeletedPostDto
 import com.back.boundedContexts.post.dto.AdmDeletedPostSnapshotDto
 import com.back.boundedContexts.post.dto.AdmPostFacetCounts
 import com.back.boundedContexts.post.dto.PostInteractionReadStateDto
+import com.back.boundedContexts.post.dto.PublicBacklinkCandidateProjection
 import com.back.boundedContexts.post.dto.PublicPostDetailContentCacheDto
 import com.back.boundedContexts.post.dto.PublicSitemapPostItemDto
+import com.back.boundedContexts.post.dto.PublicWikilinkCatalogItemDto
 import org.hibernate.Hibernate
 import org.springframework.data.domain.PageRequest
 import org.springframework.data.domain.Sort
@@ -140,6 +142,14 @@ class PostRepositoryAdapter(
 
     override fun findPublicSitemapItems(limit: Int): List<PublicSitemapPostItemDto> = postRepository.findPublicSitemapItems(limit)
 
+    override fun findPublicWikilinkCatalogItems(limit: Int): List<PublicWikilinkCatalogItemDto> =
+        postRepository.findPublicWikilinkCatalogItems(limit)
+
+    override fun findPublicBacklinkCandidates(
+        targetPostId: Long,
+        limit: Int,
+    ): List<PublicBacklinkCandidateProjection> = postRepository.findPublicBacklinkCandidates(targetPostId, limit)
+
     override fun findInteractionReadStateById(id: Long): PostInteractionReadStateDto? = postRepository.findInteractionReadStateById(id)
 
     override fun existsImageReference(
@@ -167,11 +177,21 @@ class PostRepositoryAdapter(
         hitCountAttr: PostAttr?,
     ) = postRepository.updateHitCount(post, hitCount, hitCountAttr)
 
+    override fun updateHitCountById(
+        postId: Long,
+        hitCount: Int,
+    ) = postRepository.updateHitCountById(postId, hitCount)
+
     override fun updateLikesCount(
         post: Post,
         likesCount: Int,
         likesCountAttr: PostAttr?,
     ) = postRepository.updateLikesCount(post, likesCount, likesCountAttr)
+
+    override fun updateLikesCountById(
+        postId: Long,
+        likesCount: Int,
+    ) = postRepository.updateLikesCountById(postId, likesCount)
 
     private fun PostRepositoryPort.PagedQuery.toPageRequest(): PageRequest =
         PageRequest.of(

@@ -3,8 +3,11 @@ package com.back.boundedContexts.post.adapter.web
 import com.back.boundedContexts.post.dto.AdjacentPostsDto
 import com.back.boundedContexts.post.dto.CursorFeedPageDto
 import com.back.boundedContexts.post.dto.FeedPostDto
+import com.back.boundedContexts.post.dto.PostDto
+import com.back.boundedContexts.post.dto.PublicPostBacklinksResBody
 import com.back.boundedContexts.post.dto.PublicPostsBootstrapDto
 import com.back.boundedContexts.post.dto.PublicSitemapPostsResBody
+import com.back.boundedContexts.post.dto.PublicWikilinkCatalogResBody
 import com.back.boundedContexts.post.dto.TagCountDto
 import com.back.global.util.Utf8ChunkDigest
 import com.back.standard.dto.page.PageDto
@@ -25,6 +28,65 @@ class PostPublicReadEtagSeedBuilder {
     ): String {
         val writer = Utf8ChunkDigest.newWeakEtagWriter()
         writeFeedPageSeed(writer, source, page, pageSize, sort, kw, tag, data)
+        return writer.finishWeakEtag()
+    }
+
+    fun buildPostDtoPageWeakEtag(
+        source: String,
+        page: Int,
+        pageSize: Int,
+        sort: PostSearchSortType1,
+        kw: String = "",
+        data: PageDto<PostDto>,
+    ): String {
+        val writer = Utf8ChunkDigest.newWeakEtagWriter()
+        writer.appendUtf8(source)
+        writer.appendAscii("|page=").appendInt(page)
+        writer.appendAscii("|size=").appendInt(pageSize)
+        writer.appendAscii("|sort=").appendAscii(sort.name)
+        writer.appendAscii("|kw=").appendTrimmedUtf8(kw)
+        writer.appendAscii("|total=").appendLong(data.pageable.totalElements)
+        writer.appendAscii("|pages=").appendLong(data.pageable.totalPages.toLong())
+        writer.appendAscii("|items=")
+        for (index in data.content.indices) {
+            if (index > 0) writer.appendChar('|')
+            val post = data.content[index]
+            writer.appendLong(post.id)
+            writer.appendChar(':')
+            writer.appendLong(toEpochMillis(post.modifiedAt))
+            writer.appendChar(':')
+            writer.appendLong(post.version)
+            writer.appendChar(':')
+            writer.appendInt(post.likesCount)
+            writer.appendChar(':')
+            writer.appendInt(post.hitCount)
+            writer.appendAscii(":content=")
+            writer.appendNullableLengthPrefixedUtf8(post.title)
+            writer.appendChar(',')
+            writer.appendNullableLengthPrefixedUtf8(post.thumbnail)
+            writer.appendChar(',')
+            writer.appendNullableLengthPrefixedUtf8(post.summary)
+            writer.appendChar(',')
+            writer.appendNullableLengthPrefixedUtf8(post.summarySource.name)
+            writer.appendAscii(":author=")
+            writer.appendDecimalLengthPrefixedLong(post.authorId)
+            writer.appendChar(',')
+            writer.appendLengthPrefixedUtf8(post.authorName)
+            writer.appendChar(',')
+            writer.appendLengthPrefixedUtf8(post.authorUsername)
+            writer.appendChar(',')
+            writer.appendLengthPrefixedUtf8(post.authorProfileImgUrl)
+            writer.appendAscii(":createdAt=")
+            writer.appendLong(toEpochMillis(post.createdAt))
+            writer.appendAscii(":published=")
+            writer.appendBoolean(post.published)
+            writer.appendAscii(":listed=")
+            writer.appendBoolean(post.listed)
+            writer.appendAscii(":tags=")
+            writeLengthPrefixedStringList(writer, post.tags)
+            writer.appendAscii(":category=")
+            writeLengthPrefixedStringList(writer, post.category)
+        }
         return writer.finishWeakEtag()
     }
 
@@ -72,6 +134,33 @@ class PostPublicReadEtagSeedBuilder {
         writeFeedItemsToken(writer, listOfNotNull(data.previousPost))
         writer.appendAscii("|next=")
         writeFeedItemsToken(writer, listOfNotNull(data.nextPost))
+        return writer.finishWeakEtag()
+    }
+
+    fun buildWikilinkCatalogWeakEtag(data: PublicWikilinkCatalogResBody): String {
+        val writer = Utf8ChunkDigest.newWeakEtagWriter()
+        writer.appendAscii("wikilink-catalog|count=").appendInt(data.items.size)
+        for (item in data.items) {
+            writer.appendChar('|').appendLong(item.id)
+            writer.appendChar(':').appendLong(toEpochMillis(item.createdAt))
+            writer.appendChar(':').appendLengthPrefixedUtf8(item.title)
+        }
+        return writer.finishWeakEtag()
+    }
+
+    fun buildBacklinksWeakEtag(
+        id: Long,
+        data: PublicPostBacklinksResBody,
+    ): String {
+        val writer = Utf8ChunkDigest.newWeakEtagWriter()
+        writer.appendAscii("backlinks|id=").appendLong(id)
+        writer.appendAscii("|count=").appendInt(data.items.size)
+        for (item in data.items) {
+            writer.appendChar('|').appendLong(item.id)
+            writer.appendChar(':').appendLong(toEpochMillis(item.modifiedAt))
+            writer.appendChar(':').appendLengthPrefixedUtf8(item.title)
+            writer.appendChar(':').appendLengthPrefixedUtf8(item.summary)
+        }
         return writer.finishWeakEtag()
     }
 

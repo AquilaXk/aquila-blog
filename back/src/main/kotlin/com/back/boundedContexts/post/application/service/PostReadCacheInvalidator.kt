@@ -128,6 +128,7 @@ class PostReadCacheInvalidator(
     internal fun invalidateAuthorRepresentation(reason: String) {
         listOf(
             PostQueryCacheNames.ADMIN_POSTS_FIRST_PAGE,
+            PostQueryCacheNames.ITEMS,
             PostQueryCacheNames.FEED,
             PostQueryCacheNames.EXPLORE,
             PostQueryCacheNames.FEED_CURSOR_FIRST,
@@ -138,6 +139,8 @@ class PostReadCacheInvalidator(
             PostQueryCacheNames.DETAIL_PUBLIC_META,
             PostQueryCacheNames.DETAIL_PUBLIC_CONTENT,
             PostQueryCacheNames.ADJACENT_POSTS,
+            PostQueryCacheNames.WIKILINK_CATALOG,
+            PostQueryCacheNames.BACKLINKS,
         ).forEach { cacheName ->
             cacheManager.getCache(cacheName)?.let { cache ->
                 try {
@@ -196,6 +199,10 @@ class PostReadCacheInvalidator(
         includeSearchFirstPage: Boolean,
         evictReason: String,
     ) {
+        if (includeHotReadPages || includeSearchFirstPage) {
+            cacheManager.getCache(PostQueryCacheNames.ITEMS)?.clear()
+            recordCacheEvict(PostQueryCacheNames.ITEMS, "clear", evictReason)
+        }
         if (includeHotReadPages) {
             cacheManager.getCache(PostQueryCacheNames.FEED)?.clear()
             recordCacheEvict(PostQueryCacheNames.FEED, "clear", evictReason)
@@ -209,6 +216,10 @@ class PostReadCacheInvalidator(
             recordCacheEvict(PostQueryCacheNames.BOOTSTRAP, "clear", evictReason)
             cacheManager.getCache(PostQueryCacheNames.SITEMAP)?.clear()
             recordCacheEvict(PostQueryCacheNames.SITEMAP, "clear", evictReason)
+            cacheManager.getCache(PostQueryCacheNames.WIKILINK_CATALOG)?.clear()
+            recordCacheEvict(PostQueryCacheNames.WIKILINK_CATALOG, "clear", evictReason)
+            cacheManager.getCache(PostQueryCacheNames.BACKLINKS)?.clear()
+            recordCacheEvict(PostQueryCacheNames.BACKLINKS, "clear", evictReason)
             cacheManager.getCache(PostQueryCacheNames.ADJACENT_POSTS)?.clear()
             recordCacheEvict(PostQueryCacheNames.ADJACENT_POSTS, "clear", evictReason)
         }
@@ -237,6 +248,8 @@ class PostReadCacheInvalidator(
             PostQueryCacheNames.DETAIL_PUBLIC_META,
             PostQueryCacheNames.DETAIL_PUBLIC_CONTENT,
             PostQueryCacheNames.DETAIL_PUBLIC_NEGATIVE,
+            PostQueryCacheNames.ADJACENT_POSTS,
+            PostQueryCacheNames.BACKLINKS,
         ).forEach { cacheName ->
             val cache = cacheManager.getCache(cacheName)
             if (postId == null) {
@@ -271,6 +284,7 @@ class PostReadCacheInvalidator(
     private companion object {
         private val RANKED_SORT_CACHE_SHAPES =
             listOf(
+                PostQueryCacheNames.ITEMS to false,
                 PostQueryCacheNames.FEED to true,
                 PostQueryCacheNames.FEED_CURSOR_FIRST to true,
                 PostQueryCacheNames.BOOTSTRAP to false,

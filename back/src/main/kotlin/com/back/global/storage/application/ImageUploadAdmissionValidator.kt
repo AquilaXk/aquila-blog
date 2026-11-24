@@ -164,7 +164,7 @@ class ImageUploadAdmissionValidator(
             val chunkFourCc = readInt32BE(chunkHeader, 0)
             val chunkSize = readUint32LE(chunkHeader, 4)
             val remainingInRiff = riffEnd - offset - RIFF_CHUNK_HEADER_BYTES
-            if (chunkSize > remainingInRiff + 1L) {
+            if (chunkSize > remainingInRiff) {
                 throw invalidImage()
             }
             val paddedChunkSize = chunkSize + (chunkSize and 1L)

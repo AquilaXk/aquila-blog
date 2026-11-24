@@ -193,6 +193,8 @@ class PostRepositoryAdapter(
         likesCount: Int,
     ) = postRepository.updateLikesCountById(postId, likesCount)
 
+    override fun lockByIdForUpdate(postId: Long) = postRepository.lockByIdForUpdate(postId)
+
     private fun PostRepositoryPort.PagedQuery.toPageRequest(): PageRequest =
         PageRequest.of(
             zeroBasedPage,

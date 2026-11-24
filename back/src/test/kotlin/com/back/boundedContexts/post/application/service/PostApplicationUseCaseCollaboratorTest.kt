@@ -20,7 +20,9 @@ import org.junit.jupiter.api.Test
 import org.mockito.BDDMockito.given
 import org.mockito.BDDMockito.then
 import org.mockito.Mockito.any
+import org.mockito.Mockito.inOrder
 import org.mockito.Mockito.mock
+import org.mockito.Mockito.never
 import org.mockito.Mockito.times
 import org.springframework.dao.PessimisticLockingFailureException
 import java.time.Instant
@@ -99,6 +101,50 @@ class PostApplicationUseCaseCollaboratorTest {
         assertThat(service.decrementLike(99L, minLikesCount = 3)).isEqualTo(3)
         then(postAttrRepository).should().incrementIntValueBySubjectId(99L, LIKES_COUNT, 2)
         then(postRepository).should().updateLikesCountById(99L, 3)
+    }
+
+    @Test
+    @DisplayName("좋아요 증감 및 회원 좋아요 토글은 lockByIdForUpdate 선행 호출 후 countByPostId와 카운터 갱신을 직렬화한다")
+    fun `like counter methods acquire post row lock before postLike mutations and countByPostId`() {
+        val postRepository = mock(PostRepositoryPort::class.java)
+        val postAttrRepository = mock(PostAttrRepositoryPort::class.java)
+        val memberAttrRepository = mock(MemberAttrRepositoryPort::class.java)
+        val postLikeRepository = mock(PostLikeRepositoryPort::class.java)
+        val service = PostCounterService(postRepository, postAttrRepository, memberAttrRepository, postLikeRepository)
+
+        given(postLikeRepository.insertIfAbsentByIds(7L, 55L)).willReturn(901L)
+        given(postAttrRepository.incrementIntValueBySubjectId(55L, LIKES_COUNT, 1)).willReturn(1, 2)
+        given(postLikeRepository.deleteByLikerIdAndPostId(7L, 55L)).willReturn(1)
+        given(postLikeRepository.countByPostId(55L)).willReturn(0L, 0L)
+        given(postAttrRepository.incrementIntValueBySubjectId(55L, LIKES_COUNT, -1)).willReturn(1, 0)
+
+        assertThat(service.likePostByMember(55L, 7L)).isEqualTo(1)
+        assertThat(service.incrementLike(55L)).isEqualTo(2)
+        assertThat(service.unlikePostByMember(55L, 7L)).isEqualTo(1)
+        assertThat(service.decrementLike(55L)).isEqualTo(0)
+
+        inOrder(postRepository, postLikeRepository, postAttrRepository).apply {
+            verify(postRepository).lockByIdForUpdate(55L)
+            verify(postLikeRepository).insertIfAbsentByIds(7L, 55L)
+            verify(postAttrRepository).incrementIntValueBySubjectId(55L, LIKES_COUNT, 1)
+            verify(postRepository).updateLikesCountById(55L, 1)
+
+            verify(postRepository).lockByIdForUpdate(55L)
+            verify(postAttrRepository).incrementIntValueBySubjectId(55L, LIKES_COUNT, 1)
+            verify(postRepository).updateLikesCountById(55L, 2)
+
+            verify(postRepository).lockByIdForUpdate(55L)
+            verify(postLikeRepository).deleteByLikerIdAndPostId(7L, 55L)
+            verify(postLikeRepository).countByPostId(55L)
+            verify(postAttrRepository).incrementIntValueBySubjectId(55L, LIKES_COUNT, -1)
+            verify(postRepository).updateLikesCountById(55L, 1)
+
+            verify(postRepository).lockByIdForUpdate(55L)
+            verify(postLikeRepository).countByPostId(55L)
+            verify(postAttrRepository).incrementIntValueBySubjectId(55L, LIKES_COUNT, -1)
+            verify(postRepository).updateLikesCountById(55L, 0)
+        }
+        then(postAttrRepository).should(never()).incrementIntValueBySubjectId(55L, LIKES_COUNT, 2)
     }
 
     @Test

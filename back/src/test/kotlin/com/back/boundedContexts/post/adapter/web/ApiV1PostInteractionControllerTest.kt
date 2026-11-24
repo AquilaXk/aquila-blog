@@ -83,6 +83,30 @@ class ApiV1PostInteractionControllerTest {
     }
 
     @Test
+    @DisplayName("회원 및 익명 다중 좋아요 취소는 팬텀 +1 복원 없이 0으로 수렴한다")
+    fun sequentialMemberAndAnonymousUnlikesConvergeToZeroWithoutPhantomRestore() {
+        val actor = member(id = 7L)
+        given(postUseCase.findInteractionReadStateById(17L)).willReturn(
+            publicState(id = 17L, likesCount = 2),
+            publicState(id = 17L, likesCount = 1),
+            publicState(id = 17L, likesCount = 0),
+        )
+        given(rq.actorOrNull).willReturn(actor, null, null)
+        given(rq.clientIp).willReturn("203.0.113.61")
+        given(postUseCase.unlikePost(17L, 7L)).willReturn(1)
+        given(postHitDedupUseCase.unmarkLikedIfPresent(17L, "anon:203.0.113.61")).willReturn(true, false)
+        given(postUseCase.decrementLike(17L)).willReturn(0)
+
+        assertThat(controller.unlike(17L).data).isEqualTo(PostLikeToggleResBody(liked = false, likesCount = 1))
+        assertThat(controller.unlike(17L).data).isEqualTo(PostLikeToggleResBody(liked = false, likesCount = 0))
+        assertThat(controller.unlike(17L).data).isEqualTo(PostLikeToggleResBody(liked = false, likesCount = 0))
+
+        verify(postUseCase, times(1)).unlikePost(17L, 7L)
+        verify(postUseCase, times(1)).decrementLike(17L)
+        verify(postUseCase, never()).incrementLike(17L)
+    }
+
+    @Test
     @DisplayName("좋아요와 좋아요 취소 및 조회수는 dedup 결과에 따라 경량 카운터 반영 여부를 결정한다")
     fun interactionsRespectDedupDecision() {
         given(postUseCase.findInteractionReadStateById(12L)).willReturn(publicState(id = 12L, likesCount = 2, hitCount = 5))

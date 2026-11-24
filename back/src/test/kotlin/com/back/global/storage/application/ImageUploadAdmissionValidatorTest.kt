@@ -452,6 +452,33 @@ class ImageUploadAdmissionValidatorTest {
         assertThatThrownBy {
             validator.preScreenWebpStream(java.io.ByteArrayInputStream(truncatedRiff), truncatedRiff.size.toLong())
         }.isInstanceOf(AppException::class.java)
+
+        val oddChunkWebp = buildWebpBytes("VP8L", vp8lPayload(width = 64, height = 64))
+        val oddChunkMissingPadByte = oddChunkWebp.copyOf(oddChunkWebp.size - 1)
+        validator.preScreenWebpStream(
+            java.io.ByteArrayInputStream(oddChunkMissingPadByte),
+            oddChunkMissingPadByte.size.toLong(),
+        )
+
+        val truncatedOddChunkPayload = oddChunkWebp.copyOf(oddChunkWebp.size - 2)
+        writeInt32LEInto(truncatedOddChunkPayload, 4, truncatedOddChunkPayload.size - 8)
+        assertThatThrownBy {
+            validator.preScreenWebpStream(
+                java.io.ByteArrayInputStream(truncatedOddChunkPayload),
+                truncatedOddChunkPayload.size.toLong(),
+            )
+        }.isInstanceOf(AppException::class.java)
+    }
+
+    private fun writeInt32LEInto(
+        target: ByteArray,
+        offset: Int,
+        value: Int,
+    ) {
+        target[offset] = (value and 0xFF).toByte()
+        target[offset + 1] = ((value ushr 8) and 0xFF).toByte()
+        target[offset + 2] = ((value ushr 16) and 0xFF).toByte()
+        target[offset + 3] = ((value ushr 24) and 0xFF).toByte()
     }
 
     private fun buildWebpBytes(

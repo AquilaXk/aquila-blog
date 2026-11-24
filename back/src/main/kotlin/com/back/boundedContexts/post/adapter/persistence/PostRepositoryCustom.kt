@@ -104,4 +104,6 @@ interface PostRepositoryCustom {
         postId: Long,
         likesCount: Int,
     )
+
+    fun lockByIdForUpdate(postId: Long)
 }

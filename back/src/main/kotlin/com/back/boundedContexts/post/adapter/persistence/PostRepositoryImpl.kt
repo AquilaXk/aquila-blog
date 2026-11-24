@@ -854,6 +854,13 @@ class PostRepositoryImpl(
         )
     }
 
+    override fun lockByIdForUpdate(postId: Long) {
+        entityManager
+            ?.createNativeQuery("SELECT id FROM post WHERE id = :postId FOR UPDATE")
+            ?.setParameter("postId", postId)
+            ?.resultList
+    }
+
     private fun updatePostCounterColumnById(
         postId: Long,
         counterColumn: String,

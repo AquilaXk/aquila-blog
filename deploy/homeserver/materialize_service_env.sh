@@ -67,7 +67,7 @@ is_caddy_key() {
 # Platform-owned key that holds the same shared secret, so there is a single source of truth.
 is_front_key() {
   case "$1" in
-    BACKEND_INTERNAL_URL|BACKEND_PROXY_*)
+    BACKEND_INTERNAL_URL|BACKEND_PROXY_*|TRUSTED_PROXY_IPS)
       return 0
       ;;
     *)
@@ -216,6 +216,10 @@ write_filtered_env() {
 write_filtered_env "${CADDY_OUT}" "caddy"
 write_filtered_env "${BACK_OUT}" "back"
 write_filtered_env "${FRONT_OUT}" "front"
+
+if ! grep -q '^TRUSTED_PROXY_IPS=' "${FRONT_OUT}"; then
+  printf 'TRUSTED_PROXY_IPS=%s\n' "127.0.0.1,::1,10.0.0.0/8,172.16.0.0/12,192.168.0.0/16,100.64.0.0/10,fc00::/7,fe80::/10" >> "${FRONT_OUT}"
+fi
 
 # front가 읽는 TOKEN_FOR_REVALIDATE와 backend가 보내는 CUSTOM__REVALIDATE__TOKEN은 같은 공유
 # 비밀이다(RevalidateService.kt:53이 x-revalidate-token 헤더로 보내고, revalidate.ts:18이 그 값과

@@ -5314,9 +5314,35 @@ test("materialize_service_env.sh는 키를 서비스별 env 파일로 실제 분
       // BACKEND_PROXY_*는 front 전용이다 (`git grep BACKEND_PROXY -- back/`는 0건).
       assert.match(frontEnv, /^BACKEND_PROXY_MAX_BODY_BYTES=1048576$/m)
       assert.doesNotMatch(backEnv, /^BACKEND_PROXY_/m)
+      // TRUSTED_PROXY_IPS는 미설정 시 기본 Docker/사설 CIDR 목록을 .env.front.prod에만 생성한다.
+      assert.match(
+        frontEnv,
+        /^TRUSTED_PROXY_IPS=127\.0\.0\.1,::1,10\.0\.0\.0\/8,172\.16\.0\.0\/12,192\.168\.0\.0\/16,100\.64\.0\.0\/10,fc00::\/7,fe80::\/10$/m,
+      )
+      assert.doesNotMatch(backEnv, /^TRUSTED_PROXY_IPS=/m)
+      assert.doesNotMatch(caddyEnv, /^TRUSTED_PROXY_IPS=/m)
       // 서비스별 env는 서로의 비밀을 담지 않는다 (blast radius / HR-56).
       assert.doesNotMatch(frontEnv, /^CUSTOM_PROD_DBNAME=/m)
       assert.doesNotMatch(caddyEnv, /^BACKEND_INTERNAL_URL=/m)
+
+      const customTrustedProxyEnv = path.join(workDir, "custom-trusted-proxy.env")
+      writeFileSync(
+        customTrustedProxyEnv,
+        [
+          "BACKEND_INTERNAL_URL=http://caddy",
+          `WEB_METRICS_TOKEN=${webMetricsTokenFixture}`,
+          "TRUSTED_PROXY_IPS=127.0.0.1,172.20.0.0/16",
+          "",
+        ].join("\n"),
+      )
+      execFileSync("bash", [script, customTrustedProxyEnv], { stdio: "pipe" })
+      const customFrontEnv = readFileSync(outputs.front, "utf8")
+      const customBackEnv = readFileSync(outputs.back, "utf8")
+      const customCaddyEnv = readFileSync(outputs.caddy, "utf8")
+      assert.match(customFrontEnv, /^TRUSTED_PROXY_IPS=127\.0\.0\.1,172\.20\.0\.0\/16$/m)
+      assert.equal(customFrontEnv.match(/^TRUSTED_PROXY_IPS=/gm)?.length, 1)
+      assert.doesNotMatch(customBackEnv, /^TRUSTED_PROXY_IPS=/m)
+      assert.doesNotMatch(customCaddyEnv, /^TRUSTED_PROXY_IPS=/m)
 
       const missingTokenEnv = path.join(workDir, "missing-web-metrics-token.env")
       writeFileSync(missingTokenEnv, "BACKEND_INTERNAL_URL=http://caddy\n")

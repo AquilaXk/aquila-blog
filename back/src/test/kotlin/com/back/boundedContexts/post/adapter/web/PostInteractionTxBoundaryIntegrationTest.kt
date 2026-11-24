@@ -2,6 +2,11 @@ package com.back.boundedContexts.post.adapter.web
 
 import com.back.boundedContexts.member.application.service.ActorApplicationService
 import com.back.boundedContexts.post.application.port.input.PostUseCase
+import com.back.boundedContexts.post.application.port.output.PostAttrRepositoryPort
+import com.back.boundedContexts.post.application.port.output.PostLikeRepositoryPort
+import com.back.boundedContexts.post.application.port.output.PostRepositoryPort
+import com.back.boundedContexts.post.domain.Post
+import com.back.boundedContexts.post.domain.postMixin.LIKES_COUNT
 import com.back.boundedContexts.post.model.PostSummaryMode
 import com.back.standard.extensions.getOrThrow
 import com.back.support.BaseSeededIntegrationTest
@@ -20,7 +25,13 @@ import org.springframework.test.web.servlet.delete
 import org.springframework.test.web.servlet.get
 import org.springframework.test.web.servlet.post
 import org.springframework.test.web.servlet.put
+import org.springframework.transaction.PlatformTransactionManager
+import org.springframework.transaction.TransactionDefinition
 import org.springframework.transaction.support.TransactionTemplate
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.Executors
+import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicBoolean
 
 @AutoConfigureMockMvc
 @DisplayName("비트랜잭션 open-in-view=false 환경 게시글 상호작용·상세 조회 경계 통합 테스트")
@@ -42,6 +53,18 @@ class PostInteractionTxBoundaryIntegrationTest : BaseSeededIntegrationTest() {
 
     @Autowired
     private lateinit var cacheManager: CacheManager
+
+    @Autowired
+    private lateinit var postRepository: PostRepositoryPort
+
+    @Autowired
+    private lateinit var postAttrRepository: PostAttrRepositoryPort
+
+    @Autowired
+    private lateinit var postLikeRepository: PostLikeRepositoryPort
+
+    @Autowired
+    private lateinit var transactionManager: PlatformTransactionManager
 
     @AfterEach
     fun cleanup() {
@@ -178,5 +201,110 @@ class PostInteractionTxBoundaryIntegrationTest : BaseSeededIntegrationTest() {
         mvc.get("/post/api/v1/posts/999999999").andExpect {
             status { isNotFound() }
         }
+    }
+
+    @Test
+    @DisplayName("동일 게시글 동시 다중 좋아요 취소는 lockByIdForUpdate로 직렬화되어 팬텀 +1 복원 없이 0으로 수렴한다")
+    fun concurrentMultiUnlikeSerializesOnPostRowLockAndConvergesToZero() {
+        val author = actorApplicationService.findByEmail("user1@test.com").getOrThrow()
+        val secondMember = actorApplicationService.findByEmail("admin@test.com").getOrThrow()
+        val post =
+            transactionTemplate.execute {
+                postUseCase.write(
+                    author = author,
+                    title = "동시 좋아요 취소 직렬화 테스트",
+                    content = "tags: lock\n\n동시성 검증 본문입니다.",
+                    published = true,
+                    listed = true,
+                    summaryMode = PostSummaryMode.AUTO,
+                )
+            }
+
+        assertThat(postUseCase.likePost(post.id, author.id)).isEqualTo(1)
+        assertThat(postUseCase.incrementLike(post.id)).isEqualTo(2)
+
+        val lockedByTx1 = CountDownLatch(1)
+        val tx1Committed = AtomicBoolean(false)
+        val requiredTemplate =
+            TransactionTemplate(transactionManager).apply {
+                propagationBehavior = TransactionDefinition.PROPAGATION_REQUIRED
+            }
+        val executor = Executors.newFixedThreadPool(2)
+        try {
+            val tx1Future =
+                executor.submit {
+                    requiredTemplate.executeWithoutResult {
+                        postRepository.lockByIdForUpdate(post.id)
+                        postLikeRepository.deleteByLikerIdAndPostId(author.id, post.id)
+                        lockedByTx1.countDown()
+                        Thread.sleep(150)
+                        val updated = postAttrRepository.incrementIntValueBySubjectId(post.id, LIKES_COUNT, -1)
+                        postRepository.updateLikesCountById(post.id, updated)
+                    }
+                    tx1Committed.set(true)
+                }
+
+            val tx2Future =
+                executor.submit<Pair<Boolean, Int>> {
+                    check(lockedByTx1.await(10, TimeUnit.SECONDS)) { "tx1 lock wait timed out" }
+                    val updated = postUseCase.decrementLike(post.id)
+                    tx1Committed.get() to updated
+                }
+
+            tx1Future.get(20, TimeUnit.SECONDS)
+            val (sawCommittedTx1, tx2Result) = tx2Future.get(20, TimeUnit.SECONDS)
+            assertThat(sawCommittedTx1).isTrue()
+            assertThat(tx2Result).isEqualTo(0)
+        } finally {
+            executor.shutdownNow()
+            assertThat(executor.awaitTermination(10, TimeUnit.SECONDS)).isTrue()
+        }
+
+        assertLikesConvergedToZero(post)
+
+        // 두 번째 동시 다중 취소 버스트: 회원 2명 + 익명 1건 -> 동시 unlike 5건 실행 후 정확히 0 수렴
+        assertThat(postUseCase.likePost(post.id, author.id)).isEqualTo(1)
+        assertThat(postUseCase.likePost(post.id, secondMember.id)).isEqualTo(2)
+        assertThat(postUseCase.incrementLike(post.id)).isEqualTo(3)
+
+        val burstPool = Executors.newFixedThreadPool(5)
+        val ready = CountDownLatch(5)
+        val start = CountDownLatch(1)
+        try {
+            val actions =
+                listOf(
+                    { postUseCase.unlikePost(post.id, author.id) },
+                    { postUseCase.unlikePost(post.id, secondMember.id) },
+                    { postUseCase.decrementLike(post.id) },
+                    { postUseCase.unlikePost(post.id, author.id) },
+                    { postUseCase.decrementLike(post.id) },
+                )
+            val futures =
+                actions.map { action ->
+                    burstPool.submit<Int> {
+                        ready.countDown()
+                        check(start.await(10, TimeUnit.SECONDS)) { "burst start timed out" }
+                        action()
+                    }
+                }
+            assertThat(ready.await(10, TimeUnit.SECONDS)).isTrue()
+            start.countDown()
+            futures.forEach { it.get(20, TimeUnit.SECONDS) }
+        } finally {
+            burstPool.shutdownNow()
+            assertThat(burstPool.awaitTermination(10, TimeUnit.SECONDS)).isTrue()
+        }
+
+        assertLikesConvergedToZero(post)
+    }
+
+    private fun assertLikesConvergedToZero(post: Post) {
+        assertThat(postUseCase.findInteractionReadStateById(post.id)?.likesCount).isZero()
+        assertThat(postLikeRepository.countByPostId(post.id)).isZero()
+        val attrValue =
+            transactionTemplate.execute {
+                postAttrRepository.findBySubjectAndName(post, LIKES_COUNT)?.intValue
+            }
+        assertThat(attrValue).isZero()
     }
 }

@@ -316,7 +316,7 @@ class PostApplicationServiceDeleteResilienceTest {
             )
 
     @Test
-    @DisplayName("delete는 member posts 카운터 보정 실패가 나도 soft delete를 완료한다")
+    @DisplayName("delete는 member posts 카운터 갱신 실패 시 예외를 전파해 트랜잭션을 롤백한다")
     fun completeSoftDeleteWhenMemberPostsCounterRepairFails() {
         // given
         val author =

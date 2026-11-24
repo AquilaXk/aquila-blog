@@ -283,6 +283,6 @@ class PostImageAdmissionValidatorTest {
 
     private companion object {
         const val WEBP_1X1_BASE64 =
-            "UklGRkoAAABXRUJQVlA4ID4AAABQAgCdASoBAAEAAUAmJbACdAD0aEe/UP/+WoNI/Nt3/Zl88G7u93c4Pb/8/wv/1f1f+X/3f+R/y+/v9wAA"
+            "UklGRiQAAABXRUJQVlA4IBgAAAAwAQCdASoBAAEAAwA0JaQAA3AA/vuUAAA="
     }
 }

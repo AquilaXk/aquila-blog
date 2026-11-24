@@ -38,6 +38,11 @@ class PostCounterService(
     }
 
     fun incrementLike(postId: Long): Int {
+        postRepository.lockByIdForUpdate(postId)
+        return incrementLikeLocked(postId)
+    }
+
+    private fun incrementLikeLocked(postId: Long): Int {
         val updatedLikesCount = postAttrRepository.incrementIntValueBySubjectId(postId, LIKES_COUNT)
         postRepository.updateLikesCountById(postId, updatedLikesCount)
         return updatedLikesCount
@@ -50,9 +55,19 @@ class PostCounterService(
 
     fun decrementLike(
         postId: Long,
-        minLikesCount: Int = postLikeRepository.countByPostId(postId).toInt().coerceAtLeast(0),
+        minLikesCount: Int? = null,
     ): Int {
-        val safeFloor = minLikesCount.coerceAtLeast(0)
+        postRepository.lockByIdForUpdate(postId)
+        return decrementLikeLocked(postId, minLikesCount)
+    }
+
+    private fun decrementLikeLocked(
+        postId: Long,
+        minLikesCount: Int?,
+    ): Int {
+        val safeFloor =
+            (minLikesCount ?: postLikeRepository.countByPostId(postId).toInt().coerceAtLeast(0))
+                .coerceAtLeast(0)
         var updatedLikesCount = postAttrRepository.incrementIntValueBySubjectId(postId, LIKES_COUNT, -1)
         if (updatedLikesCount < safeFloor) {
             updatedLikesCount =
@@ -68,18 +83,20 @@ class PostCounterService(
         postId: Long,
         memberId: Long,
     ): Int? {
+        postRepository.lockByIdForUpdate(postId)
         val insertedId = postLikeRepository.insertIfAbsentByIds(memberId, postId) ?: return null
         if (insertedId <= 0L) return null
-        return incrementLike(postId)
+        return incrementLikeLocked(postId)
     }
 
     fun unlikePostByMember(
         postId: Long,
         memberId: Long,
     ): Int? {
+        postRepository.lockByIdForUpdate(postId)
         val deletedRows = postLikeRepository.deleteByLikerIdAndPostId(memberId, postId)
         if (deletedRows <= 0) return null
-        return decrementLike(postId)
+        return decrementLikeLocked(postId, minLikesCount = null)
     }
 
     fun decrementLike(post: Post) {

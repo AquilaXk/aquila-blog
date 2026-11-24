@@ -5,7 +5,7 @@ import java.util.Locale
 internal object PostWikilinkScanner {
     private const val MAX_SCAN_CHARS = 128 * 1024
     private const val MAX_WIKILINK_BODY_CHARS = 256
-    private const val MAX_POSTS_LINK_CHECK_CHARS = 16
+    private const val MAX_HOST_LOOKBACK_CHARS = 260
 
     fun normalizeTargetKey(raw: String): String {
         val len = raw.length
@@ -54,20 +54,19 @@ internal object PostWikilinkScanner {
                 inlineCodeTicks = 0
                 val fenceRun = matchFenceMarker(markdown, i, limit)
                 if (fenceRun != null) {
-                    val (markerChar, markerLen, lineEnd) = fenceRun
                     if (!inFence) {
                         inFence = true
-                        fenceChar = markerChar
-                        fenceLength = markerLen
-                        i = lineEnd
+                        fenceChar = fenceRun.markerChar
+                        fenceLength = fenceRun.markerLen
+                        i = fenceRun.lineEnd
                         continue
                     } else if (
-                        markerChar == fenceChar &&
-                        markerLen >= fenceLength &&
-                        isTrailingFenceLineBlank(markdown, i + markerLen, lineEnd)
+                        fenceRun.markerChar == fenceChar &&
+                        fenceRun.markerLen >= fenceLength &&
+                        isTrailingFenceLineBlank(markdown, fenceRun.markerEndOffset, fenceRun.lineEnd)
                     ) {
                         inFence = false
-                        i = lineEnd
+                        i = fenceRun.lineEnd
                         continue
                     }
                 }
@@ -203,20 +202,29 @@ internal object PostWikilinkScanner {
         text: String,
         slashIdx: Int,
     ): Boolean {
-        val scanBackStart = maxOf(0, slashIdx - MAX_POSTS_LINK_CHECK_CHARS - 32)
+        val scanBackStart = maxOf(0, slashIdx - MAX_HOST_LOOKBACK_CHARS)
         for (i in slashIdx - 1 downTo scanBackStart) {
             val ch = text[i]
-            if (ch.isWhitespace() || ch == '(' || ch == '[' || ch == '<') return false
-            if (ch == '/' && i > 0 && text[i - 1] == '/') return true
+            if (ch.isWhitespace() || ch == '(' || ch == '[' || ch == '<' || ch == '?' || ch == '#') return false
+            if (ch == '/') {
+                return i >= 2 && text[i - 1] == '/' && text[i - 2] == ':'
+            }
         }
         return false
     }
+
+    private data class FenceMarker(
+        val markerChar: Char,
+        val markerLen: Int,
+        val markerEndOffset: Int,
+        val lineEnd: Int,
+    )
 
     private fun matchFenceMarker(
         text: String,
         lineStart: Int,
         limit: Int,
-    ): Triple<Char, Int, Int>? {
+    ): FenceMarker? {
         var pos = lineStart
         var spaces = 0
         while (pos < limit && spaces < 3 && text[pos] == ' ') {
@@ -229,10 +237,11 @@ internal object PostWikilinkScanner {
         var count = 0
         while (pos + count < limit && text[pos + count] == marker) count++
         if (count < 3) return null
-        var lineEnd = pos + count
+        val markerEndOffset = pos + count
+        var lineEnd = markerEndOffset
         while (lineEnd < limit && text[lineEnd] != '\n') lineEnd++
         if (lineEnd < limit && text[lineEnd] == '\n') lineEnd++
-        return Triple(marker, count, lineEnd)
+        return FenceMarker(marker, count, markerEndOffset, lineEnd)
     }
 
     private fun isTrailingFenceLineBlank(

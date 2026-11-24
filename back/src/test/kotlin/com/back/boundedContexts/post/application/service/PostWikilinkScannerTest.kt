@@ -63,4 +63,34 @@ class PostWikilinkScannerTest {
         assertThat(PostWikilinkScanner.referencesTargetPost("[[Target Post]]", 0L, "target post")).isFalse()
         assertThat(PostWikilinkScanner.referencesTargetPost("", 7L, "target post")).isFalse()
     }
+
+    @Test
+    @DisplayName("1~3칸 들여쓴 닫는 코드 펜스를 닫아 이후 위키링크를 누락하지 않고, 긴 도메인과 하위 경로 위양성을 정확히 구분한다")
+    fun handlesIndentedClosingFenceAndLongHostBoundary() {
+        val normalized = PostWikilinkScanner.normalizeTargetKey("Architecture Guide")
+
+        val afterIndentedFence =
+            """
+            ```kotlin
+            val ignored = "[[Architecture Guide]]"
+              ```
+            복구 후 링크 [[Architecture Guide]]
+            """.trimIndent()
+        assertThat(PostWikilinkScanner.referencesTargetPost(afterIndentedFence, 42L, normalized)).isTrue()
+
+        val afterIndentedTildeFence =
+            """
+              ~~~text
+              [ignored](/posts/42)
+               ~~~
+            복구 후 경로 [ok](/posts/42)
+            """.trimIndent()
+        assertThat(PostWikilinkScanner.referencesTargetPost(afterIndentedTildeFence, 42L, normalized)).isTrue()
+
+        val longHostUrl = "참고: [긴 호스트](https://very-long-subdomain-1234567890-abcdef.engineering-platform.example.com/posts/42)"
+        assertThat(PostWikilinkScanner.referencesTargetPost(longHostUrl, 42L, normalized)).isTrue()
+
+        val nestedSubpathUrl = "오탐 방지: [서브패스](https://aquila.blog/blog/archive/posts/42)"
+        assertThat(PostWikilinkScanner.referencesTargetPost(nestedSubpathUrl, 42L, normalized)).isFalse()
+    }
 }

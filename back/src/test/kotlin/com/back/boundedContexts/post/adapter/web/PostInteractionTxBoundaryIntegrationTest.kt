@@ -11,6 +11,7 @@ import com.back.boundedContexts.post.model.PostSummaryMode
 import com.back.standard.extensions.getOrThrow
 import com.back.support.BaseSeededIntegrationTest
 import com.back.support.RedisTestSupport
+import jakarta.persistence.EntityManager
 import org.assertj.core.api.Assertions.assertThat
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.DisplayName
@@ -65,6 +66,9 @@ class PostInteractionTxBoundaryIntegrationTest : BaseSeededIntegrationTest() {
 
     @Autowired
     private lateinit var transactionManager: PlatformTransactionManager
+
+    @Autowired
+    private lateinit var entityManager: EntityManager
 
     @AfterEach
     fun cleanup() {
@@ -224,7 +228,9 @@ class PostInteractionTxBoundaryIntegrationTest : BaseSeededIntegrationTest() {
         assertThat(postUseCase.incrementLike(post.id)).isEqualTo(2)
 
         val lockedByTx1 = CountDownLatch(1)
-        val tx1Committed = AtomicBoolean(false)
+        val tx2Started = CountDownLatch(1)
+        val tx1ReadyToCommit = AtomicBoolean(false)
+        val sawTx2LockWait = AtomicBoolean(false)
         val requiredTemplate =
             TransactionTemplate(transactionManager).apply {
                 propagationBehavior = TransactionDefinition.PROPAGATION_REQUIRED
@@ -237,22 +243,38 @@ class PostInteractionTxBoundaryIntegrationTest : BaseSeededIntegrationTest() {
                         postRepository.lockByIdForUpdate(post.id)
                         postLikeRepository.deleteByLikerIdAndPostId(author.id, post.id)
                         lockedByTx1.countDown()
-                        Thread.sleep(150)
+                        check(tx2Started.await(10, TimeUnit.SECONDS)) { "tx2 start wait timed out" }
+                        val waitDeadlineNanos = System.nanoTime() + TimeUnit.SECONDS.toNanos(5)
+                        while (System.nanoTime() < waitDeadlineNanos) {
+                            val blockedCount =
+                                (
+                                    entityManager
+                                        .createNativeQuery("SELECT count(*) FROM pg_locks WHERE NOT granted")
+                                        .singleResult as Number
+                                ).toLong()
+                            if (blockedCount > 0L) {
+                                sawTx2LockWait.set(true)
+                                break
+                            }
+                            Thread.sleep(10)
+                        }
                         val updated = postAttrRepository.incrementIntValueBySubjectId(post.id, LIKES_COUNT, -1)
                         postRepository.updateLikesCountById(post.id, updated)
+                        tx1ReadyToCommit.set(true)
                     }
-                    tx1Committed.set(true)
                 }
 
             val tx2Future =
                 executor.submit<Pair<Boolean, Int>> {
                     check(lockedByTx1.await(10, TimeUnit.SECONDS)) { "tx1 lock wait timed out" }
+                    tx2Started.countDown()
                     val updated = postUseCase.decrementLike(post.id)
-                    tx1Committed.get() to updated
+                    tx1ReadyToCommit.get() to updated
                 }
 
             tx1Future.get(20, TimeUnit.SECONDS)
             val (sawCommittedTx1, tx2Result) = tx2Future.get(20, TimeUnit.SECONDS)
+            assertThat(sawTx2LockWait.get()).isTrue()
             assertThat(sawCommittedTx1).isTrue()
             assertThat(tx2Result).isEqualTo(0)
         } finally {

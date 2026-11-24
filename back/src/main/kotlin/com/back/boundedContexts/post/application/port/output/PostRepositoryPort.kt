@@ -138,12 +138,12 @@ interface PostRepositoryPort {
 
     fun findPublicSitemapItems(limit: Int): List<PublicSitemapPostItemDto>
 
-    fun findPublicWikilinkCatalogItems(limit: Int): List<PublicWikilinkCatalogItemDto> = emptyList()
+    fun findPublicWikilinkCatalogItems(limit: Int): List<PublicWikilinkCatalogItemDto>
 
     fun findPublicBacklinkCandidates(
         targetPostId: Long,
         limit: Int,
-    ): List<PublicBacklinkCandidateProjection> = emptyList()
+    ): List<PublicBacklinkCandidateProjection>
 
     fun findInteractionReadStateById(id: Long): PostInteractionReadStateDto?
 
@@ -174,7 +174,7 @@ interface PostRepositoryPort {
     fun updateHitCountById(
         postId: Long,
         hitCount: Int,
-    ) {}
+    )
 
     fun updateLikesCount(
         post: Post,
@@ -185,7 +185,7 @@ interface PostRepositoryPort {
     fun updateLikesCountById(
         postId: Long,
         likesCount: Int,
-    ) {}
+    )
 
-    fun lockByIdForUpdate(postId: Long) {}
+    fun lockByIdForUpdate(postId: Long)
 }

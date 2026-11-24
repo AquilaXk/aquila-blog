@@ -36,7 +36,7 @@ class PostPublicReadEtagSeedBuilder {
         page: Int,
         pageSize: Int,
         sort: PostSearchSortType1,
-        kw: String = "",
+        kw: String,
         data: PageDto<PostDto>,
     ): String {
         val writer = Utf8ChunkDigest.newWeakEtagWriter()

@@ -190,6 +190,12 @@ class PostLikeReconciliationServiceTest {
             delta: Int,
         ): Int = error("not used in this test")
 
+        override fun incrementIntValueBySubjectId(
+            subjectId: Long,
+            name: String,
+            delta: Int,
+        ): Int = error("not used in this test")
+
         override fun findRecentlyModifiedByName(
             name: String,
             modifiedAfter: Instant,
@@ -210,6 +216,11 @@ class PostLikeReconciliationServiceTest {
             post: Post,
         ): Long? = error("not used in this test")
 
+        override fun insertIfAbsentByIds(
+            likerId: Long,
+            postId: Long,
+        ): Long? = error("not used in this test")
+
         override fun save(postLike: com.back.boundedContexts.post.domain.PostLike) = error("not used in this test")
 
         override fun delete(postLike: com.back.boundedContexts.post.domain.PostLike) = error("not used in this test")
@@ -217,6 +228,11 @@ class PostLikeReconciliationServiceTest {
         override fun deleteByLikerAndPost(
             liker: Member,
             post: Post,
+        ): Int = error("not used in this test")
+
+        override fun deleteByLikerIdAndPostId(
+            likerId: Long,
+            postId: Long,
         ): Int = error("not used in this test")
 
         override fun findByLikerAndPost(
@@ -235,6 +251,8 @@ class PostLikeReconciliationServiceTest {
         ) = error("not used in this test")
 
         override fun countByPost(post: Post): Long = actualCount
+
+        override fun countByPostId(postId: Long): Long = actualCount
 
         override fun countByPostIdIn(postIds: Collection<Long>): Map<Long, Long> = postIds.associateWith { actualCount }
     }

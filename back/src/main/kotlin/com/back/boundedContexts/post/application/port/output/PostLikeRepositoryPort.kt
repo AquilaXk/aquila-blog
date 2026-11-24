@@ -13,7 +13,7 @@ interface PostLikeRepositoryPort {
     fun insertIfAbsentByIds(
         likerId: Long,
         postId: Long,
-    ): Long? = error("insertIfAbsentByIds not implemented")
+    ): Long?
 
     fun save(postLike: PostLike): PostLike
 
@@ -27,7 +27,7 @@ interface PostLikeRepositoryPort {
     fun deleteByLikerIdAndPostId(
         likerId: Long,
         postId: Long,
-    ): Int = error("deleteByLikerIdAndPostId not implemented")
+    ): Int
 
     fun findByLikerAndPost(
         liker: Member,
@@ -46,7 +46,7 @@ interface PostLikeRepositoryPort {
 
     fun countByPost(post: Post): Long
 
-    fun countByPostId(postId: Long): Long = error("countByPostId not implemented")
+    fun countByPostId(postId: Long): Long
 
     fun countByPostIdIn(postIds: Collection<Long>): Map<Long, Long>
 }

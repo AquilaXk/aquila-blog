@@ -560,6 +560,12 @@ class PostRecommendRankingServiceTest {
             delta: Int,
         ): Int = error("not used")
 
+        override fun incrementIntValueBySubjectId(
+            subjectId: Long,
+            name: String,
+            delta: Int,
+        ): Int = error("not used")
+
         override fun findRecentlyModifiedByName(
             name: String,
             modifiedAfter: Instant,

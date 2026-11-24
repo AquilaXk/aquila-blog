@@ -4,9 +4,12 @@ import com.back.boundedContexts.post.application.port.input.PostPublicReadQueryU
 import com.back.boundedContexts.post.dto.AdjacentPostsDto
 import com.back.boundedContexts.post.dto.CursorFeedPageDto
 import com.back.boundedContexts.post.dto.FeedPostDto
+import com.back.boundedContexts.post.dto.PostDto
 import com.back.boundedContexts.post.dto.PostWithContentDto
+import com.back.boundedContexts.post.dto.PublicPostBacklinksResBody
 import com.back.boundedContexts.post.dto.PublicPostsBootstrapDto
 import com.back.boundedContexts.post.dto.PublicSitemapPostsResBody
+import com.back.boundedContexts.post.dto.PublicWikilinkCatalogResBody
 import com.back.boundedContexts.post.dto.TagCountDto
 import com.back.standard.dto.page.PageDto
 import com.back.standard.dto.post.type1.PostSearchSortType1
@@ -157,5 +160,16 @@ class PostReadPrewarmServiceTest {
         override fun getPublicSitemap(limit: Int): PublicSitemapPostsResBody = PublicSitemapPostsResBody(emptyList())
 
         override fun getAdjacentPosts(id: Long): AdjacentPostsDto = AdjacentPostsDto()
+
+        override fun getPublicItems(
+            page: Int,
+            pageSize: Int,
+            kw: String,
+            sort: PostSearchSortType1,
+        ): PageDto<PostDto> = PageDto()
+
+        override fun getPublicWikilinkCatalog(): PublicWikilinkCatalogResBody = PublicWikilinkCatalogResBody()
+
+        override fun getPublicBacklinks(id: Long): PublicPostBacklinksResBody = PublicPostBacklinksResBody()
     }
 }

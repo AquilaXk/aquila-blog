@@ -25,7 +25,7 @@ interface PostAttrRepositoryPort {
         subjectId: Long,
         name: String,
         delta: Int = 1,
-    ): Int = error("incrementIntValueBySubjectId not implemented")
+    ): Int
 
     fun findRecentlyModifiedByName(
         name: String,

@@ -53,7 +53,7 @@ interface PostPublicReadQueryUseCase {
         pageSize: Int,
         kw: String,
         sort: PostSearchSortType1,
-    ): PageDto<PostDto> = error("getPublicItems not implemented")
+    ): PageDto<PostDto>
 
     fun getPublicPostDetail(id: Long): PostWithContentDto
 
@@ -75,7 +75,7 @@ interface PostPublicReadQueryUseCase {
 
     fun getAdjacentPosts(id: Long): AdjacentPostsDto
 
-    fun getPublicWikilinkCatalog(): PublicWikilinkCatalogResBody = error("getPublicWikilinkCatalog not implemented")
+    fun getPublicWikilinkCatalog(): PublicWikilinkCatalogResBody
 
-    fun getPublicBacklinks(id: Long): PublicPostBacklinksResBody = error("getPublicBacklinks not implemented")
+    fun getPublicBacklinks(id: Long): PublicPostBacklinksResBody
 }

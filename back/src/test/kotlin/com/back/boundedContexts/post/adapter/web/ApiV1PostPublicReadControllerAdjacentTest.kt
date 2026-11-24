@@ -9,9 +9,13 @@ import com.back.boundedContexts.post.application.service.PostReadBulkheadService
 import com.back.boundedContexts.post.application.support.PostCacheTags
 import com.back.boundedContexts.post.domain.Post
 import com.back.boundedContexts.post.dto.AdjacentPostsDto
+import com.back.boundedContexts.post.dto.AdmPostRevisionRestoreRequest
 import com.back.boundedContexts.post.dto.FeedPostDto
 import com.back.boundedContexts.post.dto.PostDto
 import com.back.boundedContexts.post.dto.PostWithContentDto
+import com.back.boundedContexts.post.dto.PublicPostBacklinkItemDto
+import com.back.boundedContexts.post.dto.PublicPostBacklinksResBody
+import com.back.boundedContexts.post.dto.PublicWikilinkCatalogResBody
 import com.back.boundedContexts.post.model.PostSummarySource
 import com.back.global.app.AppConfig
 import com.back.global.exception.application.AppException
@@ -340,6 +344,40 @@ class ApiV1PostPublicReadControllerAdjacentTest {
         val notModifiedRes = MockHttpServletResponse()
         val secondEntity = controller.getItems(notModifiedReq, notModifiedRes, 1, 30, "", PostSearchSortType1.CREATED_AT)
         assertThat(secondEntity.statusCode.value()).isEqualTo(304)
+
+        val searchKw = "kotlin"
+        given(postSearchIntentResolver.normalizeKeyword(searchKw)).willReturn(searchKw)
+        given(postPublicReadQueryUseCase.getPublicItems(1, 30, searchKw, PostSearchSortType1.CREATED_AT)).willReturn(pageDto)
+        val searchRes = MockHttpServletResponse()
+        val searchEntity = controller.getItems(MockHttpServletRequest(), searchRes, 1, 30, searchKw, PostSearchSortType1.CREATED_AT)
+        assertThat(searchEntity.statusCode.value()).isEqualTo(200)
+        assertThat(searchRes.getHeader("Surrogate-Key")).contains(PostCacheTags.LIST, PostCacheTags.SEARCH)
+        assertThat(searchRes.getHeader("Cache-Control")).contains("public")
+
+        val noStoreKw = "this query exceeds twentyeight chars for no store"
+        given(postSearchIntentResolver.normalizeKeyword(noStoreKw)).willReturn(noStoreKw)
+        given(postPublicReadQueryUseCase.getPublicItems(1, 30, noStoreKw, PostSearchSortType1.CREATED_AT)).willReturn(pageDto)
+        val noStoreRes = MockHttpServletResponse()
+        val noStoreEntity = controller.getItems(MockHttpServletRequest(), noStoreRes, 1, 30, noStoreKw, PostSearchSortType1.CREATED_AT)
+        assertThat(noStoreEntity.statusCode.value()).isEqualTo(200)
+        assertThat(noStoreEntity.body).isEqualTo(pageDto)
+        assertThat(noStoreRes.getHeader("Cache-Control")).contains("no-store")
+        assertThat(noStoreRes.getHeader("Surrogate-Key")).contains(PostCacheTags.LIST, PostCacheTags.SEARCH)
+
+        val defaultCatalog = PublicWikilinkCatalogResBody()
+        assertThat(defaultCatalog.items).isEmpty()
+        val defaultBacklinkItem =
+            PublicPostBacklinkItemDto(
+                id = 1L,
+                title = "제목",
+                createdAt = Instant.EPOCH,
+                modifiedAt = Instant.EPOCH,
+            )
+        assertThat(defaultBacklinkItem.summary).isEmpty()
+        val defaultBacklinks = PublicPostBacklinksResBody()
+        assertThat(defaultBacklinks.items).isEmpty()
+        val defaultRestoreReq = AdmPostRevisionRestoreRequest()
+        assertThat(defaultRestoreReq.expectedVersion).isNull()
     }
 
     @Test

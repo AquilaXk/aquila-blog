@@ -195,7 +195,7 @@ class PostPublicReadResponseFactory(
         page: Int,
         pageSize: Int,
         sort: PostSearchSortType1,
-        kw: String = "",
+        kw: String,
         data: PageDto<PostDto>,
     ): String =
         etagSeedBuilder.buildPostDtoPageWeakEtag(

@@ -468,6 +468,126 @@ class ImageUploadAdmissionValidatorTest {
                 truncatedOddChunkPayload.size.toLong(),
             )
         }.isInstanceOf(AppException::class.java)
+
+        val shortRiffHeaderStream = ByteArray(6)
+        assertThatThrownBy {
+            validator.preScreenWebpStream(java.io.ByteArrayInputStream(shortRiffHeaderStream), 32L)
+        }.isInstanceOf(AppException::class.java)
+
+        val waveInsteadOfWebp =
+            byteArrayOf(
+                'R'.code.toByte(),
+                'I'.code.toByte(),
+                'F'.code.toByte(),
+                'F'.code.toByte(),
+                0x10,
+                0x00,
+                0x00,
+                0x00,
+                'W'.code.toByte(),
+                'A'.code.toByte(),
+                'V'.code.toByte(),
+                'E'.code.toByte(),
+            ) + ByteArray(12)
+        assertThatThrownBy {
+            validator.preScreenWebpStream(java.io.ByteArrayInputStream(waveInsteadOfWebp), waveInsteadOfWebp.size.toLong())
+        }.isInstanceOf(AppException::class.java)
+
+        val riff12 =
+            byteArrayOf(
+                'R'.code.toByte(),
+                'I'.code.toByte(),
+                'F'.code.toByte(),
+                'F'.code.toByte(),
+                22,
+                0,
+                0,
+                0,
+                'W'.code.toByte(),
+                'E'.code.toByte(),
+                'B'.code.toByte(),
+                'P'.code.toByte(),
+            )
+        val truncatedChunkHeaderStream = riff12 + "VP8 ".toByteArray(Charsets.US_ASCII)
+        assertThatThrownBy {
+            validator.preScreenWebpStream(java.io.ByteArrayInputStream(truncatedChunkHeaderStream), 30L)
+        }.isInstanceOf(AppException::class.java)
+
+        val invalidFirstChunk = buildWebpBytes("JUNK" to ByteArray(4))
+        assertThatThrownBy {
+            validator.preScreenWebpStream(java.io.ByteArrayInputStream(invalidFirstChunk), invalidFirstChunk.size.toLong())
+        }.isInstanceOf(AppException::class.java)
+
+        val truncatedVp8PayloadStream =
+            riff12 +
+                "VP8 ".toByteArray(Charsets.US_ASCII) +
+                byteArrayOf(10, 0, 0, 0) +
+                byteArrayOf(0x10, 0x00, 0x00, 0x9D.toByte())
+        assertThatThrownBy {
+            validator.preScreenWebpStream(java.io.ByteArrayInputStream(truncatedVp8PayloadStream), 30L)
+        }.isInstanceOf(AppException::class.java)
+
+        val interframeVp8 = buildWebpBytes("VP8 ", byteArrayOf(0x11, 0x00, 0x00, 0x9D.toByte(), 0x01, 0x2A, 10, 0, 10, 0))
+        assertThatThrownBy {
+            validator.preScreenWebpStream(java.io.ByteArrayInputStream(interframeVp8), interframeVp8.size.toLong())
+        }.isInstanceOf(AppException::class.java)
+
+        val badSignatureVp8 = buildWebpBytes("VP8 ", byteArrayOf(0x10, 0x00, 0x00, 0x00, 0x01, 0x2A, 10, 0, 10, 0))
+        assertThatThrownBy {
+            validator.preScreenWebpStream(java.io.ByteArrayInputStream(badSignatureVp8), badSignatureVp8.size.toLong())
+        }.isInstanceOf(AppException::class.java)
+
+        val riff12Vp8l =
+            byteArrayOf(
+                'R'.code.toByte(),
+                'I'.code.toByte(),
+                'F'.code.toByte(),
+                'F'.code.toByte(),
+                18,
+                0,
+                0,
+                0,
+                'W'.code.toByte(),
+                'E'.code.toByte(),
+                'B'.code.toByte(),
+                'P'.code.toByte(),
+            )
+        val truncatedVp8lStream =
+            riff12Vp8l +
+                "VP8L".toByteArray(Charsets.US_ASCII) +
+                byteArrayOf(5, 0, 0, 0) +
+                byteArrayOf(0x2F, 0x00)
+        assertThatThrownBy {
+            validator.preScreenWebpStream(java.io.ByteArrayInputStream(truncatedVp8lStream), 26L)
+        }.isInstanceOf(AppException::class.java)
+
+        val badSignatureVp8l = buildWebpBytes("VP8L", byteArrayOf(0x00, 0x00, 0x00, 0x00, 0x00))
+        assertThatThrownBy {
+            validator.preScreenWebpStream(java.io.ByteArrayInputStream(badSignatureVp8l), badSignatureVp8l.size.toLong())
+        }.isInstanceOf(AppException::class.java)
+
+        val wrongSizeVp8x = buildWebpBytes("VP8X", ByteArray(12))
+        assertThatThrownBy {
+            validator.preScreenWebpStream(java.io.ByteArrayInputStream(wrongSizeVp8x), wrongSizeVp8x.size.toLong())
+        }.isInstanceOf(AppException::class.java)
+
+        val secondChunkVp8x =
+            buildWebpBytes(
+                "VP8L" to vp8lPayload(width = 16, height = 16),
+                "VP8X" to vp8xPayload(flags = 0x00, width = 16, height = 16),
+            )
+        assertThatThrownBy {
+            validator.preScreenWebpStream(java.io.ByteArrayInputStream(secondChunkVp8x), secondChunkVp8x.size.toLong())
+        }.isInstanceOf(AppException::class.java)
+
+        val truncatedVp8xStream =
+            riff12 +
+                "VP8X".toByteArray(Charsets.US_ASCII) +
+                byteArrayOf(10, 0, 0, 0) +
+                byteArrayOf(0x00, 0x00, 0x00, 0x00)
+        assertThatThrownBy {
+            validator.preScreenWebpStream(java.io.ByteArrayInputStream(truncatedVp8xStream), 30L)
+        }.isInstanceOf(AppException::class.java)
     }
 
     private fun writeInt32LEInto(

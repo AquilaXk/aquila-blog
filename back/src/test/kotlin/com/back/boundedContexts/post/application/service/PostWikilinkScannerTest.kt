@@ -92,5 +92,14 @@ class PostWikilinkScannerTest {
 
         val nestedSubpathUrl = "오탐 방지: [서브패스](https://aquila.blog/blog/archive/posts/42)"
         assertThat(PostWikilinkScanner.referencesTargetPost(nestedSubpathUrl, 42L, normalized)).isFalse()
+
+        val multiBacktickNestedSingle = "``code ` inner`` [[42]]"
+        assertThat(PostWikilinkScanner.referencesTargetPost(multiBacktickNestedSingle, 42L, normalized)).isTrue()
+
+        val unclosedWikilinkEof = "미완성 [[42 닫히지않음"
+        assertThat(PostWikilinkScanner.referencesTargetPost(unclosedWikilinkEof, 42L, normalized)).isFalse()
+
+        val schemelessHostPath = "example.com/posts/42"
+        assertThat(PostWikilinkScanner.referencesTargetPost(schemelessHostPath, 42L, normalized)).isFalse()
     }
 }

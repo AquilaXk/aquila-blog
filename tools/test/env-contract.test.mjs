@@ -1096,11 +1096,21 @@ test("homeserver monitoring runtime files stay readable by container users", () 
   assert.match(steadyStateGuard, /find "\$\{SCRIPT_DIR\}\/caddy" -type d -exec chmod 0755/)
   assert.match(deployScript, /find "\$\{SCRIPT_DIR\}\/caddy" -type f -exec chmod 0644/)
   assert.match(steadyStateGuard, /find "\$\{SCRIPT_DIR\}\/caddy" -type f -exec chmod 0644/)
+  const remoteBackendRollout = readFileSync(remoteBackendRolloutPath, "utf8")
   const remoteFrontRollout = readFileSync(path.join(repoRoot, "deploy/homeserver/remote_front_rollout.sh"), "utf8")
   const rollbackScript = readFileSync(path.join(repoRoot, "deploy/homeserver/rollback_last_deploy.sh"), "utf8")
   const recoverScript = readFileSync(path.join(repoRoot, "deploy/homeserver/recover.sh"), "utf8")
-  assert.match(remoteFrontRollout, /find deploy\/homeserver\/caddy deploy\/homeserver\/monitoring -type f -exec chmod 0644/)
+  assert.match(
+    remoteBackendRollout,
+    /git checkout --force "\$\{HOME_DEPLOY_SHA\}"[\s\S]{0,200}find deploy\/homeserver\/caddy deploy\/homeserver\/monitoring -type d -exec chmod 0755[\s\S]{0,120}find deploy\/homeserver\/caddy deploy\/homeserver\/monitoring -type f -exec chmod 0644/,
+  )
+  assert.match(
+    remoteFrontRollout,
+    /git checkout --force "\$\{HOME_DEPLOY_SHA\}"[\s\S]{0,200}find deploy\/homeserver\/caddy deploy\/homeserver\/monitoring -type d -exec chmod 0755[\s\S]{0,120}find deploy\/homeserver\/caddy deploy\/homeserver\/monitoring -type f -exec chmod 0644/,
+  )
+  assert.match(rollbackScript, /find "\$\{SCRIPT_DIR\}\/caddy" -type d -exec chmod 0755/)
   assert.match(rollbackScript, /find "\$\{SCRIPT_DIR\}\/caddy" -type f -exec chmod 0644/)
+  assert.match(recoverScript, /find "\$\{SCRIPT_DIR\}\/caddy" -type d -exec chmod 0755/)
   assert.match(recoverScript, /find "\$\{SCRIPT_DIR\}\/caddy" -type f -exec chmod 0644/)
   const monitoringBootArray = deployScript.match(/monitoring_services_to_boot=\(([^)]*)\)/)
   assert(monitoringBootArray, "monitoring boot services must be declared as a shared array")

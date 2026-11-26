@@ -131,6 +131,9 @@ fi
 
 git checkout --force "${HOME_DEPLOY_SHA}"
 
+find deploy/homeserver/caddy deploy/homeserver/monitoring -type d -exec chmod 0755 {} + 2>/dev/null || true
+find deploy/homeserver/caddy deploy/homeserver/monitoring -type f -exec chmod 0644 {} + 2>/dev/null || true
+
 mkdir -p deploy/homeserver
 
 chmod +x \

@@ -1,20 +1,35 @@
 package com.back.boundedContexts.cloud.application.service
 
+import com.back.boundedContexts.cloud.adapter.web.ApiV1AdmCloudController
 import com.back.boundedContexts.cloud.config.CloudSecurityConfigurer
 import com.back.boundedContexts.cloud.model.CloudFileMediaKind
 import com.back.boundedContexts.cloud.support.InMemoryCloudFileRepository
 import com.back.boundedContexts.cloud.support.StubCloudStoragePort
 import com.back.global.exception.application.AppException
 import com.back.global.exception.application.ErrorCode
+import com.back.global.exception.config.ExceptionHandler
+import com.back.global.observability.ErrorMetrics
+import com.back.global.security.domain.SecurityUser
 import com.back.global.storage.application.ImageUploadAdmissionValidator
 import com.back.global.storage.application.ImageUploadAdmissionValidator.ImageValidationPolicy
 import com.back.global.storage.application.port.output.CloudStoragePort
 import com.back.global.storage.config.CloudStorageProperties
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry
 import org.assertj.core.api.Assertions.assertThat
 import org.assertj.core.api.Assertions.assertThatThrownBy
 import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.io.TempDir
+import org.mockito.Mockito.mock
+import org.springframework.core.MethodParameter
+import org.springframework.mock.web.MockMultipartFile
+import org.springframework.security.core.authority.SimpleGrantedAuthority
+import org.springframework.test.web.servlet.multipart
+import org.springframework.test.web.servlet.setup.MockMvcBuilders
+import org.springframework.web.bind.support.WebDataBinderFactory
+import org.springframework.web.context.request.NativeWebRequest
+import org.springframework.web.method.support.HandlerMethodArgumentResolver
+import org.springframework.web.method.support.ModelAndViewContainer
 import java.awt.Color
 import java.awt.image.BufferedImage
 import java.io.ByteArrayInputStream
@@ -807,6 +822,11 @@ class CloudOverhaulSecurityAndFormatTest {
                 "<svg xmlns=\"http://www.w3.org/2000/svg\" xmlns:x=\"http://www.w3.org/1999/xhtml\">" +
                     "<x:iframe src=\"https://evil.example\"/></svg>"
             ).toByteArray()
+        val nsDotScriptSvg =
+            (
+                "<svg xmlns=\"http://www.w3.org/2000/svg\" xmlns:a.b=\"http://www.w3.org/1999/xhtml\">" +
+                    "<a.b:script>alert(1)</a.b:script></svg>"
+            ).toByteArray()
 
         val secondEntrySlipTar =
             multiEntryTarBytes(
@@ -828,6 +848,7 @@ class CloudOverhaulSecurityAndFormatTest {
         val secondSlipTgz = gzipBytes(secondEntrySlipTar)
         val secondPrefixSlipTgz = gzipBytes(secondEntryPrefixSlipTar)
         val badSecondChecksumTgz = gzipBytes(badSecondChecksumTar)
+        val nonUstarTgz = gzipBytes("plain text pretending to be tgz\n".toByteArray())
         val tgzBomb = gzipBytes(multiEntryTarBytes(TarTestEntry("bomb.bin", ByteArray(5 * 1024 * 1024) { 0x43 })))
         val elfSpoofedSh = byteArrayOf(0x7F, 'E'.code.toByte(), 'L'.code.toByte(), 'F'.code.toByte(), 2, 1, 1, 0)
 
@@ -846,8 +867,12 @@ class CloudOverhaulSecurityAndFormatTest {
                 Triple("ns-script.svg", "image/svg+xml", nsScriptSvg),
                 Triple("ns-foreign.svg", "image/svg+xml", nsForeignObjectSvg),
                 Triple("ns-iframe.svg", "image/svg+xml", nsIframeSvg),
+                Triple("ns-dot-script.svg", "image/svg+xml", nsDotScriptSvg),
                 Triple("second-slip.tgz", "application/gzip", secondSlipTgz),
                 Triple("second-slip.tar.gz", "application/gzip", secondSlipTgz),
+                Triple("second-slip.gzip", "application/gzip", secondSlipTgz),
+                Triple("gzip-no-ext", "application/gzip", secondSlipTgz),
+                Triple("non-ustar.tgz", "application/gzip", nonUstarTgz),
                 Triple("second-prefix-slip.tgz", "application/gzip", secondPrefixSlipTgz),
                 Triple("bad-entry2-checksum.tgz", "application/gzip", badSecondChecksumTgz),
                 Triple("bomb.tgz", "application/gzip", tgzBomb),
@@ -890,6 +915,8 @@ class CloudOverhaulSecurityAndFormatTest {
         val validator = ImageUploadAdmissionValidator()
         val overflowAvifWrap = avifWith64BitMetaBoxSize(Long.MAX_VALUE - 5L)
         val overflowAvifMax = avifWith64BitMetaBoxSize(Long.MAX_VALUE)
+        val overflowAvifMsb = avifWith64BitMetaBoxSize(Long.MIN_VALUE + 32L)
+        val overflowAvifAllOnes = avifWith64BitMetaBoxSize(-1L)
         val truncated64Avif =
             ftypBytes("avif") +
                 ByteBuffer
@@ -900,9 +927,13 @@ class CloudOverhaulSecurityAndFormatTest {
                     .array()
         assertThat(ImageUploadAdmissionValidator.extractAvifDimensions(overflowAvifWrap, overflowAvifWrap.size)).isNull()
         assertThat(ImageUploadAdmissionValidator.extractAvifDimensions(overflowAvifMax, overflowAvifMax.size)).isNull()
+        assertThat(ImageUploadAdmissionValidator.extractAvifDimensions(overflowAvifMsb, overflowAvifMsb.size)).isNull()
+        assertThat(ImageUploadAdmissionValidator.extractAvifDimensions(overflowAvifAllOnes, overflowAvifAllOnes.size)).isNull()
         listOf(
             "overflow-wrap.avif" to overflowAvifWrap,
             "overflow-max.avif" to overflowAvifMax,
+            "overflow-msb.avif" to overflowAvifMsb,
+            "overflow-neg1.avif" to overflowAvifAllOnes,
             "trunc64.avif" to truncated64Avif,
         ).forEach { (filename, bytes) ->
             assertThatThrownBy {
@@ -936,6 +967,49 @@ class CloudOverhaulSecurityAndFormatTest {
                 "",
             )
         assertThat(outerWithEmptyNested.contentType).isEqualTo("application/zip")
+
+        // Real HTTP controller + ExceptionHandler multipart upload verification (HTTP 400, never 500)
+        val principal = SecurityUser(7L, "admin", "", "Admin", listOf(SimpleGrantedAuthority("ROLE_ADMIN")))
+        val controller =
+            ApiV1AdmCloudController(
+                cloudFileService = service,
+                cloudVideoUploadSessionService = mock(CloudVideoUploadSessionService::class.java),
+                cloudExternalPlaybackTokenService = mock(CloudExternalPlaybackTokenService::class.java),
+            )
+        val mvc =
+            MockMvcBuilders
+                .standaloneSetup(controller)
+                .setControllerAdvice(ExceptionHandler(ErrorMetrics(SimpleMeterRegistry())))
+                .setCustomArgumentResolvers(
+                    object : HandlerMethodArgumentResolver {
+                        override fun supportsParameter(parameter: MethodParameter): Boolean =
+                            parameter.parameterType == SecurityUser::class.java
+
+                        override fun resolveArgument(
+                            parameter: MethodParameter,
+                            mavContainer: ModelAndViewContainer?,
+                            webRequest: NativeWebRequest,
+                            binderFactory: WebDataBinderFactory?,
+                        ): Any = principal
+                    },
+                ).build()
+
+        listOf(
+            Triple("encrypted.zip", "application/zip", encryptedZip),
+            Triple("nonutf8-local.zip", "application/zip", nonUtf8LocalZip),
+            Triple("corrupt-deflate-nested.zip", "application/zip", truncatedDeflateNestedZip),
+            Triple("truncated-512.tar", "application/x-tar", truncatedTar512),
+            Triple("ns-script.svg", "image/svg+xml", nsScriptSvg),
+            Triple("second-slip.tgz", "application/gzip", secondSlipTgz),
+        ).forEach { (filename, mime, payload) ->
+            mvc
+                .multipart("/system/api/v1/adm/cloud/files") {
+                    file(MockMultipartFile("file", filename, mime, payload))
+                }.andExpect {
+                    status { isBadRequest() }
+                    jsonPath("$.resultCode") { value("400-1") }
+                }
+        }
     }
 
     private fun validMif1ThreeBrandAvifBytes(

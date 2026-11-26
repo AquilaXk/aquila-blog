@@ -88,7 +88,8 @@ object CloudArchiveAndDocumentInspector {
     private val SVG_ENTITY_HEX_OR_DEC = Regex("&#(?:x([0-9a-fA-F]{1,6})|([0-9]{1,7}));?")
     private val SVG_WHITESPACE = Regex("[\\u0000-\\u0020]+")
     private val SVG_ON_EVENT_ATTR = Regex("(?i)(?:^|[\\s/\"'`>])on[a-z]{1,24}\\s*=")
-    private val SVG_DANGEROUS_TAG = Regex("<\\s*(?:[a-z0-9_-]+:)?(?:script|foreignobject|iframe|object|embed)\\b")
+    private val SVG_DANGEROUS_TAG = Regex("<\\s*(?:[a-z0-9_.-]+:)?(?:script|foreignobject|iframe|object|embed)\\b")
+    private val NESTED_ZIP_EXTENSIONS = setOf("zip", "hwpx", "docx", "xlsx", "pptx")
 
     val TEXT_EXTENSION_CONTENT_TYPES: Map<String, String> =
         mapOf(
@@ -263,32 +264,33 @@ object CloudArchiveAndDocumentInspector {
             throw AppException(ErrorCode.BAD_REQUEST, "압축 파일 중첩 깊이가 허용 상한을 초과했습니다.")
         }
         val scratch = ByteArray(STREAM_BUFFER_BYTES)
-        val zip = ZipInputStream(input, StandardCharsets.UTF_8)
         var levelUncompressedBytes = 0L
         var levelEntries = 0
-        while (true) {
-            val entry = zip.nextEntry ?: break
-            levelEntries += 1
-            state.entryCount += 1
-            if (state.entryCount > maxEntries) {
-                throw AppException(ErrorCode.BAD_REQUEST, "ZIP 아카이브 엔트리 수가 허용 상한을 초과했습니다.")
+        ZipInputStream(input, StandardCharsets.UTF_8).use { zip ->
+            while (true) {
+                val entry = zip.nextEntry ?: break
+                levelEntries += 1
+                state.entryCount += 1
+                if (state.entryCount > maxEntries) {
+                    throw AppException(ErrorCode.BAD_REQUEST, "ZIP 아카이브 엔트리 수가 허용 상한을 초과했습니다.")
+                }
+                val normalizedName = validateSafeArchiveEntryName(entry.name)
+                collectedNames?.add(normalizedName)
+                levelUncompressedBytes =
+                    inspectZipEntryBytes(
+                        zip = zip,
+                        entry = entry,
+                        scratch = scratch,
+                        compressedBudgetBytes = compressedBudgetBytes,
+                        initialLevelUncompressedBytes = levelUncompressedBytes,
+                        depth = depth,
+                        state = state,
+                        maxEntries = maxEntries,
+                        maxUncompressedBytes = maxUncompressedBytes,
+                        ratioThresholdBytes = ratioThresholdBytes,
+                    )
+                zip.closeEntry()
             }
-            val normalizedName = validateSafeArchiveEntryName(entry.name)
-            collectedNames?.add(normalizedName)
-            levelUncompressedBytes =
-                inspectZipEntryBytes(
-                    zip = zip,
-                    entry = entry,
-                    scratch = scratch,
-                    compressedBudgetBytes = compressedBudgetBytes,
-                    initialLevelUncompressedBytes = levelUncompressedBytes,
-                    depth = depth,
-                    state = state,
-                    maxEntries = maxEntries,
-                    maxUncompressedBytes = maxUncompressedBytes,
-                    ratioThresholdBytes = ratioThresholdBytes,
-                )
-            zip.closeEntry()
         }
         return levelEntries
     }
@@ -306,7 +308,7 @@ object CloudArchiveAndDocumentInspector {
         ratioThresholdBytes: Long,
     ): Long {
         val nestedExt = extractLowerExt(entry.name)
-        val shouldInspectNested = !entry.isDirectory && nestedExt in setOf("zip", "hwpx", "docx", "xlsx", "pptx")
+        val shouldInspectNested = !entry.isDirectory && nestedExt in NESTED_ZIP_EXTENSIONS
         val nestedBuffer = if (shouldInspectNested) java.io.ByteArrayOutputStream() else null
         var nestedOverflowed = false
         var levelUncompressedBytes = initialLevelUncompressedBytes
@@ -471,25 +473,38 @@ object CloudArchiveAndDocumentInspector {
                 } catch (_: Exception) {
                     return@use false
                 }
-            val boundedGzip = BoundedGzipInputStream(gzip, counting, maxDecompressedBytes)
-            val headerProbe = ByteArray(TAR_BLOCK_BYTES)
-            val buffer = ByteArray(STREAM_BUFFER_BYTES)
-            try {
-                val probeFilled = readFullBlock(boundedGzip, headerProbe)
-                if ((extension == "tgz" || extension == "gz") && probeFilled == TAR_BLOCK_BYTES && hasUstarMagic(headerProbe)) {
-                    if (!inspectTarStream(boundedGzip, MAX_ARCHIVE_ENTRIES, maxDecompressedBytes, headerProbe)) {
-                        return@use false
-                    }
-                }
-                while (boundedGzip.read(buffer) >= 0) {
-                    // Drain remaining stream so GZIP CRC/ISIZE trailer and bomb caps are verified.
-                }
-                true
-            } catch (ex: AppException) {
-                throw ex
-            } catch (_: Exception) {
-                false
+            gzip.use { gzipStream ->
+                inspectOpenedGzipStream(gzipStream, counting, extension, maxDecompressedBytes)
             }
+        }
+    }
+
+    private fun inspectOpenedGzipStream(
+        gzipStream: GZIPInputStream,
+        counting: CountingInputStream,
+        extension: String,
+        maxDecompressedBytes: Long,
+    ): Boolean {
+        val boundedGzip = BoundedGzipInputStream(gzipStream, counting, maxDecompressedBytes)
+        val headerProbe = ByteArray(TAR_BLOCK_BYTES)
+        val buffer = ByteArray(STREAM_BUFFER_BYTES)
+        return try {
+            val probeFilled = readFullBlock(boundedGzip, headerProbe)
+            if (probeFilled == TAR_BLOCK_BYTES && hasUstarMagic(headerProbe)) {
+                if (!inspectTarStream(boundedGzip, MAX_ARCHIVE_ENTRIES, maxDecompressedBytes, headerProbe)) {
+                    return false
+                }
+            } else if (extension == "tgz") {
+                return false
+            }
+            while (boundedGzip.read(buffer) >= 0) {
+                // Drain remaining stream so GZIP CRC/ISIZE trailer and bomb caps are verified.
+            }
+            true
+        } catch (ex: AppException) {
+            throw ex
+        } catch (_: Exception) {
+            false
         }
     }
 

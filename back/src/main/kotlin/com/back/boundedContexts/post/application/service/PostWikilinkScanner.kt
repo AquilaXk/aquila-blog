@@ -55,11 +55,13 @@ internal object PostWikilinkScanner {
                 val fenceRun = matchFenceMarker(markdown, i, limit)
                 if (fenceRun != null) {
                     if (!inFence) {
-                        inFence = true
-                        fenceChar = fenceRun.markerChar
-                        fenceLength = fenceRun.markerLen
-                        i = fenceRun.lineEnd
-                        continue
+                        if (fenceRun.markerChar != '`' || !hasBacktickInRange(markdown, fenceRun.markerEndOffset, fenceRun.lineEnd)) {
+                            inFence = true
+                            fenceChar = fenceRun.markerChar
+                            fenceLength = fenceRun.markerLen
+                            i = fenceRun.lineEnd
+                            continue
+                        }
                     } else if (
                         fenceRun.markerChar == fenceChar &&
                         fenceRun.markerLen >= fenceLength &&
@@ -102,7 +104,8 @@ internal object PostWikilinkScanner {
                 val close = findWikilinkClose(markdown, i + 2, limit)
                 if (close > i + 2) {
                     val baseTarget = extractWikilinkBaseTarget(markdown, i + 2, close)
-                    if (baseTarget.isNotEmpty() &&
+                    if (baseTarget != null &&
+                        baseTarget.isNotEmpty() &&
                         !baseTarget.startsWith("#") &&
                         !baseTarget.startsWith("/") &&
                         !startsWithHttpScheme(baseTarget)
@@ -134,13 +137,13 @@ internal object PostWikilinkScanner {
         var i = bodyStart
         while (i + 1 < searchLimit) {
             val ch = text[i]
-            if (ch == '\n' || ch == '\r') return -1
+            if (ch == '\n' || ch == '\r' || ch == '[') return -1
             if (ch == '\\') {
                 i += 2
                 continue
             }
-            if (ch == ']' && text[i + 1] == ']') {
-                return i
+            if (ch == ']') {
+                return if (text[i + 1] == ']') i else -1
             }
             i++
         }
@@ -151,16 +154,30 @@ internal object PostWikilinkScanner {
         text: String,
         start: Int,
         end: Int,
-    ): String {
-        var cut = end
+    ): String? {
+        var pipeIdx = -1
         for (i in start until end) {
-            val ch = text[i]
-            if (ch == '|' || ch == '#') {
-                cut = i
+            if (text[i] == '|') {
+                pipeIdx = i
                 break
             }
         }
-        return text.substring(start, cut).trim()
+        val targetEnd =
+            if (pipeIdx >= 0) {
+                if (pipeIdx + 1 >= end) return null
+                if (pipeIdx > start && text[pipeIdx - 1] == '\\') pipeIdx - 1 else pipeIdx
+            } else {
+                end
+            }
+        var anchorCut = targetEnd
+        for (i in start until targetEnd) {
+            val ch = text[i]
+            if (ch == '\\') return null
+            if (ch == '#' && anchorCut == targetEnd) {
+                anchorCut = i
+            }
+        }
+        return text.substring(start, anchorCut).trim()
     }
 
     private fun startsWithHttpScheme(value: String): Boolean {
@@ -195,8 +212,15 @@ internal object PostWikilinkScanner {
         val afterIdx = idStart + targetIdText.length
         if (afterIdx >= limit) return true
         val next = text[afterIdx]
-        return next == '#' || next == '?' || next == '/' || next == ')' || next == ']' || next.isWhitespace()
+        if (next == '/') {
+            if (afterIdx + 1 >= limit) return true
+            return isPostPathBoundaryChar(text[afterIdx + 1])
+        }
+        return isPostPathBoundaryChar(next)
     }
+
+    private fun isPostPathBoundaryChar(ch: Char): Boolean =
+        ch == '#' || ch == '?' || ch == ')' || ch == ']' || ch == '>' || ch.isWhitespace()
 
     private fun isHostBoundaryBefore(
         text: String,
@@ -254,5 +278,16 @@ internal object PostWikilinkScanner {
             if (ch != ' ' && ch != '\t' && ch != '\r' && ch != '\n') return false
         }
         return true
+    }
+
+    private fun hasBacktickInRange(
+        text: String,
+        start: Int,
+        end: Int,
+    ): Boolean {
+        for (i in start until end) {
+            if (text[i] == '`') return true
+        }
+        return false
     }
 }

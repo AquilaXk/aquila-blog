@@ -34,8 +34,8 @@ class ErrorCodeContractExportTest {
             .contains("\"409-3\"", "\"500-2\"")
             .doesNotContain("\"409-4\"")
         assertThat(exported.first().path("httpStatus").asInt()).isPositive()
-        assertThat(exported.first().path("defaultUserMessage").asText()).isNotBlank()
-        assertThat(exported.first().path("kind").asText()).isIn("USER", "DEVELOPER")
+        assertThat(exported.first().path("defaultUserMessage").asString()).isNotBlank()
+        assertThat(exported.first().path("kind").asString()).isIn("USER", "DEVELOPER")
     }
 
     @Test

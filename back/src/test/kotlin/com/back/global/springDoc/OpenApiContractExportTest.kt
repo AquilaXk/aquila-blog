@@ -28,7 +28,7 @@ class OpenApiContractExportTest : BaseControllerIntegrationTest() {
                 .contentAsString
 
         val openApiNode = objectMapper.readTree(responseBody)
-        assertThat(openApiNode.path("openapi").asText()).isNotBlank()
+        assertThat(openApiNode.path("openapi").asString()).isNotBlank()
         assertThat(openApiNode.path("paths").has("/post/api/v1/posts/files")).isFalse()
         assertThat(openApiNode.path("paths").has("/post/api/v1/files/**")).isFalse()
         val schemas = openApiNode.path("components").path("schemas")
@@ -39,7 +39,7 @@ class OpenApiContractExportTest : BaseControllerIntegrationTest() {
                 .path("servers")
                 .first()
                 .path("url")
-                .asText(),
+                .asString(),
         ).isEqualTo("https://blog.aquilaxk.site")
         assertThat(
             openApiNode
@@ -47,7 +47,7 @@ class OpenApiContractExportTest : BaseControllerIntegrationTest() {
                 .path("securitySchemes")
                 .path("bearerAuth")
                 .path("type")
-                .asText(),
+                .asString(),
         ).isEqualTo("http")
         assertThat(
             openApiNode
@@ -55,7 +55,7 @@ class OpenApiContractExportTest : BaseControllerIntegrationTest() {
                 .path("securitySchemes")
                 .path("bearerAuth")
                 .path("scheme")
-                .asText(),
+                .asString(),
         ).isEqualTo("bearer")
         assertThat(
             openApiNode
@@ -63,31 +63,31 @@ class OpenApiContractExportTest : BaseControllerIntegrationTest() {
                 .path("securitySchemes")
                 .path("bearerAuth")
                 .path("bearerFormat")
-                .asText(),
+                .asString(),
         ).isEqualTo("JWT")
         assertTypeSet(propertySchema(openApiNode, "PostModifyRequest", "contentHtml"), "string", "null")
         assertTypeSet(propertySchema(openApiNode, "PostModifyRequest", "published"), "boolean", "null")
         val completedFileId = propertySchema(openApiNode, "CloudVideoUploadSessionDto", "completedFileId")
         assertTypeSet(completedFileId, "integer", "null")
-        assertThat(completedFileId.path("format").asText()).isEqualTo("int64")
+        assertThat(completedFileId.path("format").asString()).isEqualTo("int64")
         val summaryMode = propertySchema(openApiNode, "PostModifyRequest", "summaryMode")
         assertTypeSet(summaryMode, "string", "null")
         assertNullableEnum(summaryMode, "AUTO", "MANUAL")
         val createSummaryMode = propertySchema(openApiNode, "PostWriteRequest", "summaryMode")
-        assertThat(createSummaryMode.path("type").asText()).isEqualTo("string")
-        assertThat(createSummaryMode.path("enum").values().map { it.asText() })
+        assertThat(createSummaryMode.path("type").asString()).isEqualTo("string")
+        assertThat(createSummaryMode.path("enum").values().map { it.asString() })
             .containsExactlyInAnyOrder("AUTO", "MANUAL")
         assertThat(
             schemas
                 .path("PostWriteRequest")
                 .path("required")
                 .values()
-                .map { it.asText() },
+                .map { it.asString() },
         ).contains("summaryMode")
         val adminEmailCode = propertySchema(openApiNode, "AdminEmailCodeVerifyRequest", "code")
         assertThat(adminEmailCode.path("minLength").asInt()).isEqualTo(8)
         assertThat(adminEmailCode.path("maxLength").asInt()).isEqualTo(8)
-        assertThat(adminEmailCode.path("pattern").asText()).isEqualTo("\\d{8}")
+        assertThat(adminEmailCode.path("pattern").asString()).isEqualTo("\\d{8}")
         assertThat(openApiNode.path("paths").has("/post/api/v1/adm/posts/preview-summary")).isFalse()
         assertThat(openApiNode.path("paths").has("/post/api/v1/adm/posts/summary-backfill")).isFalse()
         assertThat(schemas.has("PostSummaryPreviewRequest")).isFalse()
@@ -101,11 +101,11 @@ class OpenApiContractExportTest : BaseControllerIntegrationTest() {
         assertTypeSet(contentHtmlSanitizerPolicyVersion, "string", "null")
         assertNullableEnum(contentHtmlSanitizerPolicyVersion, "content-html-v1")
         val contentHtmlTrustState = propertySchema(openApiNode, "PostWithContentDto", "contentHtmlTrustState")
-        assertThat(contentHtmlTrustState.path("type").asText()).isEqualTo("string")
-        assertThat(contentHtmlTrustState.path("enum").values().map { it.asText() })
+        assertThat(contentHtmlTrustState.path("type").asString()).isEqualTo("string")
+        assertThat(contentHtmlTrustState.path("enum").values().map { it.asString() })
             .containsExactlyInAnyOrder("TRUSTED_CURRENT", "UNKNOWN", "REJECTED")
         val feedPostSchema = openApiNode.path("components").path("schemas").path("FeedPostDto")
-        assertThat(feedPostSchema.path("required").values().map { it.asText() })
+        assertThat(feedPostSchema.path("required").values().map { it.asString() })
             .containsExactlyInAnyOrder("summary", "summarySource")
         assertEnum(
             openApiNode,
@@ -132,9 +132,9 @@ class OpenApiContractExportTest : BaseControllerIntegrationTest() {
                     .path("properties")
                     .path("isAdmin")
                     .path("type")
-                    .asText(),
+                    .asString(),
             ).isEqualTo("boolean")
-            assertThat(schema.path("required").values().map { it.asText() }).contains("isAdmin")
+            assertThat(schema.path("required").values().map { it.asString() }).contains("isAdmin")
         }
         assertThat(schemas.path("MemberWithUsernameDto").path("properties").has("aboutDetails")).isFalse()
         assertThat(schemas.path("MemberWithUsernameDto").path("properties").has("profileImageDirectUrl")).isFalse()
@@ -177,7 +177,7 @@ class OpenApiContractExportTest : BaseControllerIntegrationTest() {
         assertThat(paths.has("/system/api/v1/adm/operations/{operationId}")).isTrue()
         assertThat(paths.has("/system/api/v1/adm/tasks/replay-failed")).isFalse()
         val replayRequest = openApiNode.path("components").path("schemas").path("TaskDlqReplayOperationRequest")
-        assertThat(replayRequest.path("required").values().map { it.asText() })
+        assertThat(replayRequest.path("required").values().map { it.asString() })
             .containsExactlyInAnyOrder("operationId", "reason")
         assertThat(replayRequest.path("properties").has("actorId")).isFalse()
         assertThat(replayRequest.path("properties").has("sessionRowId")).isFalse()
@@ -186,14 +186,14 @@ class OpenApiContractExportTest : BaseControllerIntegrationTest() {
                 .path("properties")
                 .path("operationId")
                 .path("format")
-                .asText(),
+                .asString(),
         ).isEqualTo("uuid")
         assertThat(
             replayRequest
                 .path("properties")
                 .path("operationId")
                 .path("type")
-                .asText(),
+                .asString(),
         ).isEqualTo("string")
         val replayReason = replayRequest.path("properties").path("reason")
         assertThat(replayReason.path("minLength").asInt()).isEqualTo(1)
@@ -237,18 +237,18 @@ class OpenApiContractExportTest : BaseControllerIntegrationTest() {
             "DISABLED",
         )
         assertTypeSet(propertySchema(openApiNode, "AdminOperationResBody", "controlVersion"), "integer", "null")
-        assertThat(propertySchema(openApiNode, "AdminOperationResBody", "controlVersion").path("format").asText())
+        assertThat(propertySchema(openApiNode, "AdminOperationResBody", "controlVersion").path("format").asString())
             .isEqualTo("int64")
         listOf("SearchPipelineForceControlRequest", "SearchEngineMirrorForceDisableRequest").forEach { schemaName ->
             val request = openApiNode.path("components").path("schemas").path(schemaName)
-            assertThat(request.path("required").values().map { it.asText() })
+            assertThat(request.path("required").values().map { it.asString() })
                 .containsExactlyInAnyOrder("operationId", "reason")
             assertThat(
                 request
                     .path("properties")
                     .path("operationId")
                     .path("format")
-                    .asText(),
+                    .asString(),
             ).isEqualTo("uuid")
             assertThat(
                 request
@@ -284,7 +284,7 @@ class OpenApiContractExportTest : BaseControllerIntegrationTest() {
                     .path("*/*")
                     .path("schema")
                     .path("\$ref")
-                    .asText(),
+                    .asString(),
             ).isEqualTo("#/components/schemas/RsDataAdminOperationResBody")
         }
         val runtimeFlags = openApiNode.path("components").path("schemas").path("SearchRuntimeFlags")
@@ -294,14 +294,14 @@ class OpenApiContractExportTest : BaseControllerIntegrationTest() {
                 .path("properties")
                 .path("searchPipeline")
                 .path("\$ref")
-                .asText(),
+                .asString(),
         ).isEqualTo("#/components/schemas/SearchRuntimeControlStateResBody")
         assertThat(
             runtimeFlags
                 .path("properties")
                 .path("searchEngineMirror")
                 .path("\$ref")
-                .asText(),
+                .asString(),
         ).isEqualTo("#/components/schemas/SearchRuntimeControlStateResBody")
         assertEnum(
             openApiNode,
@@ -347,7 +347,7 @@ class OpenApiContractExportTest : BaseControllerIntegrationTest() {
         schema: JsonNode,
         vararg expectedTypes: String,
     ) {
-        assertThat(schema.path("type").values().map { it.asText() })
+        assertThat(schema.path("type").values().map { it.asString() })
             .containsExactlyInAnyOrderElementsOf(expectedTypes.toList())
     }
 
@@ -355,7 +355,7 @@ class OpenApiContractExportTest : BaseControllerIntegrationTest() {
         schema: JsonNode,
         vararg expectedValues: String,
     ) {
-        val actualValues = schema.path("enum").values().map { if (it.isNull) null else it.asText() }
+        val actualValues = schema.path("enum").values().map { if (it.isNull) null else it.asString() }
         val expected = expectedValues.map<String, String?> { it } + null
 
         assertThat(actualValues).containsExactlyInAnyOrderElementsOf(expected)
@@ -367,7 +367,7 @@ class OpenApiContractExportTest : BaseControllerIntegrationTest() {
         vararg expectedValues: String,
     ) {
         val resolved = resolveSchema(openApiNode, schema)
-        val actualValues = resolved.path("enum").values().map { if (it.isNull) null else it.asText() }
+        val actualValues = resolved.path("enum").values().map { if (it.isNull) null else it.asString() }
         val expected = expectedValues.map<String, String?> { it } + null
 
         assertThat(actualValues).containsExactlyInAnyOrderElementsOf(expected)
@@ -380,7 +380,7 @@ class OpenApiContractExportTest : BaseControllerIntegrationTest() {
     ) {
         val resolved = resolveSchema(openApiNode, schema)
 
-        assertThat(resolved.path("enum").values().map { it.asText() })
+        assertThat(resolved.path("enum").values().map { it.asString() })
             .containsExactlyInAnyOrderElementsOf(expectedValues.toList())
     }
 
@@ -389,12 +389,12 @@ class OpenApiContractExportTest : BaseControllerIntegrationTest() {
         schema: JsonNode,
     ): JsonNode {
         val reference =
-            schema.path("\$ref").asText().ifBlank {
+            schema.path("\$ref").asString().ifBlank {
                 schema
                     .path("oneOf")
-                    .firstOrNull { !it.path("\$ref").asText().isBlank() }
+                    .firstOrNull { !it.path("\$ref").asString().isBlank() }
                     ?.path("\$ref")
-                    ?.asText()
+                    ?.asString()
                     .orEmpty()
             }
         return if (reference.isBlank()) {

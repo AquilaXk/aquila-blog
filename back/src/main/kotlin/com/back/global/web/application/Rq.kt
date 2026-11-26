@@ -27,7 +27,7 @@ class Rq(
 
     val actorOrNull: Member?
         get() =
-            (SecurityContextHolder.getContext()?.authentication?.principal as? SecurityUser)
+            (SecurityContextHolder.getContext().authentication?.principal as? SecurityUser)
                 ?.let { securityUser ->
                     try {
                         actorApplicationService.memberOf(securityUser)

@@ -2,12 +2,10 @@ package com.back.boundedContexts.post.adapter.web
 
 import com.back.boundedContexts.post.adapter.persistence.PostRevisionJdbcRepository
 import com.back.boundedContexts.post.application.port.input.PostPublicReadQueryUseCase
-import com.back.boundedContexts.post.application.port.input.PostUseCase
 import com.back.boundedContexts.post.application.support.PostCacheTags
 import com.back.boundedContexts.post.dto.PublicSitemapPostItemDto
 import com.back.boundedContexts.post.dto.PublicSitemapPostsResBody
 import com.back.global.app.AppConfig
-import com.back.global.web.application.Rq
 import com.back.standard.util.Ut
 import org.assertj.core.api.Assertions.assertThat
 import org.junit.jupiter.api.BeforeAll
@@ -39,21 +37,15 @@ class PostPublicReadControllerSitemapTest {
         }
     }
 
-    private val postUseCase = mock(PostUseCase::class.java)
     private val postPublicReadQueryUseCase = mock(PostPublicReadQueryUseCase::class.java)
     private val postPublicReadResponseFactory = PostPublicReadResponseFactory()
     private val postSearchIntentResolver = mock(PostSearchIntentResolver::class.java)
-    private val postWebDtoAssembler = mock(PostWebDtoAssembler::class.java)
-    private val rq = mock(Rq::class.java)
 
     private val controller =
         ApiV1PostPublicReadController(
-            postUseCase = postUseCase,
             postPublicReadQueryUseCase = postPublicReadQueryUseCase,
             postPublicReadResponseFactory = postPublicReadResponseFactory,
             postSearchIntentResolver = postSearchIntentResolver,
-            postWebDtoAssembler = postWebDtoAssembler,
-            rq = rq,
         )
 
     @Test

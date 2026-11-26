@@ -7,7 +7,6 @@ import com.back.boundedContexts.post.dto.AdmPostFacetCounts
 import com.back.boundedContexts.post.dto.PostInteractionReadStateDto
 import com.back.boundedContexts.post.dto.PostRevisionSnapshotDto
 import com.back.boundedContexts.post.dto.PostRevisionSummaryDto
-import com.back.boundedContexts.post.dto.PostWithContentDto
 import com.back.boundedContexts.post.dto.PublicBacklinkCandidateProjection
 import com.back.boundedContexts.post.dto.PublicPostDetailContentCacheDto
 import com.back.boundedContexts.post.dto.PublicSitemapPostItemDto
@@ -46,12 +45,6 @@ interface PostUseCase {
     fun findPublicDetailContentById(id: Long): PublicPostDetailContentCacheDto?
 
     fun findInteractionReadStateById(id: Long): PostInteractionReadStateDto?
-
-    fun getAuthenticatedPostDetail(
-        id: Long,
-        actor: Member,
-        hasAdminRole: Boolean,
-    ): PostWithContentDto
 
     fun findLatest(): Post?
 

@@ -138,4 +138,63 @@ class PostSummaryProjectionIntegrationTest : BaseRepositoryIntegrationTest() {
         assertThat(explicitFeedDto.tags).containsExactly("대용량", "성능", "최적화")
         assertThat(explicitFeedDto.category).containsExactly("백엔드")
     }
+
+    @Test
+    fun `역링크 후보 조회는 경계 인자를 거부하고 limit 포화 시 경로 직접 참조 글을 병합하며 본문을 128KB로 절삭한다`() {
+        val author =
+            memberRepository.saveAndFlush(
+                Member(0, "backlink-author", "1234", "역링크작성자").apply {
+                    setProfileWorkspacePublishedContent(
+                        com.back.boundedContexts.member.domain.shared.memberMixin
+                            .MemberProfileWorkspaceContent(),
+                    )
+                },
+            )
+        val target =
+            postRepository.saveAndFlush(
+                Post(author = author, title = "Target Architecture", content = "대상 본문", published = true, listed = true),
+            )
+        val olderPathLinker =
+            postRepository.saveAndFlush(
+                Post(
+                    author = author,
+                    title = "Path Linker",
+                    content = "참고: [대상](/posts/${target.id}) " + "x".repeat(140_000),
+                    published = true,
+                    listed = true,
+                ),
+            )
+        val newerGenericWikilink =
+            postRepository.saveAndFlush(
+                Post(
+                    author = author,
+                    title = "Generic Wikilink",
+                    content = "다른 글 [[Unrelated Topic]]",
+                    published = true,
+                    listed = true,
+                ),
+            )
+        postRepository.saveAndFlush(
+            Post(
+                author = author,
+                title = "Unlisted Linker",
+                content = "비노출 [대상](/posts/${target.id})",
+                published = true,
+                listed = false,
+            ),
+        )
+
+        assertThat(postRepository.findPublicBacklinkCandidates(0L, 10)).isEmpty()
+        assertThat(postRepository.findPublicBacklinkCandidates(target.id, 0)).isEmpty()
+
+        val saturatedWithPath = postRepository.findPublicBacklinkCandidates(target.id, 1)
+        assertThat(saturatedWithPath.map { it.id }).containsExactly(olderPathLinker.id)
+        assertThat(saturatedWithPath.first().content.length).isLessThanOrEqualTo(131_072)
+
+        val saturatedNoPath = postRepository.findPublicBacklinkCandidates(999_999L, 1)
+        assertThat(saturatedNoPath.map { it.id }).containsExactly(newerGenericWikilink.id)
+
+        val fullCandidates = postRepository.findPublicBacklinkCandidates(target.id, 10)
+        assertThat(fullCandidates.map { it.id }).containsExactly(newerGenericWikilink.id, olderPathLinker.id)
+    }
 }

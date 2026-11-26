@@ -18,7 +18,6 @@ import com.back.boundedContexts.post.dto.PostInteractionReadStateDto
 import com.back.boundedContexts.post.dto.PostPreviewExtractor
 import com.back.boundedContexts.post.dto.PostRevisionSnapshotDto
 import com.back.boundedContexts.post.dto.PostRevisionSummaryDto
-import com.back.boundedContexts.post.dto.PostWithContentDto
 import com.back.boundedContexts.post.dto.PublicBacklinkCandidateProjection
 import com.back.boundedContexts.post.dto.PublicPostDetailContentCacheDto
 import com.back.boundedContexts.post.dto.PublicSitemapPostItemDto
@@ -233,23 +232,6 @@ class PostApplicationService(
 
     @Transactional(readOnly = true)
     override fun findInteractionReadStateById(id: Long): PostInteractionReadStateDto? = postRepository.findInteractionReadStateById(id)
-
-    @Transactional(readOnly = true)
-    override fun getAuthenticatedPostDetail(
-        id: Long,
-        actor: Member,
-        hasAdminRole: Boolean,
-    ): PostWithContentDto {
-        val post = findById(id).getOrThrow()
-        if (!hasAdminRole) {
-            post.checkActorCanRead(actor)
-        }
-        return PostWithContentDto(post).apply {
-            tempDraft = isTempDraft(post)
-            actorCanModify = hasAdminRole || post.getCheckActorCanModifyRs(actor).isSuccess
-            actorCanDelete = hasAdminRole || post.getCheckActorCanDeleteRs(actor).isSuccess
-        }
-    }
 
     override fun isPublicDetailReadable(id: Long): Boolean = postRepository.isPublicDetailReadable(id)
 

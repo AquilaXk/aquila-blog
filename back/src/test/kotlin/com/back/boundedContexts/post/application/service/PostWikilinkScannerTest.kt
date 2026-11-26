@@ -102,4 +102,31 @@ class PostWikilinkScannerTest {
         val schemelessHostPath = "example.com/posts/42"
         assertThat(PostWikilinkScanner.referencesTargetPost(schemelessHostPath, 42L, normalized)).isFalse()
     }
+
+    @Test
+    @DisplayName("인라인 백틱·중첩 대괄호·이스케이프·빈 별칭·서브패스·오토링크 경계를 프론트엔드 스캐너와 동일하게 처리한다")
+    fun enforcesFrontendScannerParityAndPathBoundaries() {
+        val normalized = PostWikilinkScanner.normalizeTargetKey("Architecture Guide")
+
+        // CommonMark: backtick opening fence info strings cannot contain backticks (`inline` at col 0 is not a fence).
+        assertThat(PostWikilinkScanner.referencesTargetPost("```inline `span`\n[[Architecture Guide]]", 42L, normalized)).isTrue()
+        // Tilde fences MAY contain backticks in info strings.
+        assertThat(PostWikilinkScanner.referencesTargetPost("~~~ ```info\n[[Architecture Guide]]\n~~~", 42L, normalized)).isFalse()
+
+        // Unclosed outer bracket / single closing bracket stops early so inner valid wikilink still matches.
+        assertThat(PostWikilinkScanner.referencesTargetPost("미완성 [[broken [중간 [[42]]", 42L, normalized)).isTrue()
+        assertThat(PostWikilinkScanner.referencesTargetPost("단일 닫힘 [[Architecture] Guide]]", 42L, normalized)).isFalse()
+
+        // Escaped pipe / backslash target / empty alias parity with frontend findWikilinkSpans.
+        assertThat(PostWikilinkScanner.referencesTargetPost("[[Architecture Guide\\|요약]]", 42L, normalized)).isTrue()
+        assertThat(PostWikilinkScanner.referencesTargetPost("[[Architecture\\Guide|요약]]", 42L, normalized)).isFalse()
+        assertThat(PostWikilinkScanner.referencesTargetPost("[[Architecture Guide|]]", 42L, normalized)).isFalse()
+        assertThat(PostWikilinkScanner.referencesTargetPost("[[|Alias]]", 42L, normalized)).isFalse()
+
+        // Canonical trailing slash & GFM autolink boundaries pass; nested subpath /edit fails closed.
+        assertThat(PostWikilinkScanner.referencesTargetPost("<https://aquila.blog/posts/42>", 42L, normalized)).isTrue()
+        assertThat(PostWikilinkScanner.referencesTargetPost("[slash](/posts/42/)", 42L, normalized)).isTrue()
+        assertThat(PostWikilinkScanner.referencesTargetPost("[end](/posts/42/", 42L, normalized)).isTrue()
+        assertThat(PostWikilinkScanner.referencesTargetPost("[edit](/posts/42/edit)", 42L, normalized)).isFalse()
+    }
 }

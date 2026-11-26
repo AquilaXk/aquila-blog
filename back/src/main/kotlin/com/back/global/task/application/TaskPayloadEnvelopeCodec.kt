@@ -165,8 +165,7 @@ class TaskPayloadEnvelopeCodec(
             throw quarantineException(TaskQuarantineReason.METADATA_MISMATCH)
         }
 
-        val effectiveExpiry = envelope.expiresAtEpochMs ?: exactPayloadExpiry
-        if (effectiveExpiry <= Instant.now(clock).toEpochMilli()) {
+        if (exactPayloadExpiry <= Instant.now(clock).toEpochMilli()) {
             throw quarantineException(TaskQuarantineReason.EXPIRED_PAYLOAD)
         }
     }

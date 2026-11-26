@@ -20,7 +20,6 @@ import com.back.boundedContexts.post.model.PostSummarySource
 import com.back.global.app.AppConfig
 import com.back.global.exception.application.AppException
 import com.back.global.exception.application.ErrorCode
-import com.back.global.web.application.Rq
 import com.back.standard.dto.page.PageDto
 import com.back.standard.dto.page.PagedResult
 import com.back.standard.dto.post.type1.PostSearchSortType1
@@ -61,17 +60,12 @@ class ApiV1PostPublicReadControllerAdjacentTest {
     private val postPublicReadQueryUseCase = mock(PostPublicReadQueryUseCase::class.java)
     private val postPublicReadResponseFactory = PostPublicReadResponseFactory()
     private val postSearchIntentResolver = mock(PostSearchIntentResolver::class.java)
-    private val postWebDtoAssembler = mock(PostWebDtoAssembler::class.java)
-    private val rq = mock(Rq::class.java)
 
     private val controller =
         ApiV1PostPublicReadController(
-            postUseCase = postUseCase,
             postPublicReadQueryUseCase = postPublicReadQueryUseCase,
             postPublicReadResponseFactory = postPublicReadResponseFactory,
             postSearchIntentResolver = postSearchIntentResolver,
-            postWebDtoAssembler = postWebDtoAssembler,
-            rq = rq,
         )
 
     @Test
@@ -100,40 +94,36 @@ class ApiV1PostPublicReadControllerAdjacentTest {
     }
 
     @Test
-    @DisplayName("controller getItem은 익명은 publicReadQueryUseCase에, 인증 사용자는 getAuthenticatedPostDetail에 위임한다")
-    fun controllerGetItemRoutesAnonymousAndAuthenticatedRequests() {
+    @DisplayName("controller getItem은 모든 요청을 publicReadQueryUseCase에 위임하고 비공개 글 우회 경로를 타지 않는다")
+    fun controllerGetItemRoutesAllRequestsThroughPublicReadQueryUseCase() {
         val publicDto = mock(PostWithContentDto::class.java)
-        given(rq.actorOrNull).willReturn(null)
         given(postPublicReadQueryUseCase.getPublicPostDetail(55L)).willReturn(publicDto)
 
-        val anonResponse = MockHttpServletResponse()
-        val anonEntity = controller.getItem(MockHttpServletRequest(), anonResponse, 55L)
-        assertThat(anonEntity.statusCode.value()).isEqualTo(200)
-        assertThat(anonEntity.body).isSameAs(publicDto)
+        val response = MockHttpServletResponse()
+        val entity = controller.getItem(MockHttpServletRequest(), response, 55L)
+        assertThat(entity.statusCode.value()).isEqualTo(200)
+        assertThat(entity.body).isSameAs(publicDto)
+        assertThat(response.getHeader("Cache-Control")).contains("private", "no-store")
         verify(postPublicReadQueryUseCase).getPublicPostDetail(55L)
+    }
 
-        val actor =
-            Member(
-                id = 7L,
-                username = "member7",
-                password = null,
-                nickname = "작성자",
-                email = null,
-                apiKey = "api-7",
-            )
-        val authDto = mock(PostWithContentDto::class.java)
-        given(rq.actorOrNull).willReturn(actor)
-        given(rq.actor).willReturn(actor)
-        given(rq.hasRole("ADMIN")).willReturn(false)
-        given(postUseCase.getAuthenticatedPostDetail(id = 56L, actor = actor, hasAdminRole = false))
-            .willReturn(authDto)
-
-        val authResponse = MockHttpServletResponse()
-        val authEntity = controller.getItem(MockHttpServletRequest(), authResponse, 56L)
-        assertThat(authEntity.statusCode.value()).isEqualTo(200)
-        assertThat(authEntity.body).isSameAs(authDto)
-        assertThat(authResponse.getHeader("Cache-Control")).contains("private", "no-store")
-        verify(postUseCase).getAuthenticatedPostDetail(id = 56L, actor = actor, hasAdminRole = false)
+    @Test
+    @DisplayName("PostHasPolicy canRead는 비공개 글을 작성자·관리자 외에 거부한다")
+    fun postHasPolicyChecksPrivateReadPolicy() {
+        val author = Member(id = 1L, username = "author", nickname = "작성자", apiKey = "k1")
+        val other = Member(id = 2L, username = "other", nickname = "타인", apiKey = "k2")
+        val admin =
+            Member(id = 3L, username = "admin", nickname = "관리자", apiKey = "k3").apply {
+                grantAdmin()
+            }
+        val privatePost = Post(id = 77L, author = author, title = "비공개", content = "내용", published = false, listed = false)
+        assertThat(privatePost.canRead(null)).isFalse()
+        assertThat(privatePost.canRead(other)).isFalse()
+        assertThat(privatePost.canRead(author)).isTrue()
+        assertThat(privatePost.canRead(admin)).isTrue()
+        assertThatThrownBy { privatePost.checkActorCanRead(other) }
+            .isInstanceOf(AppException::class.java)
+            .hasFieldOrPropertyWithValue("errorCode", ErrorCode.POST_VIEW_DENIED)
     }
 
     @Test

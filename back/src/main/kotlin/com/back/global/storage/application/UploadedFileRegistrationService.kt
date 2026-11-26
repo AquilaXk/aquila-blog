@@ -150,7 +150,7 @@ class UploadedFileRegistrationService(
         purpose: UploadedFilePurpose,
         purgeAfter: Instant,
     ): Boolean =
-        requiresNewTransactionTemplate.execute<Boolean> {
+        requiresNewTransactionTemplate.execute {
             val existing = uploadedFileRepository.findByObjectKey(objectKey) ?: return@execute false
             existing.bucket = storageProperties.bucket
             existing.contentType = normalizedContentType
@@ -159,17 +159,17 @@ class UploadedFileRegistrationService(
             uploadedFileRepository.save(existing)
             uploadedFileRepository.flush()
             true
-        } ?: false
+        }
 
     private fun repairSequenceDriftInRequiresNewTransaction(exception: DataIntegrityViolationException): Boolean =
-        requiresNewTransactionTemplate.execute<Boolean> {
+        requiresNewTransactionTemplate.execute {
             val repairedByConstraint = prodSequenceGuardService?.repairIfSequenceDrift(exception) == true
             if (repairedByConstraint) {
                 return@execute true
             }
 
             prodSequenceGuardService?.repairUploadedFileSequence() == true
-        } ?: false
+        }
 
     private fun findOrCreate(objectKey: String): UploadedFile =
         uploadedFileRepository.findByObjectKey(objectKey)

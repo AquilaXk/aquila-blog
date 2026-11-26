@@ -240,15 +240,47 @@ class PostRepositoryImpl(
         targetPostId: Long,
         limit: Int,
     ): List<PublicBacklinkCandidateProjection> {
-        if (targetPostId <= 0L) return emptyList()
+        if (targetPostId <= 0L || limit <= 0) return emptyList()
         val safeLimit = limit.coerceIn(1, MAX_BACKLINK_CANDIDATE_LIMIT)
         val pathToken = "/posts/$targetPostId"
+        val primary = fetchPublicBacklinkCandidates(targetPostId, pathToken, safeLimit, includeWikilinkToken = true)
+        if (primary.size < safeLimit) {
+            return primary
+        }
+        val pathMatches = fetchPublicBacklinkCandidates(targetPostId, pathToken, safeLimit, includeWikilinkToken = false)
+        if (pathMatches.isEmpty()) {
+            return primary
+        }
+        val mergedById = LinkedHashMap<Long, PublicBacklinkCandidateProjection>(safeLimit)
+        for (item in pathMatches) {
+            mergedById[item.id] = item
+        }
+        for (item in primary) {
+            if (mergedById.size >= safeLimit) break
+            mergedById.putIfAbsent(item.id, item)
+        }
+        return mergedById.values
+            .sortedWith(compareByDescending<PublicBacklinkCandidateProjection> { it.createdAt }.thenByDescending { it.id })
+    }
+
+    private fun fetchPublicBacklinkCandidates(
+        targetPostId: Long,
+        pathToken: String,
+        safeLimit: Int,
+        includeWikilinkToken: Boolean,
+    ): List<PublicBacklinkCandidateProjection> {
+        val tokenCondition =
+            if (includeWikilinkToken) {
+                post.content.contains("[[").or(post.content.contains(pathToken))
+            } else {
+                post.content.contains(pathToken)
+            }
         return queryFactory
             .select(
                 post.id,
                 post.title,
                 post.summaryText,
-                post.content,
+                backlinkContentPrefixExpr,
                 post.createdAt,
                 post.modifiedAt,
             ).from(post)
@@ -258,7 +290,7 @@ class PostRepositoryImpl(
                 post.listed.isTrue,
                 post.isTempDraft.isFalse,
                 post.id.ne(targetPostId),
-                post.content.contains("[[").or(post.content.contains(pathToken)),
+                tokenCondition,
             ).orderBy(post.createdAt.desc(), post.id.desc())
             .limit(safeLimit.toLong())
             .fetch()
@@ -267,7 +299,7 @@ class PostRepositoryImpl(
                     id = tuple.get(post.id)!!,
                     title = tuple.get(post.title)!!,
                     summaryText = tuple.get(post.summaryText),
-                    content = tuple.get(post.content)!!,
+                    content = tuple.get(backlinkContentPrefixExpr)!!,
                     createdAt = tuple.get(post.createdAt)!!,
                     modifiedAt = tuple.get(post.modifiedAt)!!,
                 )
@@ -903,8 +935,8 @@ class PostRepositoryImpl(
         if (!em.contains(targetPost)) return
         val session = em.unwrap(SharedSessionContractImplementor::class.java)
         val targetEntity = org.hibernate.Hibernate.unproxy(targetPost)
-        val entry = session.persistenceContextInternal.getEntry(targetEntity) ?: return
-        val loadedState = entry.loadedState ?: return
+        val entry = session.persistenceContextInternal.getEntry(targetEntity)
+        val loadedState = entry.loadedState
         val propertyNames = entry.persister.propertyNames
         val counterIdx = propertyNames.indexOf(counterProperty)
         if (counterIdx >= 0) {
@@ -926,8 +958,8 @@ class PostRepositoryImpl(
         if (!em.contains(attr)) return
         val session = em.unwrap(SharedSessionContractImplementor::class.java)
         val targetAttr = org.hibernate.Hibernate.unproxy(attr)
-        val entry = session.persistenceContextInternal.getEntry(targetAttr) ?: return
-        val loadedState = entry.loadedState ?: return
+        val entry = session.persistenceContextInternal.getEntry(targetAttr)
+        val loadedState = entry.loadedState
         val intValueIdx = entry.persister.propertyNames.indexOf("intValue")
         if (intValueIdx >= 0) {
             if (loadedState[intValueIdx] != counterValue) {
@@ -955,6 +987,8 @@ class PostRepositoryImpl(
                 post.thumbnail,
                 post.content,
             )
+        private val backlinkContentPrefixExpr: Expression<String> =
+            Expressions.stringTemplate("substring({0}, 1, 131072)", post.content)
         private const val FLAG_PGROONGA_SPECIAL = 1
         private const val FLAG_WHITESPACE = 2
         private const val MAX_PUBLIC_SITEMAP_LIMIT = 10_000

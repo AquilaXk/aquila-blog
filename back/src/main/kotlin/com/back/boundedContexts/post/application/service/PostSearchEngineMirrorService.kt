@@ -29,15 +29,15 @@ class PostSearchEngineMirrorService(
     private val endpoint: String,
     @param:Value("\${custom.post.search-engine.mirror.apiKey:}")
     private val apiKey: String,
-    @param:Value("\${custom.post.search-engine.mirror.connectTimeoutMs:1200}")
+    @Value("\${custom.post.search-engine.mirror.connectTimeoutMs:1200}")
     connectTimeoutMs: Long,
     @param:Value("\${custom.post.search-engine.mirror.requestTimeoutMs:2500}")
     private val requestTimeoutMs: Long,
-    @param:Value("\${custom.post.search-engine.mirror.maxTags:32}")
+    @Value("\${custom.post.search-engine.mirror.maxTags:32}")
     maxTags: Int,
-    @param:Value("\${custom.post.search-engine.mirror.circuit.failureThreshold:5}")
+    @Value("\${custom.post.search-engine.mirror.circuit.failureThreshold:5}")
     failureThreshold: Int,
-    @param:Value("\${custom.post.search-engine.mirror.circuit.openSeconds:60}")
+    @Value("\${custom.post.search-engine.mirror.circuit.openSeconds:60}")
     circuitOpenSeconds: Long,
     private val objectMapper: ObjectMapper,
     private val searchRuntimeControlQueryService: SearchRuntimeControlQueryService,

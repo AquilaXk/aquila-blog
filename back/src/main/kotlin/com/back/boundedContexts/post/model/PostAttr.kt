@@ -2,6 +2,8 @@ package com.back.boundedContexts.post.model
 
 import com.back.global.jpa.domain.BaseTime
 import com.back.global.jpa.domain.EntityAttr
+import com.querydsl.core.annotations.PropertyType
+import com.querydsl.core.annotations.QueryType
 import jakarta.persistence.*
 import jakarta.persistence.FetchType.LAZY
 import jakarta.persistence.GenerationType.SEQUENCE
@@ -27,6 +29,7 @@ class PostAttr private constructor(
     @field:NaturalId
     @field:ManyToOne(fetch = LAZY)
     @field:JoinColumn(nullable = false)
+    @field:QueryType(PropertyType.NONE)
     val subject: Post,
     @field:NaturalId
     @field:Column(nullable = false)

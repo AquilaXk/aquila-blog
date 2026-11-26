@@ -23,7 +23,7 @@ class ProdSequenceGuardService(
     }
 
     fun repairIfSequenceDrift(exception: DataIntegrityViolationException): Boolean {
-        val message = exception.mostSpecificCause?.message ?: exception.message ?: return false
+        val message = exception.mostSpecificCause.message ?: exception.message ?: return false
         if (!isDuplicateKeyViolation(exception, message)) return false
 
         val constraintName = extractConstraintName(exception, message) ?: return false
@@ -137,7 +137,7 @@ class ProdSequenceGuardService(
     }
 
     private fun extractSqlState(exception: DataIntegrityViolationException): String? {
-        val cause = exception.mostSpecificCause ?: return null
+        val cause = exception.mostSpecificCause
         return runCatching {
             cause.javaClass.methods
                 .firstOrNull { method -> method.name == "getSQLState" || method.name == "getSqlState" }
@@ -146,7 +146,7 @@ class ProdSequenceGuardService(
     }
 
     private fun extractServerConstraintName(exception: DataIntegrityViolationException): String? {
-        val cause = exception.mostSpecificCause ?: return null
+        val cause = exception.mostSpecificCause
         return runCatching {
             val serverErrorMessage =
                 cause.javaClass.methods

@@ -4,6 +4,7 @@ import com.back.boundedContexts.member.domain.shared.Member
 import com.back.boundedContexts.member.domain.shared.MemberAttr
 import jakarta.persistence.EntityManager
 import jakarta.persistence.PersistenceContext
+import org.hibernate.KeyType
 import org.hibernate.Session
 
 class MemberAttrRepositoryImpl : MemberAttrRepositoryCustom {
@@ -16,10 +17,14 @@ class MemberAttrRepositoryImpl : MemberAttrRepositoryCustom {
     ): MemberAttr? =
         entityManager
             .unwrap(Session::class.java)
-            .byNaturalId(MemberAttr::class.java)
-            .using(MemberAttr::subject.name, subject)
-            .using(MemberAttr::name.name, name)
-            .load()
+            .find(
+                MemberAttr::class.java,
+                mapOf(
+                    MemberAttr::subject.name to subject,
+                    MemberAttr::name.name to name,
+                ),
+                KeyType.NATURAL,
+            )
 
     override fun findBySubjectInAndNameIn(
         subjects: List<Member>,
@@ -53,10 +58,10 @@ class MemberAttrRepositoryImpl : MemberAttrRepositoryCustom {
                 where a.name = :name
                   and a.strValue = :strValue
                 """.trimIndent(),
-                java.lang.Boolean::class.java,
+                Boolean::class.javaObjectType,
             ).setParameter("name", name)
             .setParameter("strValue", strValue)
-            .singleResult == true
+            .singleResult
 
     override fun existsByNameAndStrValueContaining(
         name: String,
@@ -70,10 +75,10 @@ class MemberAttrRepositoryImpl : MemberAttrRepositoryCustom {
                 where a.name = :name
                   and a.strValue like :pattern
                 """.trimIndent(),
-                java.lang.Boolean::class.java,
+                Boolean::class.javaObjectType,
             ).setParameter("name", name)
             .setParameter("pattern", "%$valueFragment%")
-            .singleResult == true
+            .singleResult
 
     override fun existsBySubjectIdAndNameAndStrValueContaining(
         subjectId: Long,
@@ -89,11 +94,11 @@ class MemberAttrRepositoryImpl : MemberAttrRepositoryCustom {
                   and a.name = :name
                   and a.strValue like :pattern
                 """.trimIndent(),
-                java.lang.Boolean::class.java,
+                Boolean::class.javaObjectType,
             ).setParameter("subjectId", subjectId)
             .setParameter("name", name)
             .setParameter("pattern", "%$valueFragment%")
-            .singleResult == true
+            .singleResult
 
     override fun incrementIntValue(
         subject: Member,

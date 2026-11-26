@@ -101,10 +101,6 @@ class PostPublicReadResponseFactory(
         return ResponseEntity.ok(body)
     }
 
-    fun applyPrivateNoStoreHeaders(response: HttpServletResponse) {
-        cacheHeaderWriter.applyPrivateNoStoreHeaders(response)
-    }
-
     fun resolveSearchReadCachePolicy(keyword: String): PublicReadCachePolicy = searchCachePolicyResolver.resolve(keyword)
 
     fun buildFeedPageEtagSeed(

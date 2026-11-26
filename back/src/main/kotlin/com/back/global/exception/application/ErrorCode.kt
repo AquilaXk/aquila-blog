@@ -199,7 +199,7 @@ enum class ErrorCode(
     // --- 413 ---
     PAYLOAD_TOO_LARGE(
         "413-1",
-        HttpStatus.PAYLOAD_TOO_LARGE,
+        HttpStatus.CONTENT_TOO_LARGE,
         "업로드 가능한 파일 용량을 초과했습니다. 허용 크기 이내 파일로 다시 시도해주세요.",
         ErrorKind.USER,
     ),

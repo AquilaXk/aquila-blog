@@ -220,7 +220,7 @@ class AdminOperationExecutionTransactionIntegrationTest : BaseAdminOperationExec
                 )
             },
             SearchRuntimeControlKey.PIPELINE_FORCE_CONTROL.name,
-        )!!
+        )
 
     private fun restorePipelineState(snapshot: PipelineState) {
         inTransaction {

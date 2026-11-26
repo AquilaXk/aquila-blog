@@ -261,7 +261,6 @@ kotlin {
         jvmTarget.set(JvmTarget.JVM_24)
         freeCompilerArgs.addAll(
             "-Xjsr305=strict",
-            "-Xannotation-default-target=param-property",
         )
     }
 }

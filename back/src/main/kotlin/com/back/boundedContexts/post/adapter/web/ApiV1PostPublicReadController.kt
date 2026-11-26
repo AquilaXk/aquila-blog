@@ -1,7 +1,6 @@
 package com.back.boundedContexts.post.adapter.web
 
 import com.back.boundedContexts.post.application.port.input.PostPublicReadQueryUseCase
-import com.back.boundedContexts.post.application.port.input.PostUseCase
 import com.back.boundedContexts.post.application.support.PostCacheTags
 import com.back.boundedContexts.post.dto.AdjacentPostsDto
 import com.back.boundedContexts.post.dto.CursorFeedPageDto
@@ -13,7 +12,6 @@ import com.back.boundedContexts.post.dto.PublicPostsBootstrapDto
 import com.back.boundedContexts.post.dto.PublicSitemapPostsResBody
 import com.back.boundedContexts.post.dto.PublicWikilinkCatalogResBody
 import com.back.boundedContexts.post.dto.TagCountDto
-import com.back.global.web.application.Rq
 import com.back.standard.dto.page.PageDto
 import com.back.standard.dto.post.type1.PostSearchSortType1
 import jakarta.servlet.http.HttpServletRequest
@@ -36,12 +34,9 @@ internal fun postExploreCursorSurrogateKeys(normalizedTag: String): Set<String> 
 @RestController
 @RequestMapping("/post/api/v1/posts")
 class ApiV1PostPublicReadController(
-    private val postUseCase: PostUseCase,
     private val postPublicReadQueryUseCase: PostPublicReadQueryUseCase,
     private val postPublicReadResponseFactory: PostPublicReadResponseFactory,
     private val postSearchIntentResolver: PostSearchIntentResolver,
-    private val postWebDtoAssembler: PostWebDtoAssembler,
-    private val rq: Rq,
 ) {
     @GetMapping("/feed")
     fun getFeed(
@@ -419,24 +414,14 @@ class ApiV1PostPublicReadController(
         @PathVariable @Positive id: Long,
     ): ResponseEntity<PostWithContentDto> {
         val startedAtNanos = System.nanoTime()
-        if (rq.actorOrNull == null) {
-            val data = postPublicReadQueryUseCase.getPublicPostDetail(id)
-            return postPublicReadResponseFactory.respondNoStore(
-                response = response,
-                cachePolicy = PostPublicReadCachePolicies.DETAIL,
-                surrogateKeys = emptySet(),
-                startedAtNanos = startedAtNanos,
-                originDescription = "detail",
-                body = data,
-            )
-        }
-        postPublicReadResponseFactory.applyPrivateNoStoreHeaders(response)
-        return ResponseEntity.ok(
-            postUseCase.getAuthenticatedPostDetail(
-                id = id,
-                actor = rq.actor,
-                hasAdminRole = rq.hasRole("ADMIN"),
-            ),
+        val data = postPublicReadQueryUseCase.getPublicPostDetail(id)
+        return postPublicReadResponseFactory.respondNoStore(
+            response = response,
+            cachePolicy = PostPublicReadCachePolicies.DETAIL,
+            surrogateKeys = emptySet(),
+            startedAtNanos = startedAtNanos,
+            originDescription = "detail",
+            body = data,
         )
     }
 

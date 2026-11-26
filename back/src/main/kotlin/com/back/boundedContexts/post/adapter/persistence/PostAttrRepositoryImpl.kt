@@ -5,6 +5,7 @@ import com.back.boundedContexts.post.domain.PostAttr
 import jakarta.persistence.EntityManager
 import jakarta.persistence.FlushModeType
 import jakarta.persistence.PersistenceContext
+import org.hibernate.KeyType
 import org.hibernate.Session
 import java.time.Instant
 
@@ -18,10 +19,14 @@ class PostAttrRepositoryImpl : PostAttrRepositoryCustom {
     ): PostAttr? =
         entityManager
             .unwrap(Session::class.java)
-            .byNaturalId(PostAttr::class.java)
-            .using(PostAttr::subject.name, subject)
-            .using(PostAttr::name.name, name)
-            .load()
+            .find(
+                PostAttr::class.java,
+                mapOf(
+                    PostAttr::subject.name to subject,
+                    PostAttr::name.name to name,
+                ),
+                KeyType.NATURAL,
+            )
 
     override fun findBySubjectInAndNameIn(
         subjects: List<Post>,

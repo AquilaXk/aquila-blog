@@ -179,12 +179,12 @@ class PostSitemapAndRevisionIntegrationTest : BaseControllerIntegrationTest() {
         val revisionArray = objectMapper.readTree(listResult.response.contentAsString)
         val revisionNodes = revisionArray.values().toList()
         assertThat(revisionNodes).hasSize(20)
-        assertThat(revisionNodes.first().path("title").asText()).isEqualTo("리비전 v25")
-        assertThat(revisionNodes.last().path("title").asText()).isEqualTo("리비전 v6")
+        assertThat(revisionNodes.first().path("title").asString()).isEqualTo("리비전 v25")
+        assertThat(revisionNodes.last().path("title").asString()).isEqualTo("리비전 v6")
 
         val restoreTarget = revisionNodes[3]
         val restoreRevisionId = restoreTarget.path("id").asLong()
-        val restoreTargetTitle = restoreTarget.path("title").asText()
+        val restoreTargetTitle = restoreTarget.path("title").asString()
         assertThat(restoreTargetTitle).isEqualTo("리비전 v22")
 
         // summaryText가 null인 리비전 복원 경로 + 일반 리비전 복원 경로를 모두 검증한다.

@@ -581,9 +581,9 @@ class ExceptionHandler(
         when {
             type == String::class.java || type == CharSequence::class.java -> message
             type == Throwable::class.java -> cause
-            type == Integer.TYPE || type == Integer::class.java -> 0
-            type == java.lang.Long.TYPE || type == java.lang.Long::class.java -> 0L
-            type == java.lang.Boolean.TYPE || type == java.lang.Boolean::class.java -> false
+            type == Int::class.javaPrimitiveType || type == Int::class.javaObjectType -> 0
+            type == Long::class.javaPrimitiveType || type == Long::class.javaObjectType -> 0L
+            type == Boolean::class.javaPrimitiveType || type == Boolean::class.javaObjectType -> false
             type.isEnum -> type.enumConstants.firstOrNull()
             else -> null
         }

@@ -169,6 +169,8 @@ class ApiV1AdmPostController(
         val post = postUseCase.findById(id).getOrThrow()
         return PostWithContentDto(post).apply {
             tempDraft = postUseCase.isTempDraft(post)
+            actorCanModify = true
+            actorCanDelete = true
         }
     }
 

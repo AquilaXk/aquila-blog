@@ -45,8 +45,8 @@ class TaskProcessingLockDiagnosticsService(
         val processTasksLockTtlSeconds =
             if (processTasksLockExists) {
                 redisTemplate
-                    ?.getExpire(PROCESS_TASKS_LOCK_KEY, TimeUnit.SECONDS)
-                    ?.takeIf { it >= 0 }
+                    .getExpire(PROCESS_TASKS_LOCK_KEY, TimeUnit.SECONDS)
+                    .takeIf { it >= 0 }
             } else {
                 null
             }

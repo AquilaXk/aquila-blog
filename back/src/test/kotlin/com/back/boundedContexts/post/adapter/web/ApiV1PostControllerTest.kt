@@ -427,19 +427,19 @@ class ApiV1PostControllerTest : BaseControllerIntegrationTest() {
 
         @Test
         @WithUserDetails("user1@test.com")
-        fun `성공 - 미공개 글 작성자 조회`() {
+        fun `실패 - 미공개 글은 작성자라도 공개 상세 엔드포인트에서 조회할 수 없다`() {
             val actor = actorApplicationService.findByEmail("user1@test.com").getOrThrow()
             val post = writePost(actor, "미공개 글", "내용", false, false)
 
             mvc.get("/post/api/v1/posts/${post.id}").andExpect {
-                status { isOk() }
-                jsonPath("$.published") { value(false) }
+                status { isNotFound() }
+                jsonPath("$.resultCode") { value("404-1") }
             }
         }
 
         @Test
         @WithUserDetails("admin@test.com")
-        fun `관리자 role 인증은 이메일 드리프트가 있어도 상세 수정 권한 플래그를 유지한다`() {
+        fun `실패 및 허용 - 비공개 글은 공개 상세에서 404이고 관리자 에디터 엔드포인트에서만 이메일 드리프트와 무관하게 조회된다`() {
             val writer = actorApplicationService.findByEmail("user1@test.com").getOrThrow()
             val post = writePost(writer, "관리자 권한 확인 글", "내용", false, false)
             val admin = actorApplicationService.findByEmail("admin@test.com").getOrThrow()
@@ -449,6 +449,11 @@ class ApiV1PostControllerTest : BaseControllerIntegrationTest() {
             entityManager.clear()
 
             mvc.get("/post/api/v1/posts/${post.id}").andExpect {
+                status { isNotFound() }
+                jsonPath("$.resultCode") { value("404-1") }
+            }
+
+            mvc.get("/post/api/v1/adm/posts/${post.id}").andExpect {
                 status { isOk() }
                 jsonPath("$.published") { value(false) }
                 jsonPath("$.actorCanModify") { value(true) }
@@ -473,8 +478,8 @@ class ApiV1PostControllerTest : BaseControllerIntegrationTest() {
             val post = writePost(actor, "미공개 글", "내용", false, false)
 
             mvc.get("/post/api/v1/posts/${post.id}").andExpect {
-                status { isForbidden() }
-                jsonPath("$.resultCode") { value("403-11") }
+                status { isNotFound() }
+                jsonPath("$.resultCode") { value("404-1") }
             }
         }
     }

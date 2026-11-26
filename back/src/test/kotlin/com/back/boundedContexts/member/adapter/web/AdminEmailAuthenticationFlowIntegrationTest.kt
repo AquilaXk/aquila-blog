@@ -53,7 +53,7 @@ class AdminEmailAuthenticationFlowIntegrationTest : BaseAdminEmailAuthentication
                 }.andExpect {
                     status { isOk() }
                 }.andReturn()
-        val challengeId = objectMapper.readTree(request.response.contentAsString).at("/data/challengeId").asText()
+        val challengeId = objectMapper.readTree(request.response.contentAsString).at("/data/challengeId").asString()
         assertThat(challengeId).isNotBlank()
         assertThat(deliveredCode).matches("\\d{8}")
 
@@ -171,7 +171,7 @@ class AdminEmailAuthenticationFlowIntegrationTest : BaseAdminEmailAuthentication
                     status { isOk() }
                 }.andReturn()
 
-        return objectMapper.readTree(response.response.contentAsString).at("/data/challengeId").asText() to deliveredCode
+        return objectMapper.readTree(response.response.contentAsString).at("/data/challengeId").asString() to deliveredCode
     }
 
     private fun verifyChallenge(

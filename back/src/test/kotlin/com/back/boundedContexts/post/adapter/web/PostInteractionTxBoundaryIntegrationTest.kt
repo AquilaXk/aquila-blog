@@ -82,16 +82,18 @@ class PostInteractionTxBoundaryIntegrationTest : BaseSeededIntegrationTest() {
     fun repeatedInteractionsWorkWithoutOuterTransactionWhenAttrsExist() {
         val author = actorApplicationService.findByEmail("user1@test.com").getOrThrow()
         val post =
-            transactionTemplate.execute {
-                postUseCase.write(
-                    author = author,
-                    title = "비트랜잭션 카운터 테스트",
-                    content = "tags: tx\n\n본문입니다.",
-                    published = true,
-                    listed = true,
-                    summaryMode = PostSummaryMode.AUTO,
-                )
-            }!!
+            requireNotNull(
+                transactionTemplate.execute {
+                    postUseCase.write(
+                        author = author,
+                        title = "비트랜잭션 카운터 테스트",
+                        content = "tags: tx\n\n본문입니다.",
+                        published = true,
+                        listed = true,
+                        summaryMode = PostSummaryMode.AUTO,
+                    )
+                },
+            )
 
         // 1차 조회수 증가: hitCountAttr rows 생성
         mvc
@@ -168,23 +170,29 @@ class PostInteractionTxBoundaryIntegrationTest : BaseSeededIntegrationTest() {
     }
 
     @Test
-    @WithUserDetails("user1@test.com")
-    @DisplayName("인증된 작성자는 open-in-view=false에서도 비공개 글 상세를 LazyInitializationException 없이 조회한다")
+    @WithUserDetails("admin@test.com")
+    @DisplayName("관리자 에디터 상세는 open-in-view=false에서도 비공개 글을 LazyInitializationException 없이 조회하고 공개 상세는 404를 반환한다")
     fun authenticatedDetailReadWorksWithoutControllerTransaction() {
-        val author = actorApplicationService.findByEmail("user1@test.com").getOrThrow()
+        val admin = actorApplicationService.findByEmail("admin@test.com").getOrThrow()
         val privatePost =
-            transactionTemplate.execute {
-                postUseCase.write(
-                    author = author,
-                    title = "비공개 상세 테스트",
-                    content = "tags: private\n\n비공개 본문입니다.",
-                    published = false,
-                    listed = false,
-                    summaryMode = PostSummaryMode.AUTO,
-                )
-            }!!
+            requireNotNull(
+                transactionTemplate.execute {
+                    postUseCase.write(
+                        author = admin,
+                        title = "비공개 상세 테스트",
+                        content = "tags: private\n\n비공개 본문입니다.",
+                        published = false,
+                        listed = false,
+                        summaryMode = PostSummaryMode.AUTO,
+                    )
+                },
+            )
 
         mvc.get("/post/api/v1/posts/${privatePost.id}").andExpect {
+            status { isNotFound() }
+        }
+
+        mvc.get("/post/api/v1/adm/posts/${privatePost.id}").andExpect {
             status { isOk() }
             jsonPath("$.id") { value(privatePost.id) }
             jsonPath("$.title") { value("비공개 상세 테스트") }

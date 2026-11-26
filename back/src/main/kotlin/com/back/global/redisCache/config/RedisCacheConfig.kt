@@ -93,7 +93,7 @@ class RedisCacheConfig(
                 .build()
         val safeSerializer =
             object : RedisSerializer<Any> {
-                override fun serialize(value: Any?): ByteArray = serializer.serialize(value) ?: ByteArray(0)
+                override fun serialize(value: Any?): ByteArray = serializer.serialize(value)
 
                 override fun deserialize(bytes: ByteArray?): Any? =
                     try {

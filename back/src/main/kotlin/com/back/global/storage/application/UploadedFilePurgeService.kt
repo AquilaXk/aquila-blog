@@ -259,13 +259,13 @@ class UploadedFilePurgeService(
         now: Instant,
         effectiveLimit: Int,
     ): List<UploadedFile> =
-        readOnlyTransactionTemplate.execute<List<UploadedFile>> {
+        readOnlyTransactionTemplate.execute {
             uploadedFileRepository.findByStatusInAndPurgeAfterLessThanEqualOrderByPurgeAfterAsc(
                 statuses = purgeCandidateStatuses,
                 purgeAfter = now,
                 pageable = PageRequest.of(0, effectiveLimit),
             )
-        } ?: emptyList()
+        }
 
     private fun restoreActive(objectKey: String) {
         writeTransactionTemplate.executeWithoutResult {

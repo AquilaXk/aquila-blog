@@ -162,16 +162,18 @@ class PostApplicationServiceAfterCommitTest : BasePostApplicationServiceAfterCom
         // given
         val admin = actorApplicationService.findByEmail("admin@test.com")!!
         val post =
-            transactionTemplate.execute {
-                postApplicationService.write(
-                    author = admin,
-                    title = "hit durable source",
-                    content = "hit durable content",
-                    published = true,
-                    listed = true,
-                    summaryMode = PostSummaryMode.AUTO,
-                )
-            }!!
+            requireNotNull(
+                transactionTemplate.execute {
+                    postApplicationService.write(
+                        author = admin,
+                        title = "hit durable source",
+                        content = "hit durable content",
+                        published = true,
+                        listed = true,
+                        summaryMode = PostSummaryMode.AUTO,
+                    )
+                },
+            )
         val previousTaskIds = taskRepository.findAll().map { it.id }.toSet()
 
         // when
@@ -193,9 +195,9 @@ class PostApplicationServiceAfterCommitTest : BasePostApplicationServiceAfterCom
         val payload = objectMapper.readTree(envelope.payloadJson)
         assertThat(envelope.taskType).isEqualTo("post.hit.side-effect")
         assertThat(payload.path("postId").longValue()).isEqualTo(post.id)
-        assertThat(payload.path("aggregateType").textValue()).isEqualTo("Post")
+        assertThat(payload.path("aggregateType").stringValue()).isEqualTo("Post")
         assertThat(payload.path("aggregateId").longValue()).isEqualTo(post.id)
-        assertThat(payload.path("reason").textValue()).isEqualTo("hit")
+        assertThat(payload.path("reason").stringValue()).isEqualTo("hit")
     }
 
     @Test
@@ -366,16 +368,18 @@ class PostApplicationServiceAfterCommitTest : BasePostApplicationServiceAfterCom
 
         // when
         val post =
-            transactionTemplate.execute {
-                postApplicationService.write(
-                    author = admin,
-                    title = "durable side effect source",
-                    content = "durable side effect content",
-                    published = true,
-                    listed = true,
-                    summaryMode = PostSummaryMode.AUTO,
-                )
-            }!!
+            requireNotNull(
+                transactionTemplate.execute {
+                    postApplicationService.write(
+                        author = admin,
+                        title = "durable side effect source",
+                        content = "durable side effect content",
+                        published = true,
+                        listed = true,
+                        summaryMode = PostSummaryMode.AUTO,
+                    )
+                },
+            )
 
         // then
         val sideEffectTasks = postWriteSideEffectTasksSince(previousTaskIds)
@@ -427,16 +431,18 @@ class PostApplicationServiceAfterCommitTest : BasePostApplicationServiceAfterCom
         clearSideEffectMocks()
         val admin = actorApplicationService.findByEmail("admin@test.com")!!
         val post =
-            transactionTemplate.execute {
-                postApplicationService.write(
-                    author = admin,
-                    title = "recommend counter source",
-                    content = "recommend counter content",
-                    published = true,
-                    listed = true,
-                    summaryMode = PostSummaryMode.AUTO,
-                )
-            }!!
+            requireNotNull(
+                transactionTemplate.execute {
+                    postApplicationService.write(
+                        author = admin,
+                        title = "recommend counter source",
+                        content = "recommend counter content",
+                        published = true,
+                        listed = true,
+                        summaryMode = PostSummaryMode.AUTO,
+                    )
+                },
+            )
         transactionTemplate.executeWithoutResult {
             postAttrRepository.incrementIntValue(post, HIT_COUNT, 11)
             postAttrRepository.incrementIntValue(post, LIKES_COUNT, 7)
@@ -481,16 +487,18 @@ class PostApplicationServiceAfterCommitTest : BasePostApplicationServiceAfterCom
         clearSideEffectMocks()
         val admin = actorApplicationService.findByEmail("admin@test.com")!!
         val post =
-            transactionTemplate.execute {
-                postApplicationService.write(
-                    author = admin,
-                    title = "content html cache source",
-                    content = "same markdown content",
-                    published = true,
-                    listed = true,
-                    summaryMode = PostSummaryMode.AUTO,
-                )
-            }!!
+            requireNotNull(
+                transactionTemplate.execute {
+                    postApplicationService.write(
+                        author = admin,
+                        title = "content html cache source",
+                        content = "same markdown content",
+                        published = true,
+                        listed = true,
+                        summaryMode = PostSummaryMode.AUTO,
+                    )
+                },
+            )
         clearSideEffectMocks()
         val previousTaskIds = taskRepository.findAll().map { it.id }.toSet()
 
@@ -523,16 +531,18 @@ class PostApplicationServiceAfterCommitTest : BasePostApplicationServiceAfterCom
     fun modifyPrivateSummaryEvictsAdminPostListOnly() {
         val admin = actorApplicationService.findByEmail("admin@test.com")!!
         val post =
-            transactionTemplate.execute {
-                postApplicationService.write(
-                    author = admin,
-                    title = "private summary source",
-                    content = "private summary content",
-                    published = false,
-                    listed = false,
-                    summaryMode = PostSummaryMode.AUTO,
-                )
-            }!!
+            requireNotNull(
+                transactionTemplate.execute {
+                    postApplicationService.write(
+                        author = admin,
+                        title = "private summary source",
+                        content = "private summary content",
+                        published = false,
+                        listed = false,
+                        summaryMode = PostSummaryMode.AUTO,
+                    )
+                },
+            )
         val previousTaskIds = taskRepository.findAll().map { it.id }.toSet()
 
         transactionTemplate.executeWithoutResult {
@@ -560,16 +570,18 @@ class PostApplicationServiceAfterCommitTest : BasePostApplicationServiceAfterCom
         val admin = actorApplicationService.findByEmail("admin@test.com")!!
         for ((beforePublished, afterPublished) in listOf(true to false, false to true, true to true)) {
             val post =
-                transactionTemplate.execute {
-                    postApplicationService.write(
-                        author = admin,
-                        title = "unlisted cache source",
-                        content = "original content",
-                        published = beforePublished,
-                        listed = false,
-                        summaryMode = PostSummaryMode.AUTO,
-                    )
-                }!!
+                requireNotNull(
+                    transactionTemplate.execute {
+                        postApplicationService.write(
+                            author = admin,
+                            title = "unlisted cache source",
+                            content = "original content",
+                            published = beforePublished,
+                            listed = false,
+                            summaryMode = PostSummaryMode.AUTO,
+                        )
+                    },
+                )
             clearSideEffectMocks()
             val previousTaskIds = taskRepository.findAll().map { it.id }.toSet()
             transactionTemplate.executeWithoutResult {
@@ -604,16 +616,18 @@ class PostApplicationServiceAfterCommitTest : BasePostApplicationServiceAfterCom
     fun restoreAndHardDeletePublishDomainEventsAfterCommit() {
         val admin = actorApplicationService.findByEmail("admin@test.com")!!
         val post =
-            transactionTemplate.execute {
-                postApplicationService.write(
-                    author = admin,
-                    title = "admin restore and hard delete event source",
-                    content = "tags: [kotlin]\n\nrestore and hard delete content",
-                    published = true,
-                    listed = true,
-                    summaryMode = PostSummaryMode.AUTO,
-                )
-            }!!
+            requireNotNull(
+                transactionTemplate.execute {
+                    postApplicationService.write(
+                        author = admin,
+                        title = "admin restore and hard delete event source",
+                        content = "tags: [kotlin]\n\nrestore and hard delete content",
+                        published = true,
+                        listed = true,
+                        summaryMode = PostSummaryMode.AUTO,
+                    )
+                },
+            )
         transactionTemplate.executeWithoutResult {
             postApplicationService.delete(postApplicationService.findById(post.id)!!, admin)
         }
@@ -651,16 +665,18 @@ class PostApplicationServiceAfterCommitTest : BasePostApplicationServiceAfterCom
     fun restoreRollbackLeavesPostDeletedWithoutPostgresAbortedTransactionError() {
         val actor = actorApplicationService.findByEmail("user1@test.com")!!
         val created =
-            transactionTemplate.execute {
-                postApplicationService.write(
-                    author = actor,
-                    title = "복구 롤백 검증 글",
-                    content = "tags: rollback-test\n\n첨부 복구 실패 시 롤백되어야 합니다.",
-                    published = true,
-                    listed = true,
-                    summaryMode = PostSummaryMode.AUTO,
-                )
-            }!!
+            requireNotNull(
+                transactionTemplate.execute {
+                    postApplicationService.write(
+                        author = actor,
+                        title = "복구 롤백 검증 글",
+                        content = "tags: rollback-test\n\n첨부 복구 실패 시 롤백되어야 합니다.",
+                        published = true,
+                        listed = true,
+                        summaryMode = PostSummaryMode.AUTO,
+                    )
+                },
+            )
         transactionTemplate.executeWithoutResult {
             postApplicationService.delete(created, actor)
         }

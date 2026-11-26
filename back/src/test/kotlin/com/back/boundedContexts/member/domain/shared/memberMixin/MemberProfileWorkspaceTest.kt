@@ -55,7 +55,7 @@ class MemberProfileWorkspaceTest {
         assertThat(wire.path("aboutSections")).isEqualTo(
             mapper.readTree("""[{"id":"notes","title":"Notes","items":["Engineering"],"dividerBefore":true}]"""),
         )
-        assertThat(wire.path("aboutProjectSectionTitle").asText()).isEqualTo("Projects")
+        assertThat(wire.path("aboutProjectSectionTitle").asString()).isEqualTo("Projects")
         assertThat(wire.path("aboutProjects")).isEqualTo(
             mapper.readTree(
                 """[{"id":"blog","name":"Aquila Blog","summary":"Technical notes","role":"Maintainer","href":"https://example.com/blog","linkLabel":"Read"}]""",

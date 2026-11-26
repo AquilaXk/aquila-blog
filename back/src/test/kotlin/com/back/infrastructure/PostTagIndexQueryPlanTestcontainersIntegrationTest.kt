@@ -135,7 +135,7 @@ class PostTagIndexQueryPlanTestcontainersIntegrationTest {
     private fun isPublicTagCountAggregate(plan: JsonNode): Boolean {
         val root = plan.path("Plan").takeUnless(JsonNode::isMissingNode) ?: return false
         return nodes(root).any { node ->
-            node.path("Node Type").asText() == "Aggregate" &&
+            node.path("Node Type").asString() == "Aggregate" &&
                 descendants(node).containsAll(setOf("post_tag_index", "post")) &&
                 "post_attr" !in descendants(node)
         }
@@ -150,8 +150,8 @@ class PostTagIndexQueryPlanTestcontainersIntegrationTest {
     private fun descendants(node: JsonNode): Set<String> =
         nodes(node)
             .map { it.path("Relation Name") }
-            .filter(JsonNode::isTextual)
-            .map(JsonNode::asText)
+            .filter(JsonNode::isString)
+            .map(JsonNode::asString)
             .toSet()
 
     private fun childPlans(node: JsonNode): List<JsonNode> = node.path("Plans").toList()

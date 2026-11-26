@@ -43,6 +43,8 @@ interface PostUseCase {
 
     fun findById(id: Long): Post?
 
+    fun findByIdForUpdate(id: Long): Post? = findById(id)
+
     fun findPublicDetailById(id: Long): Post?
 
     fun isPublicDetailReadable(id: Long): Boolean

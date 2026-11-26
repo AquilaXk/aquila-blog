@@ -236,6 +236,16 @@ class PostApplicationService(
                 postHydrationService.hydrateMembersPublishedProfileWorkspaces(listOf(post.author))
             }
 
+    @Transactional
+    override fun findByIdForUpdate(id: Long): Post? =
+        postRepository
+            .findByIdForUpdate(id)
+            .getOrNull()
+            ?.also { post ->
+                postHydrationService.hydratePostAttrs(post)
+                postHydrationService.hydrateMembersPublishedProfileWorkspaces(listOf(post.author))
+            }
+
     @Transactional(readOnly = true)
     override fun findPublicDetailById(id: Long): Post? =
         postRepository
@@ -1221,7 +1231,7 @@ class PostApplicationService(
         postId: Long,
     ) {
         val post =
-            postRepository.findById(postId).orElse(null)
+            postRepository.findByIdForUpdate(postId).orElse(null)
                 ?: throw AppException(ErrorCode.NOT_FOUND, "존재하지 않는 글입니다.")
         if (post.deletedAt != null) {
             throw AppException(ErrorCode.NOT_FOUND, "존재하지 않는 글입니다.")

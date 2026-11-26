@@ -265,6 +265,17 @@ class ApiV1AdmPostControllerBulkIntegrationTest : BaseControllerIntegrationTest(
                 )
             }
 
+        val scheduledPublishListed =
+            postFacade.write(
+                author = adminActor(),
+                title = "예약 즉시 전체공개 전환 글",
+                content = "즉시 전체 공개 벌크 전환 시 예약 시각이 비워지고 listed=true가 되어야 합니다.",
+                published = false,
+                listed = false,
+                summaryMode = com.back.boundedContexts.post.model.PostSummaryMode.AUTO,
+                scheduledAt = futureDue,
+            )
+
         mvc
             .post("/post/api/v1/adm/posts/bulk") {
                 contentType = MediaType.APPLICATION_JSON
@@ -295,6 +306,21 @@ class ApiV1AdmPostControllerBulkIntegrationTest : BaseControllerIntegrationTest(
                 jsonPath("$.data.processedCount") { value(1) }
             }
 
+        mvc
+            .post("/post/api/v1/adm/posts/bulk") {
+                contentType = MediaType.APPLICATION_JSON
+                content =
+                    """
+                    {
+                        "ids": [${scheduledPublishListed.id}],
+                        "action": "PUBLISH_LISTED"
+                    }
+                    """.trimIndent()
+            }.andExpect {
+                status { isOk() }
+                jsonPath("$.data.processedCount") { value(1) }
+            }
+
         entityManager.flush()
         entityManager.clear()
 
@@ -302,6 +328,7 @@ class ApiV1AdmPostControllerBulkIntegrationTest : BaseControllerIntegrationTest(
         val private2 = postFacade.findById(scheduledUnlisted.id).getOrThrow()
         val privateTemp = postFacade.findById(tempDraftWithSchedule.id).getOrThrow()
         val publishedNow = postFacade.findById(scheduledPublishNow.id).getOrThrow()
+        val publishedListedNow = postFacade.findById(scheduledPublishListed.id).getOrThrow()
 
         assertThat(private1.published).isFalse()
         assertThat(private1.listed).isFalse()
@@ -319,6 +346,10 @@ class ApiV1AdmPostControllerBulkIntegrationTest : BaseControllerIntegrationTest(
         assertThat(publishedNow.published).isTrue()
         assertThat(publishedNow.listed).isFalse()
         assertThat(publishedNow.scheduledAt).isNull()
+
+        assertThat(publishedListedNow.published).isTrue()
+        assertThat(publishedListedNow.listed).isTrue()
+        assertThat(publishedListedNow.scheduledAt).isNull()
 
         assertThat(scheduledPublishUseCase.publishDueScheduledPosts(now = futureDue.plusSeconds(30), batchSize = 50))
             .isEqualTo(0)

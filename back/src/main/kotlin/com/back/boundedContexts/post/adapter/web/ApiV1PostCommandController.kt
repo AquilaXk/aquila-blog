@@ -90,7 +90,7 @@ class ApiV1PostCommandController(
     fun delete(
         @PathVariable @Positive id: Long,
     ): RsData<Void> {
-        val post = postUseCase.findById(id).getOrThrow()
+        val post = postUseCase.findByIdForUpdate(id).getOrThrow()
         val actor = rq.actor
         postUseCase.delete(post, actor)
         return RsData("200-1", "${id}번 글이 삭제되었습니다.")

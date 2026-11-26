@@ -201,6 +201,23 @@ class PostPublishingMetadataIntegrationTest : BaseControllerIntegrationTest() {
                 status { isBadRequest() }
             }
 
+        mvc
+            .post("/post/api/v1/posts") {
+                contentType = MediaType.APPLICATION_JSON
+                content =
+                    """
+                    {
+                      "title": "빈 userInfo 정본 URL",
+                      "content": "본문",
+                      "published": true,
+                      "listed": true,
+                      "canonicalUrl": "https://@example.com/post"
+                    }
+                    """.trimIndent()
+            }.andExpect {
+                status { isBadRequest() }
+            }
+
         val futureAt = Instant.now().plus(1, ChronoUnit.HOURS).truncatedTo(ChronoUnit.SECONDS)
         mvc
             .post("/post/api/v1/posts") {
@@ -398,17 +415,39 @@ class PostPublishingMetadataIntegrationTest : BaseControllerIntegrationTest() {
         assertThat(afterPromote.scheduledAt).isEqualTo(firstDue)
 
         val updatedDue = firstDue.plus(1, ChronoUnit.HOURS)
+        val modifiedRes =
+            mvc
+                .put("/post/api/v1/posts/$postId") {
+                    contentType = MediaType.APPLICATION_JSON
+                    content =
+                        """
+                        {
+                          "title": "PUT 예약 공개 수정 글",
+                          "content": "예약 대기 상태에서 내용을 수정해도 listed=true가 유지됩니다.",
+                          "published": false,
+                          "listed": true,
+                          "version": $promotedVersion,
+                          "scheduledAt": "$updatedDue"
+                        }
+                        """.trimIndent()
+                }.andExpect {
+                    status { isOk() }
+                    jsonPath("$.data.published") { value(false) }
+                    jsonPath("$.data.listed") { value(true) }
+                    jsonPath("$.data.scheduledAt") { exists() }
+                }.andReturn()
+        val secondModifiedVersion = JsonPath.read<Int>(modifiedRes.response.contentAsString, "$.data.version").toLong()
+
         mvc
             .put("/post/api/v1/posts/$postId") {
                 contentType = MediaType.APPLICATION_JSON
                 content =
                     """
                     {
-                      "title": "PUT 예약 공개 수정 글",
-                      "content": "예약 대기 상태에서 내용을 수정해도 listed=true가 유지됩니다.",
+                      "title": "PUT 예약 공개 listed 생략 수정 글",
+                      "content": "listed를 생략해도 기존 예약 공개 상태가 유지됩니다.",
                       "published": false,
-                      "listed": true,
-                      "version": $promotedVersion,
+                      "version": $secondModifiedVersion,
                       "scheduledAt": "$updatedDue"
                     }
                     """.trimIndent()

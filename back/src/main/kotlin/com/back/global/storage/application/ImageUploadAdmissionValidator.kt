@@ -675,7 +675,7 @@ class ImageUploadAdmissionValidator(
                         rawSize == 1L && cursor + 16 <= end -> readInt64BE(bytes, cursor + 8)
                         else -> rawSize
                     }
-                if (boxSizeLong < headerSize || cursor + boxSizeLong > end) return null
+                if (boxSizeLong < headerSize || boxSizeLong > (end - cursor).toLong()) return null
                 val boxEnd = (cursor + boxSizeLong).toInt()
                 val payloadStart = cursor + headerSize
                 when (type) {

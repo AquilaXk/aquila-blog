@@ -5,6 +5,7 @@ import com.back.boundedContexts.cloud.model.CloudFileMediaKind
 import com.back.boundedContexts.cloud.support.InMemoryCloudFileRepository
 import com.back.boundedContexts.cloud.support.StubCloudStoragePort
 import com.back.global.exception.application.AppException
+import com.back.global.exception.application.ErrorCode
 import com.back.global.storage.application.ImageUploadAdmissionValidator
 import com.back.global.storage.application.ImageUploadAdmissionValidator.ImageValidationPolicy
 import com.back.global.storage.application.port.output.CloudStoragePort
@@ -761,6 +762,182 @@ class CloudOverhaulSecurityAndFormatTest {
         )
     }
 
+    @Test
+    @DisplayName("암호화·비UTF8·손상 중첩 ZIP, 잘린 TAR, 네임스페이스 SVG XSS, AVIF 64비트 오버플로, 다중 TGZ 경로 순회를 400 Fail-Closed 거부한다")
+    fun `rejects encrypted malformed zip truncated tar ns svg xss avif64 overflow and multi tgz slip with bad request`() {
+        val encryptedZip = encryptedZipBytes("secret.txt", "classified".toByteArray(StandardCharsets.UTF_8))
+        val nonUtf8LocalZip = nonUtf8LocalEntryZipBytes()
+        val truncatedNestedZip =
+            zipBytes(
+                "nested.zip" to byteArrayOf(0x50, 0x4B, 0x03, 0x04, 0x14, 0x00, 0x00, 0x00),
+            )
+        val inner25 =
+            ByteArray(25).apply {
+                this[0] = 0x50
+                this[1] = 0x4B
+                this[2] = 0x03
+                this[3] = 0x04
+            }
+        val truncated25NestedZip = zipBytes("nested.zip" to inner25)
+        val validInnerZip = zipBytes("payload.txt" to "hello world payload for deflate")
+        val truncatedDeflateNestedZip =
+            zipBytes(
+                "nested.zip" to validInnerZip.copyOf(validInnerZip.size / 2),
+            )
+        val encryptedNestedZip = zipBytes("nested.zip" to encryptedZip)
+        val nonUtf8NestedZip = zipBytes("nested.zip" to nonUtf8LocalZip)
+
+        val truncatedTar512 = tarHeaderBlock("truncated.bin", 1024L)
+        val truncatedTar1024 =
+            tarHeaderBlock("first.txt", 0L) + tarHeaderBlock("second-truncated.bin", 2048L)
+        val truncatedTgz = gzipBytes(truncatedTar512)
+
+        val nsScriptSvg =
+            (
+                "<svg xmlns=\"http://www.w3.org/2000/svg\" xmlns:h=\"http://www.w3.org/1999/xhtml\">" +
+                    "<h:script>alert(1)</h:script></svg>"
+            ).toByteArray()
+        val nsForeignObjectSvg =
+            (
+                "<svg xmlns=\"http://www.w3.org/2000/svg\" xmlns:x=\"http://www.w3.org/2000/svg\">" +
+                    "<x:foreignObject><body/></x:foreignObject></svg>"
+            ).toByteArray()
+        val nsIframeSvg =
+            (
+                "<svg xmlns=\"http://www.w3.org/2000/svg\" xmlns:x=\"http://www.w3.org/1999/xhtml\">" +
+                    "<x:iframe src=\"https://evil.example\"/></svg>"
+            ).toByteArray()
+
+        val secondEntrySlipTar =
+            multiEntryTarBytes(
+                TarTestEntry("safe/readme.txt", "ok\n".toByteArray()),
+                TarTestEntry("../escape.sh", "echo pwn\n".toByteArray()),
+            )
+        val secondEntryPrefixSlipTar =
+            multiEntryTarBytes(
+                TarTestEntry("safe/readme.txt", "ok\n".toByteArray()),
+                TarTestEntry("escape.sh", "echo pwn\n".toByteArray(), prefix = "../evil"),
+            )
+        val badSecondChecksumTar =
+            multiEntryTarBytes(
+                TarTestEntry("safe/readme.txt", "ok\n".toByteArray()),
+                TarTestEntry("safe/second.txt", "hi\n".toByteArray()),
+            ).apply {
+                this[1024 + 10] = 'X'.code.toByte()
+            }
+        val secondSlipTgz = gzipBytes(secondEntrySlipTar)
+        val secondPrefixSlipTgz = gzipBytes(secondEntryPrefixSlipTar)
+        val badSecondChecksumTgz = gzipBytes(badSecondChecksumTar)
+        val tgzBomb = gzipBytes(multiEntryTarBytes(TarTestEntry("bomb.bin", ByteArray(5 * 1024 * 1024) { 0x43 })))
+        val elfSpoofedSh = byteArrayOf(0x7F, 'E'.code.toByte(), 'L'.code.toByte(), 'F'.code.toByte(), 2, 1, 1, 0)
+
+        val badCases =
+            listOf(
+                Triple("encrypted.zip", "application/zip", encryptedZip),
+                Triple("nonutf8-local.zip", "application/zip", nonUtf8LocalZip),
+                Triple("corrupt-nested.zip", "application/zip", truncatedNestedZip),
+                Triple("corrupt25-nested.zip", "application/zip", truncated25NestedZip),
+                Triple("corrupt-deflate-nested.zip", "application/zip", truncatedDeflateNestedZip),
+                Triple("encrypted-nested.zip", "application/zip", encryptedNestedZip),
+                Triple("nonutf8-nested.zip", "application/zip", nonUtf8NestedZip),
+                Triple("truncated-512.tar", "application/x-tar", truncatedTar512),
+                Triple("truncated-1024.tar", "application/x-tar", truncatedTar1024),
+                Triple("truncated.tgz", "application/gzip", truncatedTgz),
+                Triple("ns-script.svg", "image/svg+xml", nsScriptSvg),
+                Triple("ns-foreign.svg", "image/svg+xml", nsForeignObjectSvg),
+                Triple("ns-iframe.svg", "image/svg+xml", nsIframeSvg),
+                Triple("second-slip.tgz", "application/gzip", secondSlipTgz),
+                Triple("second-slip.tar.gz", "application/gzip", secondSlipTgz),
+                Triple("second-prefix-slip.tgz", "application/gzip", secondPrefixSlipTgz),
+                Triple("bad-entry2-checksum.tgz", "application/gzip", badSecondChecksumTgz),
+                Triple("bomb.tgz", "application/gzip", tgzBomb),
+                Triple("spoofed.sh", "text/plain", elfSpoofedSh),
+            )
+
+        badCases.forEach { (name, mime, bytes) ->
+            val thrown =
+                org.junit.jupiter.api.Assertions.assertThrows(AppException::class.java, {
+                    service.upload(7L, name, null, mime, ByteArrayInputStream(bytes), bytes.size.toLong(), "")
+                }, "Expected BAD_REQUEST for $name")
+            assertThat(thrown.errorCode).isEqualTo(ErrorCode.BAD_REQUEST)
+            assertThat(thrown.rsData.statusCode).isEqualTo(400)
+        }
+
+        val validMultiTgz =
+            gzipBytes(
+                multiEntryTarBytes(
+                    TarTestEntry("notes.txt", "one\n".toByteArray(), prefix = "docs/2026"),
+                    TarTestEntry("sub/two.txt", "two\n".toByteArray()),
+                ),
+            )
+        val uploadedMultiTgz =
+            service.upload(
+                7L,
+                "valid-multi.tgz",
+                null,
+                "application/gzip",
+                ByteArrayInputStream(validMultiTgz),
+                validMultiTgz.size.toLong(),
+                "",
+            )
+        assertThat(uploadedMultiTgz.contentType).isEqualTo("application/gzip")
+
+        val validSh = "#!/usr/bin/env bash\necho ok\n".toByteArray(StandardCharsets.UTF_8)
+        val uploadedSh =
+            service.upload(7L, "deploy.sh", null, "application/x-sh", ByteArrayInputStream(validSh), validSh.size.toLong(), "")
+        assertThat(uploadedSh.contentType).isEqualTo("text/plain")
+
+        val validator = ImageUploadAdmissionValidator()
+        val overflowAvifWrap = avifWith64BitMetaBoxSize(Long.MAX_VALUE - 5L)
+        val overflowAvifMax = avifWith64BitMetaBoxSize(Long.MAX_VALUE)
+        val truncated64Avif =
+            ftypBytes("avif") +
+                ByteBuffer
+                    .allocate(12)
+                    .putInt(1)
+                    .put("meta".toByteArray())
+                    .putInt(0)
+                    .array()
+        assertThat(ImageUploadAdmissionValidator.extractAvifDimensions(overflowAvifWrap, overflowAvifWrap.size)).isNull()
+        assertThat(ImageUploadAdmissionValidator.extractAvifDimensions(overflowAvifMax, overflowAvifMax.size)).isNull()
+        listOf(
+            "overflow-wrap.avif" to overflowAvifWrap,
+            "overflow-max.avif" to overflowAvifMax,
+            "trunc64.avif" to truncated64Avif,
+        ).forEach { (filename, bytes) ->
+            assertThatThrownBy {
+                validator.validate(writeTemp(filename, bytes), "image/avif", ImageValidationPolicy.CLOUD_PHOTO)
+            }.isInstanceOf(AppException::class.java)
+                .satisfies({ ex ->
+                    assertThat((ex as AppException).errorCode).isEqualTo(ErrorCode.BAD_REQUEST)
+                })
+        }
+
+        val valid64Avif = validAvifWith64BitMetaBox(128, 96)
+        assertThat(
+            validator.validate(writeTemp("valid64.avif", valid64Avif), "image/avif", ImageValidationPolicy.CLOUD_PHOTO).contentType,
+        ).isEqualTo("image/avif")
+
+        val emptyEocdZip =
+            ByteArray(22).apply {
+                this[0] = 0x50
+                this[1] = 0x4B
+                this[2] = 0x05
+                this[3] = 0x06
+            }
+        val outerWithEmptyNested =
+            service.upload(
+                7L,
+                "empty-nested.zip",
+                null,
+                "application/zip",
+                ByteArrayInputStream(zipBytes("empty.zip" to emptyEocdZip)),
+                zipBytes("empty.zip" to emptyEocdZip).size.toLong(),
+                "",
+            )
+        assertThat(outerWithEmptyNested.contentType).isEqualTo("application/zip")
+    }
+
     private fun validMif1ThreeBrandAvifBytes(
         width: Int,
         height: Int,
@@ -1091,5 +1268,147 @@ class CloudOverhaulSecurityAndFormatTest {
         buf.putInt(22)
         buf.put(payload)
         return buf.array()
+    }
+
+    private data class TarTestEntry(
+        val name: String,
+        val payload: ByteArray,
+        val prefix: String = "",
+    )
+
+    private fun tarHeaderBlock(
+        name: String,
+        entrySize: Long,
+        prefix: String = "",
+    ): ByteArray {
+        val block = ByteArray(512)
+        name.toByteArray(StandardCharsets.UTF_8).copyInto(block, 0)
+        "0000644\u0000".toByteArray(StandardCharsets.US_ASCII).copyInto(block, 100)
+        "0000000\u0000".toByteArray(StandardCharsets.US_ASCII).copyInto(block, 108)
+        "0000000\u0000".toByteArray(StandardCharsets.US_ASCII).copyInto(block, 116)
+        entrySize
+            .toString(8)
+            .padStart(11, '0')
+            .toByteArray(StandardCharsets.US_ASCII)
+            .copyInto(block, 124)
+        "00000000000\u0000".toByteArray(StandardCharsets.US_ASCII).copyInto(block, 136)
+        for (i in 148..155) block[i] = ' '.code.toByte()
+        block[156] = '0'.code.toByte()
+        "ustar\u0000".toByteArray(StandardCharsets.US_ASCII).copyInto(block, 257)
+        "00".toByteArray(StandardCharsets.US_ASCII).copyInto(block, 263)
+        if (prefix.isNotEmpty()) {
+            prefix.toByteArray(StandardCharsets.UTF_8).copyInto(block, 345)
+        }
+        var sum = 0
+        for (b in block) sum += b.toInt() and 0xFF
+        sum
+            .toString(8)
+            .padStart(6, '0')
+            .toByteArray(StandardCharsets.US_ASCII)
+            .copyInto(block, 148)
+        block[154] = 0
+        block[155] = ' '.code.toByte()
+        return block
+    }
+
+    private fun multiEntryTarBytes(vararg entries: TarTestEntry): ByteArray {
+        val out = ByteArrayOutputStream()
+        entries.forEach { entry ->
+            out.write(tarHeaderBlock(entry.name, entry.payload.size.toLong(), entry.prefix))
+            out.write(entry.payload)
+            val paddedPayloadLen = ((entry.payload.size + 511) / 512) * 512
+            if (paddedPayloadLen > entry.payload.size) {
+                out.write(ByteArray(paddedPayloadLen - entry.payload.size))
+            }
+        }
+        out.write(ByteArray(1024))
+        return out.toByteArray()
+    }
+
+    private fun encryptedZipBytes(
+        name: String,
+        payload: ByteArray,
+    ): ByteArray {
+        val bytes = zipBytes(name to payload)
+        bytes[6] = (bytes[6].toInt() or 0x01).toByte()
+        val cdOffset = findZipCentralDirOffset(bytes)
+        bytes[cdOffset + 8] = (bytes[cdOffset + 8].toInt() or 0x01).toByte()
+        return bytes
+    }
+
+    private fun nonUtf8LocalEntryZipBytes(): ByteArray {
+        val bytes = zipBytes("abcd.txt" to "hello")
+        bytes[7] = (bytes[7].toInt() and 0xF7).toByte()
+        bytes[30] = 0xFF.toByte()
+        bytes[31] = 0xFE.toByte()
+        bytes[32] = 0xFD.toByte()
+        bytes[33] = 0xFC.toByte()
+        return bytes
+    }
+
+    private fun findZipCentralDirOffset(bytes: ByteArray): Int {
+        for (i in 0..(bytes.size - 4)) {
+            if (
+                bytes[i] == 0x50.toByte() &&
+                bytes[i + 1] == 0x4B.toByte() &&
+                bytes[i + 2] == 0x01.toByte() &&
+                bytes[i + 3] == 0x02.toByte()
+            ) {
+                return i
+            }
+        }
+        error("Central directory signature not found")
+    }
+
+    private fun avifWith64BitMetaBoxSize(boxSize: Long): ByteArray {
+        val metaHeader =
+            ByteBuffer
+                .allocate(24)
+                .putInt(1)
+                .put("meta".toByteArray(StandardCharsets.US_ASCII))
+                .putLong(boxSize)
+                .putLong(0L)
+                .array()
+        return ftypBytes("avif") + metaHeader
+    }
+
+    private fun validAvifWith64BitMetaBox(
+        width: Int,
+        height: Int,
+    ): ByteArray {
+        val ispe =
+            ByteBuffer
+                .allocate(20)
+                .putInt(20)
+                .put("ispe".toByteArray(StandardCharsets.US_ASCII))
+                .putInt(0)
+                .putInt(width)
+                .putInt(height)
+                .array()
+        val ipco =
+            ByteBuffer
+                .allocate(8 + ispe.size)
+                .putInt(8 + ispe.size)
+                .put("ipco".toByteArray())
+                .put(ispe)
+                .array()
+        val iprp =
+            ByteBuffer
+                .allocate(8 + ipco.size)
+                .putInt(8 + ipco.size)
+                .put("iprp".toByteArray())
+                .put(ipco)
+                .array()
+        val metaSize = 20L + iprp.size
+        val meta =
+            ByteBuffer
+                .allocate(20 + iprp.size)
+                .putInt(1)
+                .put("meta".toByteArray())
+                .putLong(metaSize)
+                .putInt(0)
+                .put(iprp)
+                .array()
+        return ftypBytes("avif") + meta
     }
 }

@@ -15,6 +15,7 @@ import java.util.Locale
 import java.util.zip.CRC32
 import java.util.zip.GZIPInputStream
 import java.util.zip.ZipEntry
+import java.util.zip.ZipException
 import java.util.zip.ZipFile
 import java.util.zip.ZipInputStream
 
@@ -38,6 +39,10 @@ object CloudArchiveAndDocumentInspector {
     private const val ZIP_EOCD_MIN_BYTES = 22L
     private const val GZIP_RATIO_FLOOR_BYTES = 4L * 1024 * 1024
     private const val TAR_BLOCK_BYTES = 512
+    private const val TAR_NAME_OFFSET = 0
+    private const val TAR_NAME_LENGTH = 100
+    private const val TAR_PREFIX_OFFSET = 345
+    private const val TAR_PREFIX_LENGTH = 155
     private const val TAR_USTAR_OFFSET = 257
     private const val SEVEN_ZIP_HEADER_BYTES = 32
     private const val MAX_SVG_BYTES = 5L * 1024 * 1024
@@ -83,6 +88,7 @@ object CloudArchiveAndDocumentInspector {
     private val SVG_ENTITY_HEX_OR_DEC = Regex("&#(?:x([0-9a-fA-F]{1,6})|([0-9]{1,7}));?")
     private val SVG_WHITESPACE = Regex("[\\u0000-\\u0020]+")
     private val SVG_ON_EVENT_ATTR = Regex("(?i)(?:^|[\\s/\"'`>])on[a-z]{1,24}\\s*=")
+    private val SVG_DANGEROUS_TAG = Regex("<\\s*(?:[a-z0-9_-]+:)?(?:script|foreignobject|iframe|object|embed)\\b")
 
     val TEXT_EXTENSION_CONTENT_TYPES: Map<String, String> =
         mapOf(
@@ -199,17 +205,23 @@ object CloudArchiveAndDocumentInspector {
 
         val state = ZipInspectionState()
         val entryNames = LinkedHashSet<String>()
-        BufferedInputStream(Files.newInputStream(file), STREAM_BUFFER_BYTES).use { stream ->
-            inspectZipStream(
-                input = stream,
-                compressedBudgetBytes = fileSize,
-                depth = 0,
-                state = state,
-                collectedNames = entryNames,
-                maxEntries = maxEntries,
-                maxUncompressedBytes = maxUncompressedBytes,
-                ratioThresholdBytes = ratioThresholdBytes,
-            )
+        try {
+            BufferedInputStream(Files.newInputStream(file), STREAM_BUFFER_BYTES).use { stream ->
+                inspectZipStream(
+                    input = stream,
+                    compressedBudgetBytes = fileSize,
+                    depth = 0,
+                    state = state,
+                    collectedNames = entryNames,
+                    maxEntries = maxEntries,
+                    maxUncompressedBytes = maxUncompressedBytes,
+                    ratioThresholdBytes = ratioThresholdBytes,
+                )
+            }
+        } catch (ex: AppException) {
+            throw ex
+        } catch (_: Exception) {
+            return null
         }
 
         return when (extension) {
@@ -246,15 +258,17 @@ object CloudArchiveAndDocumentInspector {
         maxEntries: Int,
         maxUncompressedBytes: Long,
         ratioThresholdBytes: Long,
-    ) {
+    ): Int {
         if (depth > MAX_ARCHIVE_NESTING_DEPTH) {
             throw AppException(ErrorCode.BAD_REQUEST, "압축 파일 중첩 깊이가 허용 상한을 초과했습니다.")
         }
         val scratch = ByteArray(STREAM_BUFFER_BYTES)
         val zip = ZipInputStream(input, StandardCharsets.UTF_8)
         var levelUncompressedBytes = 0L
+        var levelEntries = 0
         while (true) {
             val entry = zip.nextEntry ?: break
+            levelEntries += 1
             state.entryCount += 1
             if (state.entryCount > maxEntries) {
                 throw AppException(ErrorCode.BAD_REQUEST, "ZIP 아카이브 엔트리 수가 허용 상한을 초과했습니다.")
@@ -276,6 +290,7 @@ object CloudArchiveAndDocumentInspector {
                 )
             zip.closeEntry()
         }
+        return levelEntries
     }
 
     private fun inspectZipEntryBytes(
@@ -328,16 +343,24 @@ object CloudArchiveAndDocumentInspector {
                 if (nestedOverflowed) {
                     throw AppException(ErrorCode.BAD_REQUEST, "중첩 아카이브 크기가 허용 검사 상한을 초과했습니다.")
                 }
-                inspectZipStream(
-                    input = nestedBytes.inputStream(),
-                    compressedBudgetBytes = nestedBytes.size.toLong(),
-                    depth = depth + 1,
-                    state = state,
-                    collectedNames = null,
-                    maxEntries = maxEntries,
-                    maxUncompressedBytes = maxUncompressedBytes,
-                    ratioThresholdBytes = ratioThresholdBytes,
-                )
+                if (nestedBytes.size < ZIP_EOCD_MIN_BYTES) {
+                    throw ZipException("Invalid nested ZIP size")
+                }
+                val requireEntry = ImageUploadAdmissionValidator.readInt32BE(nestedBytes, 0) == ZIP_LOCAL_HEADER_WORD
+                val nestedEntries =
+                    inspectZipStream(
+                        input = nestedBytes.inputStream(),
+                        compressedBudgetBytes = nestedBytes.size.toLong(),
+                        depth = depth + 1,
+                        state = state,
+                        collectedNames = null,
+                        maxEntries = maxEntries,
+                        maxUncompressedBytes = maxUncompressedBytes,
+                        ratioThresholdBytes = ratioThresholdBytes,
+                    )
+                if (requireEntry && nestedEntries == 0) {
+                    throw ZipException("Truncated nested ZIP local header")
+                }
             }
         }
         return levelUncompressedBytes
@@ -367,22 +390,43 @@ object CloudArchiveAndDocumentInspector {
     ): Boolean {
         val fileSize = Files.size(file)
         if (fileSize < TAR_BLOCK_BYTES || fileSize % TAR_BLOCK_BYTES != 0L) return false
-        return BufferedInputStream(Files.newInputStream(file), STREAM_BUFFER_BYTES).use { stream ->
-            inspectTarStream(stream, maxEntries)
+        return try {
+            BufferedInputStream(Files.newInputStream(file), STREAM_BUFFER_BYTES).use { stream ->
+                inspectTarStream(
+                    input = stream,
+                    maxEntries = maxEntries,
+                    maxPayloadBytes = MAX_ARCHIVE_UNCOMPRESSED_BYTES,
+                    prefetchedFirstBlock = null,
+                )
+            }
+        } catch (ex: AppException) {
+            throw ex
+        } catch (_: Exception) {
+            false
         }
     }
 
     private fun inspectTarStream(
         input: InputStream,
         maxEntries: Int,
+        maxPayloadBytes: Long,
+        prefetchedFirstBlock: ByteArray?,
     ): Boolean {
         val block = ByteArray(TAR_BLOCK_BYTES)
+        var pendingFirstBlock = prefetchedFirstBlock
         var entries = 0
         var totalPayload = 0L
         var sawHeader = false
 
         while (true) {
-            val read = readFullBlock(input, block)
+            val read =
+                if (pendingFirstBlock != null) {
+                    pendingFirstBlock.copyInto(block)
+                    pendingFirstBlock = null
+                    TAR_BLOCK_BYTES
+                } else {
+                    readFullBlock(input, block)
+                }
             if (read == 0) return sawHeader
             if (read != TAR_BLOCK_BYTES) return false
             if (block.all { it == 0.toByte() }) return sawHeader
@@ -393,11 +437,13 @@ object CloudArchiveAndDocumentInspector {
             if (entries > maxEntries) {
                 throw AppException(ErrorCode.BAD_REQUEST, "TAR 아카이브 엔트리 수가 허용 상한을 초과했습니다.")
             }
-            val rawName = extractNullTerminatedAscii(block, 0, 100)
-            validateSafeArchiveEntryName(rawName)
+            val rawPrefix = extractNullTerminatedAscii(block, TAR_PREFIX_OFFSET, TAR_PREFIX_LENGTH)
+            val rawName = extractNullTerminatedAscii(block, TAR_NAME_OFFSET, TAR_NAME_LENGTH)
+            val entryPath = if (rawPrefix.isEmpty()) rawName else "$rawPrefix/$rawName"
+            validateSafeArchiveEntryName(entryPath)
             val entrySize = parseTarOctal(block, 124, 12) ?: return false
             totalPayload += entrySize
-            if (totalPayload > MAX_ARCHIVE_UNCOMPRESSED_BYTES) {
+            if (totalPayload > maxPayloadBytes) {
                 throw AppException(ErrorCode.BAD_REQUEST, "TAR 아카이브 크기가 허용 상한을 초과했습니다.")
             }
             val paddedBlocks = (entrySize + TAR_BLOCK_BYTES - 1L) / TAR_BLOCK_BYTES
@@ -419,47 +465,31 @@ object CloudArchiveAndDocumentInspector {
         if (fileSize < 10L) return false
         return BufferedInputStream(Files.newInputStream(file), STREAM_BUFFER_BYTES).use { raw ->
             val counting = CountingInputStream(raw)
-            val headerProbe = ByteArray(TAR_BLOCK_BYTES)
-            var probeFilled = 0
             val gzip =
                 try {
                     GZIPInputStream(counting, STREAM_BUFFER_BYTES)
                 } catch (_: Exception) {
                     return@use false
                 }
+            val boundedGzip = BoundedGzipInputStream(gzip, counting, maxDecompressedBytes)
+            val headerProbe = ByteArray(TAR_BLOCK_BYTES)
             val buffer = ByteArray(STREAM_BUFFER_BYTES)
-            var totalDecompressed = 0L
             try {
-                while (true) {
-                    val read = gzip.read(buffer)
-                    if (read < 0) break
-                    if (probeFilled < headerProbe.size) {
-                        val copyLen = minOf(read, headerProbe.size - probeFilled)
-                        System.arraycopy(buffer, 0, headerProbe, probeFilled, copyLen)
-                        probeFilled += copyLen
-                    }
-                    totalDecompressed += read
-                    if (totalDecompressed > maxDecompressedBytes) {
-                        throw AppException(ErrorCode.BAD_REQUEST, "GZIP 압축 해제 크기가 허용 상한을 초과했습니다.")
-                    }
-                    val compressedSoFar = maxOf(counting.bytesRead, 1L)
-                    if (
-                        totalDecompressed > GZIP_RATIO_FLOOR_BYTES &&
-                        totalDecompressed > compressedSoFar * MAX_COMPRESSION_RATIO
-                    ) {
-                        throw AppException(ErrorCode.BAD_REQUEST, "GZIP 압축 비율이 안전 상한을 초과했습니다.")
+                val probeFilled = readFullBlock(boundedGzip, headerProbe)
+                if ((extension == "tgz" || extension == "gz") && probeFilled == TAR_BLOCK_BYTES && hasUstarMagic(headerProbe)) {
+                    if (!inspectTarStream(boundedGzip, MAX_ARCHIVE_ENTRIES, maxDecompressedBytes, headerProbe)) {
+                        return@use false
                     }
                 }
+                while (boundedGzip.read(buffer) >= 0) {
+                    // Drain remaining stream so GZIP CRC/ISIZE trailer and bomb caps are verified.
+                }
+                true
             } catch (ex: AppException) {
                 throw ex
             } catch (_: Exception) {
-                return@use false
+                false
             }
-
-            if ((extension == "tgz" || extension == "gz") && probeFilled == TAR_BLOCK_BYTES && hasUstarMagic(headerProbe)) {
-                return@use verifyTarChecksum(headerProbe)
-            }
-            true
         }
     }
 
@@ -556,8 +586,7 @@ object CloudArchiveAndDocumentInspector {
         if (
             lowered.contains("<!doctype") ||
             lowered.contains("<!entity") ||
-            lowered.contains("<script") ||
-            lowered.contains("<foreignobject")
+            SVG_DANGEROUS_TAG.containsMatchIn(lowered)
         ) {
             return false
         }
@@ -794,6 +823,42 @@ object CloudArchiveAndDocumentInspector {
         ): Int {
             val count = delegate.read(b, off, len)
             if (count > 0) bytesRead += count.toLong()
+            return count
+        }
+    }
+
+    private class BoundedGzipInputStream(
+        private val gzip: GZIPInputStream,
+        private val compressedCounter: CountingInputStream,
+        private val maxDecompressedBytes: Long,
+    ) : InputStream() {
+        private val singleByte = ByteArray(1)
+        private var totalDecompressed: Long = 0L
+
+        override fun read(): Int {
+            val count = read(singleByte, 0, 1)
+            return if (count < 0) -1 else singleByte[0].toInt() and 0xFF
+        }
+
+        override fun read(
+            b: ByteArray,
+            off: Int,
+            len: Int,
+        ): Int {
+            val count = gzip.read(b, off, len)
+            if (count > 0) {
+                totalDecompressed += count
+                if (totalDecompressed > maxDecompressedBytes) {
+                    throw AppException(ErrorCode.BAD_REQUEST, "GZIP 압축 해제 크기가 허용 상한을 초과했습니다.")
+                }
+                val compressedSoFar = maxOf(compressedCounter.bytesRead, 1L)
+                if (
+                    totalDecompressed > GZIP_RATIO_FLOOR_BYTES &&
+                    totalDecompressed > compressedSoFar * MAX_COMPRESSION_RATIO
+                ) {
+                    throw AppException(ErrorCode.BAD_REQUEST, "GZIP 압축 비율이 안전 상한을 초과했습니다.")
+                }
+            }
             return count
         }
     }

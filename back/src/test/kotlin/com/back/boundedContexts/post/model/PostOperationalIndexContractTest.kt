@@ -178,6 +178,44 @@ class PostOperationalIndexContractTest {
     }
 
     @Test
+    fun `publishing metadata columns and partial indexes are declared in V20261127 migrations`() {
+        val schemaSql =
+            Files.readString(
+                Path.of(
+                    "src/main/resources/db/migration/V20261127_01__add_post_publishing_metadata.sql",
+                ),
+            )
+        val indexSql =
+            Files.readString(
+                Path.of(
+                    "src/main/resources/db/migration/V20261127_02__add_post_publishing_metadata_indexes_concurrently.sql",
+                ),
+            )
+        val indexConf =
+            Files.readString(
+                Path.of(
+                    "src/main/resources/db/migration/V20261127_02__add_post_publishing_metadata_indexes_concurrently.sql.conf",
+                ),
+            )
+        listOf("scheduled_at", "series_name", "series_order", "canonical_url").forEach { col ->
+            assertThat(schemaSql).contains(col)
+        }
+        assertThat(indexConf).contains("executeInTransaction=false")
+        assertThat(indexSql).contains("CREATE INDEX CONCURRENTLY")
+        assertThat(indexSql).doesNotContainIgnoringCase("BEGIN;")
+        assertThat(indexSql).doesNotContainIgnoringCase("COMMIT;")
+        val postAfterDdl = Post::class.afterDdlSql()
+        listOf(
+            "post_idx_scheduled_publish_due",
+            "post_idx_series_published_order",
+            "post_idx_author_temp_draft_modified",
+        ).forEach { expectedIndex ->
+            assertThat(indexSql).contains(expectedIndex)
+            assertThat(postAfterDdl).contains(expectedIndex)
+        }
+    }
+
+    @Test
     fun `application and prod flyway configs disable postgresql transactional advisory lock`() {
         listOf(
             Path.of("src/main/resources/application.yaml"),

@@ -6,6 +6,7 @@ import com.back.boundedContexts.post.domain.PostAttr
 import com.back.boundedContexts.post.dto.PostInteractionReadStateDto
 import com.back.boundedContexts.post.dto.PublicBacklinkCandidateProjection
 import com.back.boundedContexts.post.dto.PublicPostDetailContentCacheDto
+import com.back.boundedContexts.post.dto.PublicSeriesPostItemDto
 import com.back.boundedContexts.post.dto.PublicSitemapPostItemDto
 import com.back.boundedContexts.post.dto.PublicWikilinkCatalogItemDto
 import com.back.boundedContexts.post.model.PostSummarySource
@@ -658,6 +659,10 @@ class PostRepositoryImpl(
                 post.isTempDraft,
                 post.likesCount,
                 post.hitCount,
+                post.scheduledAt,
+                post.seriesName,
+                post.seriesOrder,
+                post.canonicalUrl,
                 post.author,
             ).from(post)
             .leftJoin(post.author)
@@ -684,6 +689,10 @@ class PostRepositoryImpl(
             isTempDraft = tuple.get(post.isTempDraft)!!,
             likesCount = tuple.get(post.likesCount)!!,
             hitCount = tuple.get(post.hitCount)!!,
+            scheduledAt = tuple.get(post.scheduledAt),
+            seriesName = tuple.get(post.seriesName),
+            seriesOrder = tuple.get(post.seriesOrder),
+            canonicalUrl = tuple.get(post.canonicalUrl),
         ).apply {
             loadedCreatedAt?.let { createdAt = it }
             loadedModifiedAt?.let { modifiedAt = it }
@@ -978,6 +987,91 @@ class PostRepositoryImpl(
             }
             loadedState[intValueIdx] = counterValue
         }
+    }
+
+    override fun findTempDraftsByAuthor(
+        authorId: Long,
+        limit: Int,
+    ): List<Post> {
+        val safeLimit = limit.coerceIn(1, 50)
+        return selectSummaryPostQuery()
+            .where(
+                post.deletedAt.isNull,
+                post.author.id.eq(authorId),
+                post.isTempDraft.isTrue,
+                post.published.isFalse,
+            ).orderBy(post.modifiedAt.desc(), post.id.desc())
+            .limit(safeLimit.toLong())
+            .fetch()
+            .map(::toSummaryPost)
+    }
+
+    override fun findDueScheduledDraftIds(
+        now: Instant,
+        limit: Int,
+    ): List<Long> {
+        val safeLimit = limit.coerceIn(1, 100)
+        return queryFactory
+            .select(post.id)
+            .from(post)
+            .where(
+                post.deletedAt.isNull,
+                post.published.isFalse,
+                post.scheduledAt.isNotNull,
+                post.scheduledAt.loe(now),
+            ).orderBy(post.scheduledAt.asc(), post.id.asc())
+            .limit(safeLimit.toLong())
+            .fetch()
+            .filterNotNull()
+    }
+
+    override fun findPublishedSeriesPosts(
+        seriesName: String,
+        limit: Int,
+    ): List<PublicSeriesPostItemDto> {
+        val safeName = seriesName.trim().takeIf(String::isNotEmpty) ?: return emptyList()
+        val safeLimit = limit.coerceIn(1, 200)
+        return queryFactory
+            .select(
+                post.id,
+                post.title,
+                post.seriesOrder,
+                post.createdAt,
+            ).from(post)
+            .where(
+                post.deletedAt.isNull,
+                post.published.isTrue,
+                post.listed.isTrue,
+                post.seriesName.eq(safeName),
+            ).orderBy(post.seriesOrder.asc().nullsLast(), post.createdAt.asc(), post.id.asc())
+            .limit(safeLimit.toLong())
+            .fetch()
+            .map { tuple ->
+                PublicSeriesPostItemDto(
+                    id = tuple.get(post.id)!!,
+                    title = tuple.get(post.title)!!,
+                    seriesOrder = tuple.get(post.seriesOrder),
+                    createdAt = tuple.get(post.createdAt)!!,
+                )
+            }
+    }
+
+    override fun findDistinctSeriesNamesByAuthor(
+        authorId: Long,
+        limit: Int,
+    ): List<String> {
+        val safeLimit = limit.coerceIn(1, 100)
+        return queryFactory
+            .selectDistinct(post.seriesName)
+            .from(post)
+            .where(
+                post.deletedAt.isNull,
+                post.author.id.eq(authorId),
+                post.seriesName.isNotNull,
+            ).orderBy(post.seriesName.asc())
+            .limit(safeLimit.toLong())
+            .fetch()
+            .mapNotNull { it?.trim()?.takeIf(String::isNotEmpty) }
     }
 
     companion object {

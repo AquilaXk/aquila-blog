@@ -35,5 +35,9 @@ class PostWebDtoAssembler(
             listed = post.listed,
             summary = post.summaryText.orEmpty(),
             summarySource = post.summarySource,
+            scheduledAt = post.scheduledAt,
+            seriesName = post.seriesName,
+            seriesOrder = post.seriesOrder,
+            canonicalUrl = post.canonicalUrl,
         )
 }

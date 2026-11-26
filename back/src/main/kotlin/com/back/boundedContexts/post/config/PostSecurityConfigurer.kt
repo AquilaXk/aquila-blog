@@ -30,6 +30,7 @@ class PostSecurityConfigurer : PublicApiRouteContributor {
             PublicApiRouteSpec("/post/api/*/posts/{id:\\d+}/backlinks", HttpMethod.GET),
             PublicApiRouteSpec("/post/api/*/posts/{id:\\d+}/meta", HttpMethod.GET),
             PublicApiRouteSpec("/post/api/*/posts/{id:\\d+}/content", HttpMethod.GET),
+            PublicApiRouteSpec("/post/api/*/posts/{id:\\d+}/series", HttpMethod.GET),
             PublicApiRouteSpec("/post/api/*/images/**", HttpMethod.GET),
             PublicApiRouteSpec("/post/api/*/posts/{id:\\d+}/hit", HttpMethod.POST),
             PublicApiRouteSpec("/post/api/*/posts/{id:\\d+}/like", HttpMethod.PUT),

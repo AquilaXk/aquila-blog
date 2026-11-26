@@ -116,4 +116,11 @@ object PostPublicReadCachePolicies {
             sharedMaxAgeSeconds = 45,
             staleWhileRevalidateSeconds = 45,
         )
+    val SERIES =
+        PublicReadCachePolicy(
+            name = "series-max15-smax45-swr45",
+            maxAgeSeconds = 15,
+            sharedMaxAgeSeconds = 45,
+            staleWhileRevalidateSeconds = 45,
+        )
 }

@@ -28,6 +28,10 @@ data class PublicPostDetailMetaCacheDto(
     var summary: String = "",
     var summarySource: PostSummarySource = PostSummarySource.NONE,
     var thumbnail: String? = null,
+    var scheduledAt: Instant? = null,
+    var seriesName: String? = null,
+    var seriesOrder: Int? = null,
+    var canonicalUrl: String? = null,
 ) {
     fun merge(content: PublicPostDetailContentCacheDto): PostWithContentDto {
         val contentHtmlTrust = content.verifyContentHtmlTrust()
@@ -54,6 +58,10 @@ data class PublicPostDetailMetaCacheDto(
             contentHtmlSanitizerPolicyVersion = contentHtmlTrust.contentHtmlSanitizerPolicyVersion,
             contentHtmlTrustState = contentHtmlTrust.contentHtmlTrustState,
             thumbnail = thumbnail,
+            scheduledAt = scheduledAt,
+            seriesName = seriesName,
+            seriesOrder = seriesOrder,
+            canonicalUrl = canonicalUrl,
         )
     }
 
@@ -78,6 +86,10 @@ data class PublicPostDetailMetaCacheDto(
                 summary = post.summaryText.orEmpty(),
                 summarySource = post.summarySource,
                 thumbnail = post.thumbnail ?: PostPreviewExtractor.extractThumbnail(post.content),
+                scheduledAt = post.scheduledAt,
+                seriesName = post.seriesName,
+                seriesOrder = post.seriesOrder,
+                canonicalUrl = post.canonicalUrl,
             )
         }
     }
@@ -133,6 +145,10 @@ data class PublicPostDetailSnapshotCacheDto(
     var summary: String = "",
     var summarySource: PostSummarySource = PostSummarySource.NONE,
     var thumbnail: String? = null,
+    var scheduledAt: Instant? = null,
+    var seriesName: String? = null,
+    var seriesOrder: Int? = null,
+    var canonicalUrl: String? = null,
 ) {
     fun toPostWithContentDto(): PostWithContentDto {
         val contentHtmlTrust =
@@ -165,6 +181,10 @@ data class PublicPostDetailSnapshotCacheDto(
             contentHtmlSanitizerPolicyVersion = contentHtmlTrust.contentHtmlSanitizerPolicyVersion,
             contentHtmlTrustState = contentHtmlTrust.contentHtmlTrustState,
             thumbnail = thumbnail,
+            scheduledAt = scheduledAt,
+            seriesName = seriesName,
+            seriesOrder = seriesOrder,
+            canonicalUrl = canonicalUrl,
         )
     }
 
@@ -193,6 +213,10 @@ data class PublicPostDetailSnapshotCacheDto(
                 summary = detail.summary,
                 summarySource = detail.summarySource,
                 thumbnail = detail.thumbnail,
+                scheduledAt = detail.scheduledAt,
+                seriesName = detail.seriesName,
+                seriesOrder = detail.seriesOrder,
+                canonicalUrl = detail.canonicalUrl,
             )
     }
 }

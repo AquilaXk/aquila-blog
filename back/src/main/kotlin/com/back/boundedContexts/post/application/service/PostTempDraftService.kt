@@ -54,6 +54,39 @@ class PostTempDraftService(
         return newPost to true
     }
 
+    @Transactional
+    fun createNewTempDraft(author: Member): Post {
+        val persistenceAuthor = acquireTempDraftAuthorLock(author)
+        postHydrationService.hydrateMembersPublishedProfileWorkspaces(listOf(persistenceAuthor))
+        val newPost = postRepository.save(Post(0, persistenceAuthor, "임시글", "임시글 입니다.", isTempDraft = true))
+        updateTempDraftMarker(persistenceAuthor, newPost.id)
+        postRepository.flush()
+        postCounterService?.incrementMemberPostsCount(persistenceAuthor)
+        return newPost
+    }
+
+    fun listTempDrafts(author: Member): List<Post> {
+        val drafts = postRepository.findTempDraftsByAuthor(author.id, 50)
+        if (drafts.isEmpty()) return emptyList()
+        postHydrationService.hydratePostAttrs(drafts)
+        postHydrationService.hydrateMembersPublishedProfileWorkspaces(listOf(author))
+        return drafts
+    }
+
+    fun clearTrackedTempDraftIfMatches(
+        author: Member,
+        postId: Long,
+    ) {
+        if (resolveTrackedTempPostId(author) == postId) {
+            val nextDraftId =
+                postRepository
+                    .findTempDraftsByAuthor(author.id, 2)
+                    .firstOrNull { it.id != postId }
+                    ?.id
+            updateTempDraftMarker(author, nextDraftId)
+        }
+    }
+
     fun isTempDraft(post: Post): Boolean = post.isTempDraft || resolveTrackedTempPostId(post.author) == post.id
 
     fun resolveTempDraftPostIds(posts: List<Post>): Set<Long> {

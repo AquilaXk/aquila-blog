@@ -6,6 +6,7 @@ import com.back.boundedContexts.post.dto.FeedPostDto
 import com.back.boundedContexts.post.dto.PostDto
 import com.back.boundedContexts.post.dto.PostWithContentDto
 import com.back.boundedContexts.post.dto.PublicPostBacklinksResBody
+import com.back.boundedContexts.post.dto.PublicPostSeriesResBody
 import com.back.boundedContexts.post.dto.PublicPostsBootstrapDto
 import com.back.boundedContexts.post.dto.PublicSitemapPostsResBody
 import com.back.boundedContexts.post.dto.PublicWikilinkCatalogResBody
@@ -78,4 +79,6 @@ interface PostPublicReadQueryUseCase {
     fun getPublicWikilinkCatalog(): PublicWikilinkCatalogResBody
 
     fun getPublicBacklinks(id: Long): PublicPostBacklinksResBody
+
+    fun getPostSeries(id: Long): PublicPostSeriesResBody = PublicPostSeriesResBody(null, emptyList())
 }

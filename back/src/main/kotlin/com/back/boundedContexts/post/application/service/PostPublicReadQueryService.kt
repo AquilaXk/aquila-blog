@@ -14,6 +14,7 @@ import com.back.boundedContexts.post.dto.PublicPostBacklinksResBody
 import com.back.boundedContexts.post.dto.PublicPostDetailContentCacheDto
 import com.back.boundedContexts.post.dto.PublicPostDetailMetaCacheDto
 import com.back.boundedContexts.post.dto.PublicPostDetailSnapshotCacheDto
+import com.back.boundedContexts.post.dto.PublicPostSeriesResBody
 import com.back.boundedContexts.post.dto.PublicPostsBootstrapDto
 import com.back.boundedContexts.post.dto.PublicSitemapPostsResBody
 import com.back.boundedContexts.post.dto.PublicWikilinkCatalogResBody
@@ -545,6 +546,27 @@ class PostPublicReadQueryService(
             val body = PublicPostBacklinksResBody(items = backlinks)
             cacheBacklinks(id, body)
             body
+        }
+
+    @Transactional(readOnly = true)
+    override fun getPostSeries(id: Long): PublicPostSeriesResBody =
+        runReadQuery("series", "id=$id") {
+            postReadBulkheadService.withExplorePermit {
+                if (isDetailNegativeCached(id)) {
+                    throw AppException(ErrorCode.NOT_FOUND, "존재하지 않는 글입니다.")
+                }
+                if (!postUseCase.isPublicDetailReadable(id)) {
+                    markDetailNegativeCache(id)
+                    throw AppException(ErrorCode.NOT_FOUND, "존재하지 않는 글입니다.")
+                }
+                val (meta, _) = getOrLoadPublicPostDetailMeta(id)
+                val seriesName = meta.seriesName?.trim()?.takeIf { it.isNotEmpty() }
+                if (!meta.listed || seriesName == null) {
+                    return@withExplorePermit PublicPostSeriesResBody(seriesName = null, items = emptyList())
+                }
+                val items = postUseCase.findPublishedSeriesPosts(seriesName)
+                PublicPostSeriesResBody(seriesName = seriesName, items = items)
+            }
         }
 
     @Transactional(readOnly = true)

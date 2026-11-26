@@ -35,6 +35,10 @@ data class PostWithContentDto(
     val contentHtmlSanitizerPolicyVersion: String? = null,
     val contentHtmlTrustState: ContentHtmlTrustState = ContentHtmlTrustState.UNKNOWN,
     val thumbnail: String? = null,
+    val scheduledAt: Instant? = null,
+    val seriesName: String? = null,
+    val seriesOrder: Int? = null,
+    val canonicalUrl: String? = null,
 ) {
     private constructor(post: Post, contentHtmlTrust: ContentHtmlTrustResult) : this(
         post.id,
@@ -60,6 +64,10 @@ data class PostWithContentDto(
         contentHtmlSanitizerPolicyVersion = contentHtmlTrust.contentHtmlSanitizerPolicyVersion,
         contentHtmlTrustState = contentHtmlTrust.contentHtmlTrustState,
         thumbnail = post.thumbnail ?: PostPreviewExtractor.extractThumbnail(post.content),
+        scheduledAt = post.scheduledAt,
+        seriesName = post.seriesName,
+        seriesOrder = post.seriesOrder,
+        canonicalUrl = post.canonicalUrl,
     )
 
     constructor(post: Post) : this(

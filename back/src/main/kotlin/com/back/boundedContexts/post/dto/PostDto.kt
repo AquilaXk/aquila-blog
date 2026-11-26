@@ -29,6 +29,10 @@ data class PostDto
         val tags: List<String> = emptyList(),
         val category: List<String> = emptyList(),
         val summarySource: PostSummarySource = PostSummarySource.NONE,
+        val scheduledAt: Instant? = null,
+        val seriesName: String? = null,
+        val seriesOrder: Int? = null,
+        val canonicalUrl: String? = null,
     ) {
         constructor(post: Post) : this(
             post,
@@ -60,6 +64,10 @@ data class PostDto
             tags = meta.tags,
             category = meta.categories,
             summarySource = post.summarySource,
+            scheduledAt = post.scheduledAt,
+            seriesName = post.seriesName,
+            seriesOrder = post.seriesOrder,
+            canonicalUrl = post.canonicalUrl,
         )
 
         private constructor(

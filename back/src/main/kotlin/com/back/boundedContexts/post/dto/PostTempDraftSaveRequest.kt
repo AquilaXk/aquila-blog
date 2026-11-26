@@ -2,7 +2,9 @@ package com.back.boundedContexts.post.dto
 
 import com.back.boundedContexts.post.model.PostSummaryMode
 import io.swagger.v3.oas.annotations.media.Schema
+import jakarta.validation.constraints.Min
 import jakarta.validation.constraints.Size
+import java.time.Instant
 
 /**
  * 참조 구현: TryGhost/Ghost (MIT), payloadcms/payload (MIT)
@@ -27,4 +29,15 @@ data class PostTempDraftSaveRequest(
     @field:Size(max = 2048)
     @field:Schema(description = "대표 썸네일 URL", example = "https://example.com/thumb.jpg", maxLength = 2048)
     val thumbnail: String? = null,
+    @field:Schema(description = "예약 발행 시각")
+    val scheduledAt: Instant? = null,
+    @field:Size(max = 120)
+    @field:Schema(description = "연재 시리즈명", maxLength = 120)
+    val seriesName: String? = null,
+    @field:Min(1)
+    @field:Schema(description = "시리즈 순번")
+    val seriesOrder: Int? = null,
+    @field:Size(max = 2048)
+    @field:Schema(description = "교차 게시 정본 URL", maxLength = 2048)
+    val canonicalUrl: String? = null,
 )

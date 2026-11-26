@@ -11,6 +11,7 @@ import com.back.boundedContexts.post.dto.AdmPostFacetCounts
 import com.back.boundedContexts.post.dto.PostInteractionReadStateDto
 import com.back.boundedContexts.post.dto.PublicBacklinkCandidateProjection
 import com.back.boundedContexts.post.dto.PublicPostDetailContentCacheDto
+import com.back.boundedContexts.post.dto.PublicSeriesPostItemDto
 import com.back.boundedContexts.post.dto.PublicSitemapPostItemDto
 import com.back.boundedContexts.post.dto.PublicWikilinkCatalogItemDto
 import org.hibernate.Hibernate
@@ -194,6 +195,26 @@ class PostRepositoryAdapter(
     ) = postRepository.updateLikesCountById(postId, likesCount)
 
     override fun lockByIdForUpdate(postId: Long) = postRepository.lockByIdForUpdate(postId)
+
+    override fun findTempDraftsByAuthor(
+        authorId: Long,
+        limit: Int,
+    ): List<Post> = postRepository.findTempDraftsByAuthor(authorId, limit)
+
+    override fun findDueScheduledDraftIds(
+        now: Instant,
+        limit: Int,
+    ): List<Long> = postRepository.findDueScheduledDraftIds(now, limit)
+
+    override fun findPublishedSeriesPosts(
+        seriesName: String,
+        limit: Int,
+    ): List<PublicSeriesPostItemDto> = postRepository.findPublishedSeriesPosts(seriesName, limit)
+
+    override fun findDistinctSeriesNamesByAuthor(
+        authorId: Long,
+        limit: Int,
+    ): List<String> = postRepository.findDistinctSeriesNamesByAuthor(authorId, limit)
 
     private fun PostRepositoryPort.PagedQuery.toPageRequest(): PageRequest =
         PageRequest.of(

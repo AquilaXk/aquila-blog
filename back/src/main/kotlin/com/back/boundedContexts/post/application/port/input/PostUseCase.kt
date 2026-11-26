@@ -9,6 +9,7 @@ import com.back.boundedContexts.post.dto.PostRevisionSnapshotDto
 import com.back.boundedContexts.post.dto.PostRevisionSummaryDto
 import com.back.boundedContexts.post.dto.PublicBacklinkCandidateProjection
 import com.back.boundedContexts.post.dto.PublicPostDetailContentCacheDto
+import com.back.boundedContexts.post.dto.PublicSeriesPostItemDto
 import com.back.boundedContexts.post.dto.PublicSitemapPostItemDto
 import com.back.boundedContexts.post.dto.PublicWikilinkCatalogItemDto
 import com.back.boundedContexts.post.dto.TagCountDto
@@ -34,6 +35,10 @@ interface PostUseCase {
         contentHtml: String? = null,
         summary: String? = null,
         summaryMode: PostSummaryMode,
+        scheduledAt: Instant? = null,
+        seriesName: String? = null,
+        seriesOrder: Int? = null,
+        canonicalUrl: String? = null,
     ): Post
 
     fun findById(id: Long): Post?
@@ -44,9 +49,9 @@ interface PostUseCase {
 
     fun findPublicDetailContentById(id: Long): PublicPostDetailContentCacheDto?
 
-    fun findInteractionReadStateById(id: Long): PostInteractionReadStateDto?
-
     fun findLatest(): Post?
+
+    fun findInteractionReadStateById(id: Long): PostInteractionReadStateDto?
 
     fun modify(
         actor: Member,
@@ -59,6 +64,11 @@ interface PostUseCase {
         contentHtml: String? = null,
         summary: String? = null,
         summaryMode: PostSummaryMode? = null,
+        scheduledAt: Instant? = null,
+        seriesName: String? = null,
+        seriesOrder: Int? = null,
+        canonicalUrl: String? = null,
+        updatePublishingMetadata: Boolean = false,
     )
 
     fun delete(
@@ -216,4 +226,17 @@ interface PostUseCase {
         revisionId: Long,
         expectedVersion: Long?,
     ): Post = error("restorePostRevisionForAdmin with expectedVersion not implemented")
+
+    fun listTempDrafts(author: Member): List<Post> = emptyList()
+
+    fun createNewTempDraft(author: Member): Post = error("createNewTempDraft not implemented")
+
+    fun deleteTempDraft(
+        author: Member,
+        postId: Long,
+    ): Unit = error("deleteTempDraft not implemented")
+
+    fun listSeriesNames(author: Member): List<String> = emptyList()
+
+    fun findPublishedSeriesPosts(seriesName: String): List<PublicSeriesPostItemDto> = emptyList()
 }

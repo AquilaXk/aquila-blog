@@ -20,6 +20,7 @@ import com.back.boundedContexts.post.dto.PostRevisionSnapshotDto
 import com.back.boundedContexts.post.dto.PostRevisionSummaryDto
 import com.back.boundedContexts.post.dto.PublicBacklinkCandidateProjection
 import com.back.boundedContexts.post.dto.PublicPostDetailContentCacheDto
+import com.back.boundedContexts.post.dto.PublicSeriesPostItemDto
 import com.back.boundedContexts.post.dto.PublicSitemapPostItemDto
 import com.back.boundedContexts.post.dto.PublicWikilinkCatalogItemDto
 import com.back.boundedContexts.post.dto.TagCountDto
@@ -102,8 +103,22 @@ class PostApplicationService(
         contentHtml: String?,
         summary: String?,
         summaryMode: PostSummaryMode,
+        scheduledAt: Instant?,
+        seriesName: String?,
+        seriesOrder: Int?,
+        canonicalUrl: String?,
     ): Post {
         validateCreateSummaryIntent(summary, summaryMode)
+        val normalizedMetadata =
+            PostPublishingMetadataValidator.normalizeAll(
+                published = published,
+                scheduledAt = scheduledAt,
+                existingScheduledAt = null,
+                seriesName = seriesName,
+                seriesOrder = seriesOrder,
+                canonicalUrl = canonicalUrl,
+                now = clock.instant(),
+            )
         val persistenceAuthor = author
         val normalizedIdempotencyKey = idempotencyKey?.trim()?.takeIf { it.isNotBlank() }
 
@@ -119,6 +134,7 @@ class PostApplicationService(
                     contentHtml = contentHtml,
                     summary = summary,
                     summaryMode = summaryMode,
+                    normalizedMetadata = normalizedMetadata,
                 )
             return completePostWrite(
                 written.post,
@@ -158,6 +174,7 @@ class PostApplicationService(
                 contentHtml = contentHtml,
                 summary = summary,
                 summaryMode = summaryMode,
+                normalizedMetadata = normalizedMetadata,
             )
 
         requestSlot.postId = written.post.id
@@ -249,11 +266,32 @@ class PostApplicationService(
         contentHtml: String?,
         summary: String?,
         summaryMode: PostSummaryMode?,
+        scheduledAt: Instant?,
+        seriesName: String?,
+        seriesOrder: Int?,
+        canonicalUrl: String?,
+        updatePublishingMetadata: Boolean,
     ) {
         postHydrationService.hydratePostAttrs(post)
         val currentVersion = post.version ?: 0L
         val wasTempDraft = postTempDraftService.isTempDraft(post)
         verifyExpectedVersion(currentVersion, expectedVersion)
+
+        val effectivePublished = published ?: post.published
+        val normalizedMetadata =
+            if (updatePublishingMetadata) {
+                PostPublishingMetadataValidator.normalizeAll(
+                    published = effectivePublished,
+                    scheduledAt = scheduledAt,
+                    existingScheduledAt = post.scheduledAt,
+                    seriesName = seriesName,
+                    seriesOrder = seriesOrder,
+                    canonicalUrl = canonicalUrl,
+                    now = clock.instant(),
+                )
+            } else {
+                null
+            }
 
         val previousTitle = post.title
         val previousContent = post.content
@@ -263,6 +301,9 @@ class PostApplicationService(
         val previousContentHtmlTrustState = post.contentHtmlTrustState
         val previousSummaryText = post.summaryText
         val previousSummarySource = post.summarySource
+        val previousSeriesName = post.seriesName
+        val previousSeriesOrder = post.seriesOrder
+        val previousCanonicalUrl = post.canonicalUrl
         val wasPublic = isPubliclyListed(post)
         val wasPublished = post.published
         val previousTags = postTagIndexService.extractNormalizedTags(previousContent)
@@ -291,6 +332,16 @@ class PostApplicationService(
                     thumbnail = thumbnail,
                 )
             }
+            if (normalizedMetadata != null) {
+                post.updatePublishingMetadata(
+                    scheduledAt = normalizedMetadata.scheduledAt,
+                    seriesName = normalizedMetadata.seriesName,
+                    seriesOrder = normalizedMetadata.seriesOrder,
+                    canonicalUrl = normalizedMetadata.canonicalUrl,
+                )
+            } else if (post.published) {
+                post.scheduledAt = null
+            }
             resolveModifiedSummary(
                 title = title,
                 content = content,
@@ -303,7 +354,7 @@ class PostApplicationService(
             )?.let { resolved -> post.applyResolvedSummary(resolved) }
             if (wasTempDraft) {
                 post.isTempDraft = false
-                postTempDraftService.updateTempDraftMarker(post.author, null)
+                postTempDraftService.clearTrackedTempDraftIfMatches(post.author, post.id)
             }
             postRepository.flush()
             afterTags = postTagIndexService.syncPostTags(post)
@@ -335,6 +386,10 @@ class PostApplicationService(
                 previousContentHtmlTrustState != post.contentHtmlTrustState
         val titleChanged = previousTitle != post.title
         val summaryChanged = previousSummaryText != post.summaryText || previousSummarySource != post.summarySource
+        val metadataChanged =
+            previousSeriesName != post.seriesName ||
+                previousSeriesOrder != post.seriesOrder ||
+                previousCanonicalUrl != post.canonicalUrl
         val tagChanged = previousTags != afterTags
         val affectsPublicRead = wasPublic || isPublic
         enqueuePostWriteSideEffect(
@@ -351,7 +406,7 @@ class PostApplicationService(
                             buildPublicPostChangeImpacts(
                                 listingVisibilityChanged = listingVisibilityChanged,
                                 titleChanged = titleChanged,
-                                contentChanged = contentChanged || contentHtmlChanged,
+                                contentChanged = contentChanged || contentHtmlChanged || metadataChanged,
                                 tagChanged = tagChanged,
                                 summaryChanged = summaryChanged,
                             ),
@@ -387,6 +442,7 @@ class PostApplicationService(
         contentHtml: String?,
         summary: String?,
         summaryMode: PostSummaryMode,
+        normalizedMetadata: PostPublishingMetadataValidator.NormalizedMetadata,
     ): WrittenPostResult {
         val resolvedSummary = resolveCreatedSummary(title, content, summary, summaryMode)
         val contentHtmlTrust = HtmlContentSanitizer.sanitizeForPersistence(contentHtml)
@@ -402,7 +458,15 @@ class PostApplicationService(
                 contentHtmlSanitizerPolicyVersion = contentHtmlTrust.contentHtmlSanitizerPolicyVersion,
                 contentHtmlTrustState = contentHtmlTrust.contentHtmlTrustState,
                 thumbnail = PostPreviewExtractor.extractThumbnail(content),
-            ).also { it.applyResolvedSummary(resolvedSummary) }
+            ).also {
+                it.applyResolvedSummary(resolvedSummary)
+                it.updatePublishingMetadata(
+                    scheduledAt = normalizedMetadata.scheduledAt,
+                    seriesName = normalizedMetadata.seriesName,
+                    seriesOrder = normalizedMetadata.seriesOrder,
+                    canonicalUrl = normalizedMetadata.canonicalUrl,
+                )
+            }
         val savedPost = postRepository.saveAndFlush(post)
         postHydrationService.hydrateMembersPublishedProfileWorkspaces(listOf(persistenceAuthor))
         val createdTags = postTagIndexService.syncPostTags(savedPost)
@@ -520,7 +584,7 @@ class PostApplicationService(
         }
         postRepository.deleteImageReferencesByPostId(post.id)
         if (wasTempDraft) {
-            postTempDraftService.updateTempDraftMarker(post.author, null)
+            postTempDraftService.clearTrackedTempDraftIfMatches(post.author, post.id)
         }
         postCounterService.decrementMemberPostsCount(Member(post.author.id))
 
@@ -1024,15 +1088,33 @@ class PostApplicationService(
                 requestedMode = request.summaryMode,
             )
 
+        val normalizedMetadata =
+            PostPublishingMetadataValidator.normalizeAll(
+                published = false,
+                scheduledAt = request.scheduledAt,
+                existingScheduledAt = post.scheduledAt,
+                seriesName = request.seriesName,
+                seriesOrder = request.seriesOrder,
+                canonicalUrl = request.canonicalUrl,
+                now = clock.instant(),
+            )
+
         val isSameSummary =
             resolvedSummary == null ||
                 (resolvedSummary.text == previousSummaryText && resolvedSummary.source == previousSummarySource)
+
+        val isSameMetadata =
+            post.scheduledAt == normalizedMetadata.scheduledAt &&
+                post.seriesName == normalizedMetadata.seriesName &&
+                post.seriesOrder == normalizedMetadata.seriesOrder &&
+                post.canonicalUrl == normalizedMetadata.canonicalUrl
 
         val isNoOp =
             previousTitle == request.title &&
                 previousContent == request.content &&
                 post.thumbnail == thumbnail &&
-                isSameSummary
+                isSameSummary &&
+                isSameMetadata
 
         if (isNoOp) {
             return post
@@ -1044,6 +1126,12 @@ class PostApplicationService(
             published = false,
             listed = false,
             thumbnail = thumbnail,
+        )
+        post.updatePublishingMetadata(
+            scheduledAt = normalizedMetadata.scheduledAt,
+            seriesName = normalizedMetadata.seriesName,
+            seriesOrder = normalizedMetadata.seriesOrder,
+            canonicalUrl = normalizedMetadata.canonicalUrl,
         )
         post.isTempDraft = true
         post.published = false
@@ -1098,6 +1186,51 @@ class PostApplicationService(
     override fun isTempDraft(post: Post): Boolean = postTempDraftService.isTempDraft(post)
 
     override fun resolveTempDraftPostIds(posts: List<Post>): Set<Long> = postTempDraftService.resolveTempDraftPostIds(posts)
+
+    @Transactional(readOnly = true)
+    override fun listTempDrafts(author: Member): List<Post> = postTempDraftService.listTempDrafts(author)
+
+    @Transactional
+    override fun createNewTempDraft(author: Member): Post =
+        postTempDraftService.createNewTempDraft(author).also { post ->
+            val invalidator = postReadCacheInvalidator ?: return@also
+            val request =
+                PostReadCacheInvalidationRequest(
+                    postId = post.id,
+                    beforeTags = emptyList(),
+                    afterTags = emptyList(),
+                    scope = PostReadCacheInvalidationScope.AdminPostListOnly,
+                    evictReason = "temp-draft-create-new",
+                )
+            scheduleCacheInvalidationAfterCommit(post.id) {
+                invalidator.invalidate(request)
+            }
+        }
+
+    @Transactional
+    override fun deleteTempDraft(
+        author: Member,
+        postId: Long,
+    ) {
+        val post =
+            postRepository.findById(postId).orElse(null)
+                ?: throw AppException(ErrorCode.NOT_FOUND, "존재하지 않는 글입니다.")
+        if (post.deletedAt != null) {
+            throw AppException(ErrorCode.NOT_FOUND, "존재하지 않는 글입니다.")
+        }
+        post.checkActorCanModify(author)
+        if (!postTempDraftService.isTempDraft(post) || post.published) {
+            throw AppException(ErrorCode.BAD_REQUEST, "임시저장 상태의 글만 삭제할 수 있습니다.")
+        }
+        delete(post, author)
+    }
+
+    @Transactional(readOnly = true)
+    override fun listSeriesNames(author: Member): List<String> = postRepository.findDistinctSeriesNamesByAuthor(author.id, 100)
+
+    @Transactional(readOnly = true)
+    override fun findPublishedSeriesPosts(seriesName: String): List<PublicSeriesPostItemDto> =
+        postRepository.findPublishedSeriesPosts(seriesName, 100)
 
     /**
      * 참조 구현: apache/answer (Apache-2.0), TryGhost/Ghost (MIT)

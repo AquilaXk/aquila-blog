@@ -312,8 +312,26 @@ class OpenApiContractExportTest : BaseControllerIntegrationTest() {
         assertThat(openApiNode.path("paths").has("/post/api/v1/posts/sitemap")).isTrue()
         assertThat(openApiNode.path("paths").has("/post/api/v1/posts/wikilink-catalog")).isTrue()
         assertThat(openApiNode.path("paths").has("/post/api/v1/posts/{id}/backlinks")).isTrue()
+        assertThat(openApiNode.path("paths").has("/post/api/v1/posts/{id}/series")).isTrue()
         assertThat(openApiNode.path("paths").has("/post/api/v1/adm/posts/{id}/revisions")).isTrue()
         assertThat(openApiNode.path("paths").has("/post/api/v1/adm/posts/{id}/revisions/{revisionId}/restore")).isTrue()
+        assertThat(openApiNode.path("paths").has("/post/api/v1/adm/posts/temp")).isTrue()
+        assertThat(openApiNode.path("paths").has("/post/api/v1/adm/posts/temp/{id}")).isTrue()
+        assertThat(openApiNode.path("paths").has("/post/api/v1/adm/posts/series")).isTrue()
+        listOf(
+            "PostWriteRequest",
+            "PostModifyRequest",
+            "PostTempDraftSaveRequest",
+            "PostDto",
+            "PostWithContentDto",
+            "PostWriteResultDto",
+        ).forEach { schemaName ->
+            val props = schemas.path(schemaName).path("properties")
+            assertThat(props.has("scheduledAt")).describedAs("%s.scheduledAt", schemaName).isTrue()
+            assertThat(props.has("seriesName")).describedAs("%s.seriesName", schemaName).isTrue()
+            assertThat(props.has("seriesOrder")).describedAs("%s.seriesOrder", schemaName).isTrue()
+            assertThat(props.has("canonicalUrl")).describedAs("%s.canonicalUrl", schemaName).isTrue()
+        }
 
         val outputPath = Path.of("build/openapi/openapi.json")
         Files.createDirectories(outputPath.parent)

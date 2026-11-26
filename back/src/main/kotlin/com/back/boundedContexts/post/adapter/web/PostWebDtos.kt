@@ -7,13 +7,14 @@ import jakarta.validation.constraints.Min
 import jakarta.validation.constraints.NotBlank
 import jakarta.validation.constraints.NotNull
 import jakarta.validation.constraints.Size
+import java.time.Instant
 
 data class PostWriteRequest(
     @field:NotBlank
     @field:Size(min = 2, max = 100)
     val title: String,
     @field:NotBlank
-    @field:Size(min = 2)
+    @field:Size(min = 2, max = 500_000)
     val content: String,
     val contentHtml: String? = null,
     val published: Boolean?,
@@ -21,8 +22,15 @@ data class PostWriteRequest(
     @field:NotNull
     @field:Schema(requiredMode = Schema.RequiredMode.REQUIRED)
     val summaryMode: PostSummaryMode,
-    @field:Size(max = 1_000)
+    @field:Size(max = 300)
     val summary: String? = null,
+    val scheduledAt: Instant? = null,
+    @field:Size(max = 120)
+    val seriesName: String? = null,
+    @field:Min(1)
+    val seriesOrder: Int? = null,
+    @field:Size(max = 2048)
+    val canonicalUrl: String? = null,
 )
 
 data class PostModifyRequest(
@@ -30,7 +38,7 @@ data class PostModifyRequest(
     @field:Size(min = 2, max = 100)
     val title: String,
     @field:NotBlank
-    @field:Size(min = 2)
+    @field:Size(min = 2, max = 500_000)
     val content: String,
     val contentHtml: String? = null,
     val published: Boolean? = null,
@@ -38,8 +46,15 @@ data class PostModifyRequest(
     @field:Min(0)
     val version: Long,
     val summaryMode: PostSummaryMode? = null,
-    @field:Size(max = 1_000)
+    @field:Size(max = 300)
     val summary: String? = null,
+    val scheduledAt: Instant? = null,
+    @field:Size(max = 120)
+    val seriesName: String? = null,
+    @field:Min(1)
+    val seriesOrder: Int? = null,
+    @field:Size(max = 2048)
+    val canonicalUrl: String? = null,
 )
 
 data class PostWriteResultDto(
@@ -50,6 +65,10 @@ data class PostWriteResultDto(
     val listed: Boolean,
     val summary: String,
     val summarySource: PostSummarySource,
+    val scheduledAt: Instant? = null,
+    val seriesName: String? = null,
+    val seriesOrder: Int? = null,
+    val canonicalUrl: String? = null,
 )
 
 data class PostHitResBody(

@@ -93,6 +93,27 @@ import java.time.Instant
     WHERE deleted_at IS NULL AND published = true AND listed = false
     """,
 )
+@AfterDDL(
+    """
+    CREATE INDEX IF NOT EXISTS post_idx_scheduled_publish_due
+    ON post (scheduled_at ASC, id ASC)
+    WHERE deleted_at IS NULL AND published = FALSE AND scheduled_at IS NOT NULL
+    """,
+)
+@AfterDDL(
+    """
+    CREATE INDEX IF NOT EXISTS post_idx_series_published_order
+    ON post (series_name ASC, series_order ASC, created_at ASC, id ASC)
+    WHERE deleted_at IS NULL AND published = TRUE AND listed = TRUE AND series_name IS NOT NULL
+    """,
+)
+@AfterDDL(
+    """
+    CREATE INDEX IF NOT EXISTS post_idx_author_temp_draft_modified
+    ON post (author_id, modified_at DESC, id DESC)
+    WHERE deleted_at IS NULL AND is_temp_draft = TRUE AND published = FALSE
+    """,
+)
 class Post(
     @field:Id
     @field:SequenceGenerator(name = "post_seq_gen", sequenceName = "post_seq", allocationSize = 50)
@@ -143,6 +164,14 @@ class Post(
     @field:Column(name = "hit_count", nullable = false)
     @org.hibernate.annotations.OptimisticLock(excluded = true)
     override var hitCount: Int = 0,
+    @field:Column(name = "scheduled_at")
+    var scheduledAt: Instant? = null,
+    @field:Column(name = "series_name", length = 120)
+    var seriesName: String? = null,
+    @field:Column(name = "series_order")
+    var seriesOrder: Int? = null,
+    @field:Column(name = "canonical_url", length = 2048)
+    var canonicalUrl: String? = null,
 ) : BaseTime(id),
     PostHasHit,
     PostHasLikes,
@@ -211,5 +240,17 @@ class Post(
         summaryContentHash = contentHash
         summaryAlgorithmVersion = algorithmVersion
         summaryGeneratedAt = generatedAt
+    }
+
+    fun updatePublishingMetadata(
+        scheduledAt: Instant?,
+        seriesName: String?,
+        seriesOrder: Int?,
+        canonicalUrl: String?,
+    ) {
+        this.scheduledAt = if (this.published) null else scheduledAt
+        this.seriesName = seriesName
+        this.seriesOrder = if (seriesName != null) seriesOrder else null
+        this.canonicalUrl = canonicalUrl
     }
 }

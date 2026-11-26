@@ -1116,6 +1116,59 @@
         ]
       }
     },
+    "/post/api/v1/adm/posts/temp": {
+      "get": {
+        "tags": [
+          "ApiV1AdmPostController"
+        ],
+        "summary": "관리자용 임시초안 목록",
+        "operationId": "listTempDrafts",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/PostDto"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ]
+      },
+      "post": {
+        "tags": [
+          "ApiV1AdmPostController"
+        ],
+        "summary": "관리자용 새 임시초안 생성",
+        "operationId": "createNewTempDraft",
+        "responses": {
+          "201": {
+            "description": "Created",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/RsDataPostWithContentDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ]
+      }
+    },
     "/post/api/v1/adm/posts/bulk": {
       "post": {
         "tags": [
@@ -2150,6 +2203,38 @@
         }
       }
     },
+    "/post/api/v1/posts/{id}/series": {
+      "get": {
+        "tags": [
+          "api-v-1-post-public-read-controller"
+        ],
+        "operationId": "getSeries",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64",
+              "exclusiveMinimum": 0
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublicPostSeriesResBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/post/api/v1/posts/{id}/backlinks": {
       "get": {
         "tags": [
@@ -3027,6 +3112,35 @@
         ]
       }
     },
+    "/post/api/v1/adm/posts/series": {
+      "get": {
+        "tags": [
+          "ApiV1AdmPostController"
+        ],
+        "summary": "관리자용 연재 시리즈 목록",
+        "operationId": "listSeries",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ]
+      }
+    },
     "/post/api/v1/adm/posts/deleted": {
       "get": {
         "tags": [
@@ -3456,6 +3570,44 @@
         ]
       }
     },
+    "/post/api/v1/adm/posts/temp/{id}": {
+      "delete": {
+        "tags": [
+          "ApiV1AdmPostController"
+        ],
+        "summary": "관리자용 임시초안 삭제",
+        "operationId": "deleteTempDraft",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64",
+              "exclusiveMinimum": 0
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/RsDataVoid"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ]
+      }
+    },
     "/member/api/v1/auth/logout": {
       "delete": {
         "tags": [
@@ -3627,7 +3779,7 @@
           },
           "content": {
             "type": "string",
-            "maxLength": 2147483647,
+            "maxLength": 500000,
             "minLength": 2
           },
           "contentHtml": {
@@ -3669,7 +3821,38 @@
               "string",
               "null"
             ],
-            "maxLength": 1000,
+            "maxLength": 300,
+            "minLength": 0
+          },
+          "scheduledAt": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
+          "seriesName": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "maxLength": 120,
+            "minLength": 0
+          },
+          "seriesOrder": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int32",
+            "minimum": 1
+          },
+          "canonicalUrl": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "maxLength": 2048,
             "minLength": 0
           }
         },
@@ -3709,6 +3892,32 @@
               "EXTRACTED",
               "MIGRATED",
               "NONE"
+            ]
+          },
+          "scheduledAt": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
+          "seriesName": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "seriesOrder": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int32"
+          },
+          "canonicalUrl": {
+            "type": [
+              "string",
+              "null"
             ]
           }
         }
@@ -3809,6 +4018,41 @@
             ],
             "description": "대표 썸네일 URL",
             "example": "https://example.com/thumb.jpg",
+            "maxLength": 2048,
+            "minLength": 0
+          },
+          "scheduledAt": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time",
+            "description": "예약 발행 시각"
+          },
+          "seriesName": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "연재 시리즈명",
+            "maxLength": 120,
+            "minLength": 0
+          },
+          "seriesOrder": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int32",
+            "description": "시리즈 순번",
+            "minimum": 1
+          },
+          "canonicalUrl": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "교차 게시 정본 URL",
             "maxLength": 2048,
             "minLength": 0
           }
@@ -4600,7 +4844,7 @@
           },
           "content": {
             "type": "string",
-            "maxLength": 2147483647,
+            "maxLength": 500000,
             "minLength": 2
           },
           "contentHtml": {
@@ -4633,7 +4877,38 @@
               "string",
               "null"
             ],
-            "maxLength": 1000,
+            "maxLength": 300,
+            "minLength": 0
+          },
+          "scheduledAt": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
+          "seriesName": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "maxLength": 120,
+            "minLength": 0
+          },
+          "seriesOrder": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int32",
+            "minimum": 1
+          },
+          "canonicalUrl": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "maxLength": 2048,
             "minLength": 0
           }
         },
@@ -4724,6 +4999,32 @@
               "EXTRACTED",
               "MIGRATED",
               "NONE"
+            ]
+          },
+          "scheduledAt": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
+          "seriesName": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "seriesOrder": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int32"
+          },
+          "canonicalUrl": {
+            "type": [
+              "string",
+              "null"
             ]
           }
         }
@@ -4873,6 +5174,32 @@
             ]
           },
           "thumbnail": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "scheduledAt": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
+          "seriesName": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "seriesOrder": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int32"
+          },
+          "canonicalUrl": {
             "type": [
               "string",
               "null"
@@ -6084,6 +6411,46 @@
           },
           "paged": {
             "type": "boolean"
+          }
+        }
+      },
+      "PublicPostSeriesResBody": {
+        "type": "object",
+        "properties": {
+          "seriesName": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PublicSeriesPostItemDto"
+            }
+          }
+        }
+      },
+      "PublicSeriesPostItemDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "title": {
+            "type": "string"
+          },
+          "seriesOrder": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int32"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
           }
         }
       },

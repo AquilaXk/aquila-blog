@@ -8,6 +8,7 @@ import com.back.boundedContexts.post.dto.FeedPostDto
 import com.back.boundedContexts.post.dto.PostDto
 import com.back.boundedContexts.post.dto.PostWithContentDto
 import com.back.boundedContexts.post.dto.PublicPostBacklinksResBody
+import com.back.boundedContexts.post.dto.PublicPostSeriesResBody
 import com.back.boundedContexts.post.dto.PublicPostsBootstrapDto
 import com.back.boundedContexts.post.dto.PublicSitemapPostsResBody
 import com.back.boundedContexts.post.dto.PublicWikilinkCatalogResBody
@@ -421,6 +422,26 @@ class ApiV1PostPublicReadController(
             surrogateKeys = emptySet(),
             startedAtNanos = startedAtNanos,
             originDescription = "detail",
+            body = data,
+        )
+    }
+
+    @GetMapping("/{id}/series")
+    fun getSeries(
+        request: HttpServletRequest,
+        response: HttpServletResponse,
+        @PathVariable @Positive id: Long,
+    ): ResponseEntity<PublicPostSeriesResBody> {
+        val startedAtNanos = System.nanoTime()
+        val data = postPublicReadQueryUseCase.getPostSeries(id)
+        val weakEtag = postPublicReadResponseFactory.buildSeriesWeakEtag(id, data)
+        return postPublicReadResponseFactory.respondWithWeakEtag(
+            request = request,
+            response = response,
+            cachePolicy = PostPublicReadCachePolicies.SERIES,
+            surrogateKeys = setOf(PostCacheTags.LIST, PostCacheTags.DETAIL),
+            weakEtag = weakEtag,
+            startedAtNanos = startedAtNanos,
             body = data,
         )
     }

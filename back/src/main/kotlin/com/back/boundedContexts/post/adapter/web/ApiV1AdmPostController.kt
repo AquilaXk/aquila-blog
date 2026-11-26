@@ -23,6 +23,7 @@ import io.swagger.v3.oas.annotations.tags.Tag
 import jakarta.validation.Valid
 import jakarta.validation.constraints.Min
 import jakarta.validation.constraints.Positive
+import org.springframework.http.HttpStatus
 import org.springframework.security.core.annotation.AuthenticationPrincipal
 import org.springframework.transaction.annotation.Transactional
 import org.springframework.web.bind.annotation.DeleteMapping
@@ -32,6 +33,7 @@ import org.springframework.web.bind.annotation.PostMapping
 import org.springframework.web.bind.annotation.RequestBody
 import org.springframework.web.bind.annotation.RequestMapping
 import org.springframework.web.bind.annotation.RequestParam
+import org.springframework.web.bind.annotation.ResponseStatus
 import org.springframework.web.bind.annotation.RestController
 
 /**
@@ -159,6 +161,48 @@ class ApiV1AdmPostController(
         postUseCase.hardDeleteDeletedByIdForAdmin(id)
         return RsData("200-1", "${id}번 삭제 글을 영구삭제했습니다.")
     }
+
+    @GetMapping("/temp")
+    @Transactional(readOnly = true)
+    @Operation(summary = "관리자용 임시초안 목록")
+    fun listTempDrafts(
+        @AuthenticationPrincipal securityUser: SecurityUser,
+    ): List<PostDto> = postUseCase.listTempDrafts(resolveAdminActor(securityUser)).map(::PostDto)
+
+    @PostMapping("/temp")
+    @ResponseStatus(HttpStatus.CREATED)
+    @Transactional
+    @Operation(summary = "관리자용 새 임시초안 생성")
+    fun createNewTempDraft(
+        @AuthenticationPrincipal securityUser: SecurityUser,
+    ): RsData<PostWithContentDto> {
+        val post = postUseCase.createNewTempDraft(resolveAdminActor(securityUser))
+        val dto =
+            PostWithContentDto(post).apply {
+                tempDraft = true
+                actorCanModify = true
+                actorCanDelete = true
+            }
+        return RsData("201-1", "${post.id}번 임시 저장글이 생성되었습니다.", dto)
+    }
+
+    @DeleteMapping("/temp/{id}")
+    @Transactional
+    @Operation(summary = "관리자용 임시초안 삭제")
+    fun deleteTempDraft(
+        @AuthenticationPrincipal securityUser: SecurityUser,
+        @PathVariable @Positive id: Long,
+    ): RsData<Void> {
+        postUseCase.deleteTempDraft(resolveAdminActor(securityUser), id)
+        return RsData("200-1", "${id}번 임시 저장글을 삭제했습니다.")
+    }
+
+    @GetMapping("/series")
+    @Transactional(readOnly = true)
+    @Operation(summary = "관리자용 연재 시리즈 목록")
+    fun listSeries(
+        @AuthenticationPrincipal securityUser: SecurityUser,
+    ): List<String> = postUseCase.listSeriesNames(resolveAdminActor(securityUser))
 
     @GetMapping("/{id}")
     @Transactional(readOnly = true)

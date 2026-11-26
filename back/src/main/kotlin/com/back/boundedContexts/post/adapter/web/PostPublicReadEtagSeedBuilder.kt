@@ -5,6 +5,7 @@ import com.back.boundedContexts.post.dto.CursorFeedPageDto
 import com.back.boundedContexts.post.dto.FeedPostDto
 import com.back.boundedContexts.post.dto.PostDto
 import com.back.boundedContexts.post.dto.PublicPostBacklinksResBody
+import com.back.boundedContexts.post.dto.PublicPostSeriesResBody
 import com.back.boundedContexts.post.dto.PublicPostsBootstrapDto
 import com.back.boundedContexts.post.dto.PublicSitemapPostsResBody
 import com.back.boundedContexts.post.dto.PublicWikilinkCatalogResBody
@@ -160,6 +161,23 @@ class PostPublicReadEtagSeedBuilder {
             writer.appendChar(':').appendLong(toEpochMillis(item.modifiedAt))
             writer.appendChar(':').appendLengthPrefixedUtf8(item.title)
             writer.appendChar(':').appendLengthPrefixedUtf8(item.summary)
+        }
+        return writer.finishWeakEtag()
+    }
+
+    fun buildSeriesWeakEtag(
+        id: Long,
+        data: PublicPostSeriesResBody,
+    ): String {
+        val writer = Utf8ChunkDigest.newWeakEtagWriter()
+        writer.appendAscii("series|id=").appendLong(id)
+        writer.appendAscii("|name=").appendLengthPrefixedUtf8(data.seriesName.orEmpty())
+        writer.appendAscii("|count=").appendInt(data.items.size)
+        for (item in data.items) {
+            writer.appendChar('|').appendLong(item.id)
+            writer.appendChar(':').appendInt(item.seriesOrder ?: -1)
+            writer.appendChar(':').appendLong(toEpochMillis(item.createdAt))
+            writer.appendChar(':').appendLengthPrefixedUtf8(item.title)
         }
         return writer.finishWeakEtag()
     }

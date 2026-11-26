@@ -269,4 +269,9 @@ class PostPublicReadResponseFactory(
         id: Long,
         data: PublicPostBacklinksResBody,
     ): String = etagSeedBuilder.buildBacklinksWeakEtag(id, data)
+
+    fun buildSeriesWeakEtag(
+        id: Long,
+        data: com.back.boundedContexts.post.dto.PublicPostSeriesResBody,
+    ): String = etagSeedBuilder.buildSeriesWeakEtag(id, data)
 }

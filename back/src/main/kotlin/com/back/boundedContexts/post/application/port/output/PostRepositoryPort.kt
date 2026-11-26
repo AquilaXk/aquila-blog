@@ -9,6 +9,7 @@ import com.back.boundedContexts.post.dto.AdmPostFacetCounts
 import com.back.boundedContexts.post.dto.PostInteractionReadStateDto
 import com.back.boundedContexts.post.dto.PublicBacklinkCandidateProjection
 import com.back.boundedContexts.post.dto.PublicPostDetailContentCacheDto
+import com.back.boundedContexts.post.dto.PublicSeriesPostItemDto
 import com.back.boundedContexts.post.dto.PublicSitemapPostItemDto
 import com.back.boundedContexts.post.dto.PublicWikilinkCatalogItemDto
 import com.back.standard.dto.post.type1.PostSearchSortType1
@@ -188,4 +189,24 @@ interface PostRepositoryPort {
     )
 
     fun lockByIdForUpdate(postId: Long)
+
+    fun findTempDraftsByAuthor(
+        authorId: Long,
+        limit: Int = 50,
+    ): List<Post>
+
+    fun findDueScheduledDraftIds(
+        now: Instant,
+        limit: Int = 50,
+    ): List<Long>
+
+    fun findPublishedSeriesPosts(
+        seriesName: String,
+        limit: Int = 100,
+    ): List<PublicSeriesPostItemDto>
+
+    fun findDistinctSeriesNamesByAuthor(
+        authorId: Long,
+        limit: Int = 100,
+    ): List<String>
 }

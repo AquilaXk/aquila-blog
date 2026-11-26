@@ -400,7 +400,9 @@ class ApiV1AdmCloudController(
         @PathVariable
         @Positive
         id: Long,
-    ): ResponseEntity<Void> = headMetadata(securityUser = securityUser, id = id, thumbnail = false)
+        @RequestParam(defaultValue = "false")
+        thumbnail: Boolean,
+    ): ResponseEntity<Void> = headMetadata(securityUser = securityUser, id = id, thumbnail = thumbnail)
 
     @GetMapping("/files/{id}/thumbnail")
     fun thumbnail(

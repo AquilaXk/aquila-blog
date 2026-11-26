@@ -1716,6 +1716,15 @@
               "format": "int64",
               "exclusiveMinimum": 0
             }
+          },
+          {
+            "name": "thumbnail",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean",
+              "default": false
+            }
           }
         ],
         "responses": {

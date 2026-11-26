@@ -1390,6 +1390,20 @@ class ApiV1AdmCloudControllerWebMvcTest : BaseAdmCloudControllerWebMvcTest() {
             .andExpect(header().doesNotExist(HttpHeaders.ACCEPT_RANGES))
             .andExpect(header().doesNotExist(HttpHeaders.CONTENT_LENGTH))
 
+        mvc
+            .perform(head("/system/api/v1/adm/cloud/files/55/content").with(user(admin)))
+            .andExpect(status().isOk)
+            .andExpect(header().string(HttpHeaders.ETAG, "\"thumbsha55\""))
+            .andExpect(header().string(HttpHeaders.ACCEPT_RANGES, "bytes"))
+            .andExpect(header().string(HttpHeaders.CONTENT_LENGTH, pngBytes.size.toString()))
+
+        mvc
+            .perform(head("/system/api/v1/adm/cloud/files/55/content").param("thumbnail", "true").with(user(admin)))
+            .andExpect(status().isOk)
+            .andExpect(header().string(HttpHeaders.ETAG, "\"thumbsha55-thumb\""))
+            .andExpect(header().doesNotExist(HttpHeaders.ACCEPT_RANGES))
+            .andExpect(header().doesNotExist(HttpHeaders.CONTENT_LENGTH))
+
         val result =
             mvc
                 .get("/system/api/v1/adm/cloud/files/55/thumbnail") {

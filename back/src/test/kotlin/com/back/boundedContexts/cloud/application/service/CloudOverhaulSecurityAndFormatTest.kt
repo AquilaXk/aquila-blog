@@ -722,7 +722,7 @@ class CloudOverhaulSecurityAndFormatTest {
                 ratioThresholdBytes = 1_024L,
             )
         }.isInstanceOf(AppException::class.java)
-            .hasMessageContaining("중첩 아카이브 크기가 허용 검사 상한을 초과했습니다.")
+            .hasMessageContaining("중첩 압축 파일 크기가 허용 검사 상한을 초과했습니다.")
 
         val fakeNestedZipBytes =
             ByteArray(12_000).apply {

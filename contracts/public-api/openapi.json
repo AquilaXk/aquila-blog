@@ -1443,7 +1443,7 @@
         "tags": [
           "ApiV1PublicCloudController"
         ],
-        "summary": "서명 공유 링크 파일 콘텐츠 조회",
+        "summary": "공유 링크 파일 조회",
         "operationId": "shareContent",
         "parameters": [
           {
@@ -1492,7 +1492,7 @@
         "tags": [
           "ApiV1PublicCloudController"
         ],
-        "summary": "서명 공유 링크 파일 메타데이터 조회",
+        "summary": "공유 링크 파일 정보 조회",
         "operationId": "shareHead",
         "parameters": [
           {

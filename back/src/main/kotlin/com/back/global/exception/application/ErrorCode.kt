@@ -178,7 +178,7 @@ enum class ErrorCode(
     CLOUD_UPLOAD_CONFLICT(
         "409-30",
         HttpStatus.CONFLICT,
-        "대용량 업로드 세션 상태가 변경되었습니다.",
+        "대용량 업로드 상태가 변경되었습니다.",
         ErrorKind.USER,
     ),
     ADMIN_OPERATION_CONFLICT(

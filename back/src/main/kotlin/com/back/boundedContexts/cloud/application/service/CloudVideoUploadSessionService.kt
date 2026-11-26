@@ -34,7 +34,7 @@ private const val PART_CONTENT_CONFLICT_MESSAGE = "이미 다른 내용의 업�
 private const val MULTIPART_COMPOSITE_CHECKSUM_PREFIX = "sha256-composite:"
 private const val INTEGRITY_MISMATCH_MESSAGE = "완성된 업로드 파일의 무결성 검증에 실패했습니다."
 private const val COMMITTED_OBJECT_NOT_VISIBLE_MESSAGE =
-    "완성된 업로드 객체를 아직 확인할 수 없습니다. 잠시 후 다시 시도해주세요."
+    "완성된 업로드 파일을 아직 확인할 수 없습니다. 잠시 후 다시 시도해주세요."
 
 /**
  * 참조 구현: strapi/strapi (MIT) & payloadcms/payload (MIT) — Low-level 64KB I/O buffer optimization
@@ -119,7 +119,7 @@ class CloudVideoUploadSessionService(
         if (!initiated) {
             markFailed(session.id, CloudVideoUploadSessionStatus.INITIATING, "multipart initiate metadata attach failed")
             abortQuietly(upload.objectKey, upload.uploadId)
-            throw AppException(ErrorCode.CLOUD_UPLOAD_CONFLICT, "대용량 업로드 세션 상태가 변경되었습니다.")
+            throw AppException(ErrorCode.CLOUD_UPLOAD_CONFLICT, "대용량 업로드 상태가 변경되었습니다.")
         }
         session.markInitiated(upload.uploadId, now)
         CloudMediaMetrics.recordSessionTransition(
@@ -142,7 +142,7 @@ class CloudVideoUploadSessionService(
     ): CloudVideoUploadSessionDto {
         val session = findOwnedSession(ownerMemberId, sessionId)
         if (expireSessionIfNeeded(session)) {
-            throw AppException(ErrorCode.GONE, "대용량 업로드 세션이 만료되었습니다.")
+            throw AppException(ErrorCode.GONE, "대용량 업로드 기한이 만료되었습니다.")
         }
         val parts = partRepository.findBySessionId(session.id)
         return session.toDto(parts)
@@ -351,7 +351,7 @@ class CloudVideoUploadSessionService(
             if (currentStatus == CloudVideoUploadSessionStatus.ABORTING || currentStatus == CloudVideoUploadSessionStatus.CANCELLED) {
                 runCatching { partRepository.delete(savedPart) }
             }
-            throw AppException(ErrorCode.CLOUD_UPLOAD_CONFLICT, "대용량 업로드 세션 상태가 변경되었습니다.")
+            throw AppException(ErrorCode.CLOUD_UPLOAD_CONFLICT, "대용량 업로드 상태가 변경되었습니다.")
         }
         session.transitionTo(CloudVideoUploadSessionStatus.IN_PROGRESS, clock.instant())
         extendSessionExpiry(session)
@@ -378,7 +378,7 @@ class CloudVideoUploadSessionService(
         when (session.status) {
             CloudVideoUploadSessionStatus.IN_PROGRESS -> {
                 if (expireSessionIfNeeded(session)) {
-                    throw AppException(ErrorCode.GONE, "대용량 업로드 세션이 만료되었습니다.")
+                    throw AppException(ErrorCode.GONE, "대용량 업로드 기한이 만료되었습니다.")
                 }
                 val parts = requireCompleteParts(session)
                 claimStatus(
@@ -395,7 +395,7 @@ class CloudVideoUploadSessionService(
                 ensureStorageCommitted(session, parts)
                 return finishCommittedSession(session).toDto(clock)
             }
-            else -> throw AppException(ErrorCode.CLOUD_UPLOAD_CONFLICT, "이미 종료된 대용량 업로드 세션입니다.")
+            else -> throw AppException(ErrorCode.CLOUD_UPLOAD_CONFLICT, "이미 종료된 대용량 업로드입니다.")
         }
     }
 
@@ -435,7 +435,7 @@ class CloudVideoUploadSessionService(
         sessionId: Long,
     ): CloudVideoUploadSession =
         sessionRepository.findByIdAndOwner(sessionId, ownerMemberId)
-            ?: throw AppException(ErrorCode.NOT_FOUND, "대용량 업로드 세션을 찾을 수 없습니다.")
+            ?: throw AppException(ErrorCode.NOT_FOUND, "진행 중인 대용량 업로드를 찾을 수 없습니다.")
 
     private fun findMutableSession(
         ownerMemberId: Long,
@@ -443,10 +443,10 @@ class CloudVideoUploadSessionService(
     ): CloudVideoUploadSession {
         val session = findOwnedSession(ownerMemberId, sessionId)
         if (session.status != CloudVideoUploadSessionStatus.IN_PROGRESS) {
-            throw AppException(ErrorCode.CLOUD_UPLOAD_CONFLICT, "이미 종료된 대용량 업로드 세션입니다.")
+            throw AppException(ErrorCode.CLOUD_UPLOAD_CONFLICT, "이미 종료된 대용량 업로드입니다.")
         }
         if (expireSessionIfNeeded(session)) {
-            throw AppException(ErrorCode.GONE, "대용량 업로드 세션이 만료되었습니다.")
+            throw AppException(ErrorCode.GONE, "대용량 업로드 기한이 만료되었습니다.")
         }
 
         return session
@@ -859,7 +859,7 @@ class CloudVideoUploadSessionService(
     }
 
     private fun requireUploadId(session: CloudVideoUploadSession): String =
-        session.uploadId ?: throw AppException(ErrorCode.CLOUD_UPLOAD_CONFLICT, "대용량 업로드 세션 초기화가 완료되지 않았습니다.")
+        session.uploadId ?: throw AppException(ErrorCode.CLOUD_UPLOAD_CONFLICT, "대용량 업로드 준비가 완료되지 않았습니다.")
 
     private fun isTerminalStatus(status: CloudVideoUploadSessionStatus): Boolean =
         when (status) {
@@ -980,7 +980,7 @@ class CloudVideoUploadSessionService(
             detectVideoFromSignature(bytes, session.contentType)
                 ?: throw AppException(ErrorCode.BAD_REQUEST, "지원하지 않는 동영상 파일 형식입니다.")
         if (detected != session.contentType) {
-            throw AppException(ErrorCode.BAD_REQUEST, "동영상 파일 내용과 콘텐츠 타입이 일치하지 않습니다.")
+            throw AppException(ErrorCode.BAD_REQUEST, "동영상 파일 내용과 파일 형식이 일치하지 않습니다.")
         }
     }
 

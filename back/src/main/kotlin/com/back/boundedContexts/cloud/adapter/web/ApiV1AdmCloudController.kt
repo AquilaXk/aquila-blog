@@ -135,7 +135,7 @@ class ApiV1AdmCloudController(
                 ownerMemberId = securityUser.id,
                 fileIds = body.ids,
             )
-        return RsData("200-1", "클라우드 파일들이 삭제되었습니다.", result)
+        return RsData("200-1", "선택한 클라우드 파일이 삭제되었습니다.", result)
     }
 
     @GetMapping("/files")
@@ -204,7 +204,7 @@ class ApiV1AdmCloudController(
 
         return ResponseEntity
             .status(HttpStatus.CREATED)
-            .body(RsData("201-1", "대용량 동영상 업로드 세션이 생성되었습니다.", session))
+            .body(RsData("201-1", "대용량 동영상 업로드를 시작했습니다.", session))
     }
 
     @GetMapping("/files/video-upload-sessions/{sessionId}")

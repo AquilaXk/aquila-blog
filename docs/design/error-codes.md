@@ -26,7 +26,7 @@
 | 403-10 | 403 | USER | PostHasPolicy edit denied | 작성자만 글을 수정할 수 있습니다. |
 | 403-11 | 403 | USER | PostHasPolicy view denied | 글 조회권한이 없습니다. |
 | 403-12 | 403 | USER | PostHasPolicy delete denied | 작성자만 글을 삭제할 수 있습니다. |
-| 403-30 | 403 | USER | CloudExternalPlaybackTokenService | 외부 재생 token이 올바르지 않거나 만료되었습니다. |
+| 403-30 | 403 | USER | CloudExternalPlaybackTokenService | 공유 또는 재생 링크가 올바르지 않거나 만료되었습니다. |
 | 404-1 | 404 | USER | 일반 not found / ExceptionHandler | 해당 데이터가 존재하지 않습니다. |
 | 404-2 | 404 | USER | member/oauth signup session not found | 유효하지 않은 세션입니다. |
 | 404-40 | 404 | USER | AdminOperationService actor-scoped receipt 조회 | 운영 작업을 찾을 수 없습니다. |
@@ -36,7 +36,7 @@
 | 409-10 | 409 | USER | PostApplicationService concurrent edit | 다른 세션에서 이미 수정되었습니다. 최신 글을 다시 불러온 뒤 수정해주세요. |
 | 409-20 | 409 | USER | MemberApplicationService duplicate | 이미 존재하는 회원 아이디입니다. |
 | 409-21 | 409 | USER | withdrawn member / privacy delete | 이미 탈퇴 처리된 계정입니다. |
-| 409-30 | 409 | USER | cloud upload session conflict | 대용량 업로드 세션 상태가 변경되었습니다. |
+| 409-30 | 409 | USER | cloud upload session conflict | 대용량 업로드 상태가 변경되었습니다. |
 | 409-40 | 409 | USER | AdminOperationService operation ID actor/fingerprint 충돌 | 운영 작업 ID가 다른 요청과 충돌합니다. |
 | 410-1 | 410 | USER | gone (oauth pending session 등) | 요청한 리소스가 더 이상 유효하지 않습니다. |
 | 413-1 | 413 | USER | upload payload too large | 업로드 가능한 파일 용량을 초과했습니다. 허용 크기 이내 파일로 다시 시도해주세요. |

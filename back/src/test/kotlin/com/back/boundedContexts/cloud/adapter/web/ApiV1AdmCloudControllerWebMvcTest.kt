@@ -218,6 +218,7 @@ class ApiV1AdmCloudControllerWebMvcTest : BaseAdmCloudControllerWebMvcTest() {
             }.andExpect {
                 status { isCreated() }
                 jsonPath("$.resultCode") { value("201-1") }
+                jsonPath("$.msg") { value("대용량 동영상 업로드를 시작했습니다.") }
                 jsonPath("$.data.id") { value(21) }
                 jsonPath("$.data.totalParts") { value(80) }
             }

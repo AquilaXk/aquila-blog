@@ -187,7 +187,7 @@ object CloudArchiveAndDocumentInspector {
                     while (entries.hasMoreElements()) {
                         count += 1
                         if (count > maxEntries) {
-                            throw AppException(ErrorCode.BAD_REQUEST, "ZIP 아카이브 엔트리 수가 허용 상한을 초과했습니다.")
+                            throw AppException(ErrorCode.BAD_REQUEST, "ZIP 압축 파일 항목 수가 허용 상한을 초과했습니다.")
                         }
                         val entry = entries.nextElement()
                         validateSafeArchiveEntryName(entry.name)
@@ -272,7 +272,7 @@ object CloudArchiveAndDocumentInspector {
                 levelEntries += 1
                 state.entryCount += 1
                 if (state.entryCount > maxEntries) {
-                    throw AppException(ErrorCode.BAD_REQUEST, "ZIP 아카이브 엔트리 수가 허용 상한을 초과했습니다.")
+                    throw AppException(ErrorCode.BAD_REQUEST, "ZIP 압축 파일 항목 수가 허용 상한을 초과했습니다.")
                 }
                 val normalizedName = validateSafeArchiveEntryName(entry.name)
                 collectedNames?.add(normalizedName)
@@ -343,7 +343,7 @@ object CloudArchiveAndDocumentInspector {
             val nestedBytes = nestedBuffer.toByteArray()
             if (isZipSignature(nestedBytes, nestedBytes.size)) {
                 if (nestedOverflowed) {
-                    throw AppException(ErrorCode.BAD_REQUEST, "중첩 아카이브 크기가 허용 검사 상한을 초과했습니다.")
+                    throw AppException(ErrorCode.BAD_REQUEST, "중첩 압축 파일 크기가 허용 검사 상한을 초과했습니다.")
                 }
                 if (nestedBytes.size < ZIP_EOCD_MIN_BYTES) {
                     throw ZipException("Invalid nested ZIP size")
@@ -370,15 +370,15 @@ object CloudArchiveAndDocumentInspector {
 
     internal fun validateSafeArchiveEntryName(rawName: String): String {
         if (rawName.indexOf('\u0000') >= 0) {
-            throw AppException(ErrorCode.BAD_REQUEST, "유효하지 않은 아카이브 엔트리 경로입니다.")
+            throw AppException(ErrorCode.BAD_REQUEST, "유효하지 않은 압축 파일 경로입니다.")
         }
         val normalized = rawName.replace('\\', '/')
         if (normalized.startsWith("/")) {
-            throw AppException(ErrorCode.BAD_REQUEST, "유효하지 않은 아카이브 엔트리 경로입니다.")
+            throw AppException(ErrorCode.BAD_REQUEST, "유효하지 않은 압축 파일 경로입니다.")
         }
         for (segment in normalized.split('/')) {
             if (segment == "..") {
-                throw AppException(ErrorCode.BAD_REQUEST, "유효하지 않은 아카이브 엔트리 경로입니다.")
+                throw AppException(ErrorCode.BAD_REQUEST, "유효하지 않은 압축 파일 경로입니다.")
             }
         }
         return normalized
@@ -437,7 +437,7 @@ object CloudArchiveAndDocumentInspector {
             sawHeader = true
             entries += 1
             if (entries > maxEntries) {
-                throw AppException(ErrorCode.BAD_REQUEST, "TAR 아카이브 엔트리 수가 허용 상한을 초과했습니다.")
+                throw AppException(ErrorCode.BAD_REQUEST, "TAR 압축 파일 항목 수가 허용 상한을 초과했습니다.")
             }
             val rawPrefix = extractNullTerminatedAscii(block, TAR_PREFIX_OFFSET, TAR_PREFIX_LENGTH)
             val rawName = extractNullTerminatedAscii(block, TAR_NAME_OFFSET, TAR_NAME_LENGTH)
@@ -446,7 +446,7 @@ object CloudArchiveAndDocumentInspector {
             val entrySize = parseTarOctal(block, 124, 12) ?: return false
             totalPayload += entrySize
             if (totalPayload > maxPayloadBytes) {
-                throw AppException(ErrorCode.BAD_REQUEST, "TAR 아카이브 크기가 허용 상한을 초과했습니다.")
+                throw AppException(ErrorCode.BAD_REQUEST, "TAR 압축 파일 크기가 허용 상한을 초과했습니다.")
             }
             val paddedBlocks = (entrySize + TAR_BLOCK_BYTES - 1L) / TAR_BLOCK_BYTES
             ImageUploadAdmissionValidator.skipExact(input, paddedBlocks * TAR_BLOCK_BYTES)

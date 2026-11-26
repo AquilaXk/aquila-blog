@@ -385,7 +385,7 @@ class CloudFileService(
                 detected.contentType == ZIP_CONTENT_TYPE ->
                     UploadLimit("ZIP", cloudStorageProperties.cloudArchiveMaxFileSizeBytes)
                 detected.contentType in ARCHIVE_CONTENT_TYPES ->
-                    UploadLimit("아카이브", cloudStorageProperties.cloudArchiveMaxFileSizeBytes)
+                    UploadLimit("압축", cloudStorageProperties.cloudArchiveMaxFileSizeBytes)
                 detected.mediaKind == CloudFileMediaKind.PHOTO ->
                     UploadLimit("사진", cloudStorageProperties.cloudPhotoMaxFileSizeBytes)
                 detected.mediaKind == CloudFileMediaKind.VIDEO ->
@@ -415,7 +415,7 @@ class CloudFileService(
             normalizedDeclared in KNOWN_CONTENT_TYPES &&
             !isDeclaredContentTypeCompatible(normalizedDeclared, detected.contentType)
         ) {
-            throw AppException(ErrorCode.BAD_REQUEST, "파일 내용과 콘텐츠 타입이 일치하지 않습니다.")
+            throw AppException(ErrorCode.BAD_REQUEST, "파일 내용과 파일 형식이 일치하지 않습니다.")
         }
 
         return detected

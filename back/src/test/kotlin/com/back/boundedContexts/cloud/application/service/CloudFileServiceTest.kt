@@ -316,7 +316,7 @@ class CloudFileServiceTest {
                 folderPath = "docs",
             )
         }.isInstanceOf(AppException::class.java)
-            .hasMessageContaining("콘텐츠 타입이 일치하지 않습니다")
+            .hasMessageContaining("파일 형식이 일치하지 않습니다")
 
         assertThat(storage.uploaded).isEmpty()
         assertThat(repository.savedFiles).isEmpty()
@@ -924,7 +924,7 @@ class CloudFileServiceTest {
                 folderPath = null,
             )
         }.isInstanceOf(AppException::class.java)
-            .hasMessageContaining("ZIP 아카이브 엔트리 수가 허용 상한을 초과했습니다.")
+            .hasMessageContaining("ZIP 압축 파일 항목 수가 허용 상한을 초과했습니다.")
 
         assertThat(storage.uploaded).isEmpty()
         assertThat(repository.savedFiles).isEmpty()

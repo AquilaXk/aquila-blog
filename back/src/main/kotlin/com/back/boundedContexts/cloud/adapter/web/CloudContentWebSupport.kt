@@ -300,7 +300,7 @@ object CloudContentWebSupport {
 
     fun safeMediaType(contentType: String): MediaType =
         runCatching { MediaType.parseMediaType(contentType) }
-            .getOrElse { throw AppException(ErrorCode.INTERNAL_ERROR, "클라우드 파일 콘텐츠 타입이 올바르지 않습니다.") }
+            .getOrElse { throw AppException(ErrorCode.INTERNAL_ERROR, "클라우드 파일 형식이 올바르지 않습니다.") }
 
     fun <T : ResponseEntity.BodyBuilder> noStoreHeaders(builder: T): T {
         builder.header(HttpHeaders.CACHE_CONTROL, "private, no-store, max-age=0")

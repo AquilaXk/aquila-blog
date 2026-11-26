@@ -937,7 +937,7 @@ class CloudVideoUploadSessionServiceTest {
         assertThatThrownBy {
             service.uploadPart(8L, session.id, 1, mp4Part(TEST_PART_SIZE_BYTES.toInt()))
         }.isInstanceOf(AppException::class.java)
-            .hasMessageContaining("세션을 찾을 수 없습니다")
+            .hasMessageContaining("업로드를 찾을 수 없습니다")
 
         assertThatThrownBy {
             service.uploadPart(7L, session.id, 2, ByteArray(1))

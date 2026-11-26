@@ -75,7 +75,7 @@ class ApiV1PublicCloudController(
         )
 
     @GetMapping("/files/{id}/share")
-    @Operation(summary = "서명 공유 링크 파일 콘텐츠 조회")
+    @Operation(summary = "공유 링크 파일 조회")
     fun shareContent(
         @PathVariable
         @Positive
@@ -112,7 +112,7 @@ class ApiV1PublicCloudController(
         )
 
     @RequestMapping(method = [RequestMethod.HEAD], path = ["/files/{id}/share"])
-    @Operation(summary = "서명 공유 링크 파일 메타데이터 조회")
+    @Operation(summary = "공유 링크 파일 정보 조회")
     fun shareHead(
         @PathVariable
         @Positive

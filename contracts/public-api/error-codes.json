@@ -152,7 +152,7 @@
   {
     "code": "409-30",
     "httpStatus": 409,
-    "defaultUserMessage": "대용량 업로드 세션 상태가 변경되었습니다.",
+    "defaultUserMessage": "대용량 업로드 상태가 변경되었습니다.",
     "kind": "USER"
   },
   {

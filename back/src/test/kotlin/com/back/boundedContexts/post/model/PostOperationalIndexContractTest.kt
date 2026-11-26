@@ -191,6 +191,12 @@ class PostOperationalIndexContractTest {
                     "src/main/resources/db/migration/V20261127_02__add_post_publishing_metadata_indexes_concurrently.sql",
                 ),
             )
+        val testIndexSql =
+            Files.readString(
+                Path.of(
+                    "src/main/resources/db/migration-test/V20261127_02__add_post_publishing_metadata_indexes.sql",
+                ),
+            )
         val indexConf =
             Files.readString(
                 Path.of(
@@ -211,9 +217,11 @@ class PostOperationalIndexContractTest {
             "post_idx_author_temp_draft_modified",
         ).forEach { expectedIndex ->
             assertThat(indexSql).contains(expectedIndex)
+            assertThat(testIndexSql).contains(expectedIndex)
             assertThat(postAfterDdl).contains(expectedIndex)
         }
         assertThat(indexSql).contains("is_temp_draft = FALSE")
+        assertThat(testIndexSql).contains("is_temp_draft = FALSE")
         assertThat(postAfterDdl).contains("is_temp_draft = FALSE")
     }
 

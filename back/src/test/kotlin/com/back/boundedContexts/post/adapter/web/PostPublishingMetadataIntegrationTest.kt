@@ -3,6 +3,7 @@ package com.back.boundedContexts.post.adapter.web
 import com.back.boundedContexts.member.application.service.ActorApplicationService
 import com.back.boundedContexts.member.domain.shared.Member
 import com.back.boundedContexts.post.application.port.input.PostScheduledPublishUseCase
+import com.back.boundedContexts.post.application.port.output.PostRepositoryPort
 import com.back.boundedContexts.post.application.service.PostApplicationService
 import com.back.boundedContexts.post.application.service.PostQueryCacheNames
 import com.back.boundedContexts.post.model.Post
@@ -11,6 +12,7 @@ import com.back.standard.extensions.getOrThrow
 import com.back.support.BaseControllerIntegrationTest
 import com.jayway.jsonpath.JsonPath
 import org.assertj.core.api.Assertions.assertThat
+import org.hamcrest.Matchers.hasItem
 import org.hamcrest.Matchers.startsWith
 import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Test
@@ -38,6 +40,9 @@ class PostPublishingMetadataIntegrationTest : BaseControllerIntegrationTest() {
 
     @Autowired
     private lateinit var cacheManager: CacheManager
+
+    @Autowired
+    private lateinit var postRepository: PostRepositoryPort
 
     private fun adminActor(): Member = actorApplicationService.findByEmail("admin@test.com").getOrThrow()
 
@@ -347,5 +352,139 @@ class PostPublishingMetadataIntegrationTest : BaseControllerIntegrationTest() {
             jsonPath("$.seriesName") { value("Schedule Series") }
             jsonPath("$.items[0].id") { value(scheduledId) }
         }
+    }
+
+    @Test
+    @WithUserDetails("admin@test.com")
+    fun `PUT 요청으로 임시초안을 예약 공개 승격·수정하고 스케줄러 발행 시 listed가 true로 유지된다`() {
+        val draftRes =
+            mvc
+                .post("/post/api/v1/adm/posts/temp")
+                .andExpect {
+                    status { isCreated() }
+                    jsonPath("$.data.tempDraft") { value(true) }
+                }.andReturn()
+        val postId = JsonPath.read<Int>(draftRes.response.contentAsString, "$.data.id").toLong()
+        val initialVersion = JsonPath.read<Int>(draftRes.response.contentAsString, "$.data.version").toLong()
+
+        val firstDue = Instant.now().plus(2, ChronoUnit.HOURS).truncatedTo(ChronoUnit.SECONDS)
+        val promotedRes =
+            mvc
+                .put("/post/api/v1/posts/$postId") {
+                    contentType = MediaType.APPLICATION_JSON
+                    content =
+                        """
+                        {
+                          "title": "PUT 예약 공개 승격 글",
+                          "content": "임시초안에서 PUT으로 예약 공개 승격된 본문입니다.",
+                          "summaryMode": "AUTO",
+                          "published": false,
+                          "listed": true,
+                          "version": $initialVersion,
+                          "scheduledAt": "$firstDue"
+                        }
+                        """.trimIndent()
+                }.andExpect {
+                    status { isOk() }
+                    jsonPath("$.data.published") { value(false) }
+                    jsonPath("$.data.listed") { value(true) }
+                    jsonPath("$.data.scheduledAt") { exists() }
+                }.andReturn()
+        val promotedVersion = JsonPath.read<Int>(promotedRes.response.contentAsString, "$.data.version").toLong()
+        val afterPromote = postFacade.findById(postId).getOrThrow()
+        assertThat(afterPromote.isTempDraft).isFalse()
+        assertThat(afterPromote.published).isFalse()
+        assertThat(afterPromote.listed).isTrue()
+        assertThat(afterPromote.scheduledAt).isEqualTo(firstDue)
+
+        val updatedDue = firstDue.plus(1, ChronoUnit.HOURS)
+        mvc
+            .put("/post/api/v1/posts/$postId") {
+                contentType = MediaType.APPLICATION_JSON
+                content =
+                    """
+                    {
+                      "title": "PUT 예약 공개 수정 글",
+                      "content": "예약 대기 상태에서 내용을 수정해도 listed=true가 유지됩니다.",
+                      "published": false,
+                      "listed": true,
+                      "version": $promotedVersion,
+                      "scheduledAt": "$updatedDue"
+                    }
+                    """.trimIndent()
+            }.andExpect {
+                status { isOk() }
+                jsonPath("$.data.published") { value(false) }
+                jsonPath("$.data.listed") { value(true) }
+                jsonPath("$.data.scheduledAt") { exists() }
+            }
+
+        val publishedCount = scheduledPublishUseCase.publishDueScheduledPosts(now = updatedDue.plusSeconds(10), batchSize = 50)
+        assertThat(publishedCount).isEqualTo(1)
+
+        val publishedPost = postFacade.findById(postId).getOrThrow()
+        assertThat(publishedPost.published).isTrue()
+        assertThat(publishedPost.listed).isTrue()
+        assertThat(publishedPost.scheduledAt).isNull()
+
+        cacheManager.getCache(PostQueryCacheNames.DETAIL_PUBLIC_NEGATIVE)?.evict(postId)
+        mvc.get("/post/api/v1/posts/$postId").andExpect {
+            status { isOk() }
+            jsonPath("$.id") { value(postId) }
+            jsonPath("$.published") { value(true) }
+            jsonPath("$.listed") { value(true) }
+        }
+        mvc.get("/post/api/v1/posts").andExpect {
+            status { isOk() }
+            jsonPath("$.content[*].id") { value(hasItem(postId.toInt())) }
+        }
+
+        // 예약 해제(scheduledAt=null) + published=false 시 listed=false 강제 및 softDelete 경합 방지 검증
+        val clearingPost =
+            postFacade.write(
+                author = adminActor(),
+                title = "예약 해제 비공개 전환 글",
+                content = "예약 해제 시 비공개로 전환됩니다.",
+                published = false,
+                listed = true,
+                summaryMode = PostSummaryMode.AUTO,
+                scheduledAt = updatedDue,
+            )
+        assertThat(clearingPost.listed).isTrue()
+        mvc
+            .put("/post/api/v1/posts/${clearingPost.id}") {
+                contentType = MediaType.APPLICATION_JSON
+                content =
+                    """
+                    {
+                      "title": "예약 해제 비공개 전환 글",
+                      "content": "예약 해제 시 비공개로 전환됩니다.",
+                      "published": false,
+                      "listed": true,
+                      "version": ${clearingPost.version ?: 0L},
+                      "scheduledAt": null
+                    }
+                    """.trimIndent()
+            }.andExpect {
+                status { isOk() }
+                jsonPath("$.data.published") { value(false) }
+                jsonPath("$.data.listed") { value(false) }
+                jsonPath("$.data.scheduledAt") { value(null as String?) }
+            }
+
+        // softDelete된 예약 글은 스케줄러가 발행하지 않는다
+        val deletedScheduled =
+            postFacade.write(
+                author = adminActor(),
+                title = "삭제된 예약 글",
+                content = "삭제 후에는 자동 발행되지 않습니다.",
+                published = false,
+                listed = true,
+                summaryMode = PostSummaryMode.AUTO,
+                scheduledAt = updatedDue,
+            )
+        assertThat(postRepository.softDeleteById(deletedScheduled.id)).isTrue()
+        assertThat(scheduledPublishUseCase.publishDueScheduledPosts(now = updatedDue.plusSeconds(10), batchSize = 50))
+            .isEqualTo(0)
     }
 }

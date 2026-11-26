@@ -81,6 +81,8 @@ interface PostRepositoryPort {
 
     fun findById(id: Long): Optional<Post>
 
+    fun findByIdForUpdate(id: Long): Optional<Post>
+
     fun findAllByIds(ids: Collection<Long>): List<Post>
 
     fun existsById(id: Long): Boolean

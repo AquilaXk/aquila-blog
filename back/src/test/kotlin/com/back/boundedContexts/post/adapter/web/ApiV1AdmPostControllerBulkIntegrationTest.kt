@@ -2,6 +2,7 @@ package com.back.boundedContexts.post.adapter.web
 
 import com.back.boundedContexts.member.application.service.ActorApplicationService
 import com.back.boundedContexts.member.domain.shared.Member
+import com.back.boundedContexts.post.application.port.input.PostScheduledPublishUseCase
 import com.back.boundedContexts.post.application.service.PostApplicationService
 import com.back.boundedContexts.post.model.Post
 import com.back.standard.extensions.getOrThrow
@@ -13,11 +14,16 @@ import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.http.MediaType
 import org.springframework.security.test.context.support.WithUserDetails
 import org.springframework.test.web.servlet.post
+import java.time.Instant
+import java.time.temporal.ChronoUnit
 
 @DisplayName("ApiV1AdmPostController 글 일괄 처리(벌크) 통합 테스트")
 class ApiV1AdmPostControllerBulkIntegrationTest : BaseControllerIntegrationTest() {
     @Autowired
     private lateinit var postFacade: PostApplicationService
+
+    @Autowired
+    private lateinit var scheduledPublishUseCase: PostScheduledPublishUseCase
 
     @Autowired
     private lateinit var actorApplicationService: ActorApplicationService
@@ -208,5 +214,113 @@ class ApiV1AdmPostControllerBulkIntegrationTest : BaseControllerIntegrationTest(
                 jsonPath("$.data.processedCount") { value(1) }
                 jsonPath("$.data.ids[0]") { value(p.id) }
             }
+    }
+
+    @Test
+    @WithUserDetails("admin@test.com")
+    fun `PUBLISH 및 UNPUBLISH_PRIVATE 벌크 액션은 scheduledAt을 정리해 예정 시각 도래 자동 발행을 차단한다`() {
+        val futureDue = Instant.now().plus(2, ChronoUnit.HOURS).truncatedTo(ChronoUnit.SECONDS)
+        val scheduledListed =
+            postFacade.write(
+                author = adminActor(),
+                title = "예약 전체공개 글",
+                content = "비공개 벌크 전환 시 예약이 해제되어야 합니다.",
+                published = false,
+                listed = true,
+                summaryMode = com.back.boundedContexts.post.model.PostSummaryMode.AUTO,
+                scheduledAt = futureDue,
+            )
+        val scheduledUnlisted =
+            postFacade.write(
+                author = adminActor(),
+                title = "예약 링크공개 글",
+                content = "published=false, listed=false 상태여도 예약이 해제되어야 합니다.",
+                published = false,
+                listed = false,
+                summaryMode = com.back.boundedContexts.post.model.PostSummaryMode.AUTO,
+                scheduledAt = futureDue,
+            )
+        val scheduledPublishNow =
+            postFacade.write(
+                author = adminActor(),
+                title = "예약 즉시발행 전환 글",
+                content = "즉시 공개 벌크 전환 시 예약 시각이 비워져야 합니다.",
+                published = false,
+                listed = true,
+                summaryMode = com.back.boundedContexts.post.model.PostSummaryMode.AUTO,
+                scheduledAt = futureDue,
+            )
+        val tempDraftWithSchedule =
+            postFacade.createNewTempDraft(adminActor()).also { draft ->
+                postFacade.saveTempDraft(
+                    actor = adminActor(),
+                    postId = draft.id,
+                    request =
+                        com.back.boundedContexts.post.dto.PostTempDraftSaveRequest(
+                            title = "임시초안 예약 비공개 전환",
+                            content = "임시초안 본문",
+                            version = draft.version ?: 0L,
+                            scheduledAt = futureDue,
+                        ),
+                )
+            }
+
+        mvc
+            .post("/post/api/v1/adm/posts/bulk") {
+                contentType = MediaType.APPLICATION_JSON
+                content =
+                    """
+                    {
+                        "ids": [${scheduledListed.id}, ${scheduledUnlisted.id}, ${tempDraftWithSchedule.id}],
+                        "action": "UNPUBLISH_PRIVATE"
+                    }
+                    """.trimIndent()
+            }.andExpect {
+                status { isOk() }
+                jsonPath("$.data.processedCount") { value(3) }
+            }
+
+        mvc
+            .post("/post/api/v1/adm/posts/bulk") {
+                contentType = MediaType.APPLICATION_JSON
+                content =
+                    """
+                    {
+                        "ids": [${scheduledPublishNow.id}],
+                        "action": "PUBLISH_UNLISTED"
+                    }
+                    """.trimIndent()
+            }.andExpect {
+                status { isOk() }
+                jsonPath("$.data.processedCount") { value(1) }
+            }
+
+        entityManager.flush()
+        entityManager.clear()
+
+        val private1 = postFacade.findById(scheduledListed.id).getOrThrow()
+        val private2 = postFacade.findById(scheduledUnlisted.id).getOrThrow()
+        val privateTemp = postFacade.findById(tempDraftWithSchedule.id).getOrThrow()
+        val publishedNow = postFacade.findById(scheduledPublishNow.id).getOrThrow()
+
+        assertThat(private1.published).isFalse()
+        assertThat(private1.listed).isFalse()
+        assertThat(private1.scheduledAt).isNull()
+
+        assertThat(private2.published).isFalse()
+        assertThat(private2.listed).isFalse()
+        assertThat(private2.scheduledAt).isNull()
+
+        assertThat(privateTemp.isTempDraft).isFalse()
+        assertThat(privateTemp.published).isFalse()
+        assertThat(privateTemp.listed).isFalse()
+        assertThat(privateTemp.scheduledAt).isNull()
+
+        assertThat(publishedNow.published).isTrue()
+        assertThat(publishedNow.listed).isFalse()
+        assertThat(publishedNow.scheduledAt).isNull()
+
+        assertThat(scheduledPublishUseCase.publishDueScheduledPosts(now = futureDue.plusSeconds(30), batchSize = 50))
+            .isEqualTo(0)
     }
 }

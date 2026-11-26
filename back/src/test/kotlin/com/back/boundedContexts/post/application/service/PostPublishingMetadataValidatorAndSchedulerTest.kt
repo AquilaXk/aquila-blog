@@ -6,6 +6,7 @@ import com.back.boundedContexts.post.adapter.scheduler.PostScheduledPublishSched
 import com.back.boundedContexts.post.application.port.input.PostScheduledPublishUseCase
 import com.back.boundedContexts.post.application.port.output.PostRepositoryPort
 import com.back.boundedContexts.post.application.port.output.PostRevisionRepositoryPort
+import com.back.boundedContexts.post.event.PostWrittenEvent
 import com.back.boundedContexts.post.model.Post
 import com.back.global.app.AppConfig
 import com.back.global.exception.application.AppException
@@ -21,6 +22,7 @@ import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Test
 import org.mockito.ArgumentMatchers.anyString
 import org.mockito.Mockito.mock
+import org.mockito.Mockito.mockingDetails
 import org.mockito.Mockito.never
 import org.mockito.Mockito.verify
 import org.mockito.Mockito.`when`
@@ -89,6 +91,8 @@ class PostPublishingMetadataValidatorAndSchedulerTest {
             .isEqualTo("https://origin.example.com/posts/hello?ref=rss")
         assertThat(PostPublishingMetadataValidator.normalizeCanonicalUrl("http://origin.example.com/a"))
             .isEqualTo("http://origin.example.com/a")
+        assertThat(PostPublishingMetadataValidator.normalizeCanonicalUrl("https://example.com/@author/post"))
+            .isEqualTo("https://example.com/@author/post")
 
         val tooLongUrl = "https://example.com/" + "a".repeat(PostPublishingMetadataValidator.MAX_CANONICAL_URL_LENGTH)
         listOf(
@@ -100,6 +104,7 @@ class PostPublishingMetadataValidatorAndSchedulerTest {
             "javascript:alert(1)",
             "ftp://example.com/file",
             "https://user:pass@example.com/post",
+            "https://@example.com/post",
             "https:///missing-host",
         ).forEach { invalidUrl ->
             assertThatThrownBy { PostPublishingMetadataValidator.normalizeCanonicalUrl(invalidUrl) }
@@ -189,23 +194,23 @@ class PostPublishingMetadataValidatorAndSchedulerTest {
             )
         val author = buildMember(1L)
 
-        `when`(postRepository.findById(10L)).thenReturn(Optional.empty())
+        `when`(postRepository.findByIdForUpdate(10L)).thenReturn(Optional.empty())
         assertThat(executor.publishDuePost(10L, fixedNow)).isFalse()
 
         val noSchedule = buildPost(11L, author, scheduledAt = null)
-        `when`(postRepository.findById(11L)).thenReturn(Optional.of(noSchedule))
+        `when`(postRepository.findByIdForUpdate(11L)).thenReturn(Optional.of(noSchedule))
         assertThat(executor.publishDuePost(11L, fixedNow)).isFalse()
 
         val deletedPost = buildPost(12L, author, scheduledAt = fixedNow.minusSeconds(10)).apply { deletedAt = fixedNow }
-        `when`(postRepository.findById(12L)).thenReturn(Optional.of(deletedPost))
+        `when`(postRepository.findByIdForUpdate(12L)).thenReturn(Optional.of(deletedPost))
         assertThat(executor.publishDuePost(12L, fixedNow)).isFalse()
 
         val alreadyPublished = buildPost(13L, author, published = true, scheduledAt = fixedNow.minusSeconds(10))
-        `when`(postRepository.findById(13L)).thenReturn(Optional.of(alreadyPublished))
+        `when`(postRepository.findByIdForUpdate(13L)).thenReturn(Optional.of(alreadyPublished))
         assertThat(executor.publishDuePost(13L, fixedNow)).isFalse()
 
         val futureSchedule = buildPost(14L, author, scheduledAt = fixedNow.plusSeconds(60))
-        `when`(postRepository.findById(14L)).thenReturn(Optional.of(futureSchedule))
+        `when`(postRepository.findByIdForUpdate(14L)).thenReturn(Optional.of(futureSchedule))
         assertThat(executor.publishDuePost(14L, fixedNow)).isFalse()
 
         val tempDraftPost =
@@ -217,7 +222,7 @@ class PostPublishingMetadataValidatorAndSchedulerTest {
                 isTempDraft = true,
                 scheduledAt = fixedNow.minusSeconds(10),
             )
-        `when`(postRepository.findById(15L)).thenReturn(Optional.of(tempDraftPost))
+        `when`(postRepository.findByIdForUpdate(15L)).thenReturn(Optional.of(tempDraftPost))
         `when`(postTempDraftService.isTempDraft(tempDraftPost)).thenReturn(true)
         assertThat(executor.publishDuePost(15L, fixedNow)).isFalse()
         assertThat(tempDraftPost.published).isFalse()
@@ -258,7 +263,7 @@ class PostPublishingMetadataValidatorAndSchedulerTest {
                 isTempDraft = false,
                 scheduledAt = fixedNow.minusSeconds(5),
             )
-        `when`(postRepository.findById(21L)).thenReturn(Optional.of(dueScheduledPost))
+        `when`(postRepository.findByIdForUpdate(21L)).thenReturn(Optional.of(dueScheduledPost))
         `when`(postTempDraftService.isTempDraft(dueScheduledPost)).thenReturn(false)
         `when`(postTagIndexService.syncPostTags(dueScheduledPost)).thenReturn(listOf("kotlin"))
 
@@ -269,6 +274,7 @@ class PostPublishingMetadataValidatorAndSchedulerTest {
         assertThat(dueScheduledPost.listed).isTrue()
         assertThat(dueScheduledPost.isTempDraft).isFalse()
         assertThat(dueScheduledPost.scheduledAt).isNull()
+        verify(postRepository).findByIdForUpdate(21L)
         verify(postTempDraftService, never()).clearTrackedTempDraftIfMatches(author, 21L)
         val expectedKeys =
             UploadedFileUrlCodec
@@ -285,20 +291,47 @@ class PostPublishingMetadataValidatorAndSchedulerTest {
         )
         verify(failingCacheManager, never()).getCache(anyString())
 
+        val queuedAfterFirst =
+            mockingDetails(taskFacade)
+                .invocations
+                .filter { it.method.name == "addToQueue" }
+                .map { it.getArgument<PostWriteSideEffectPayload>(0) }
+        assertThat(queuedAfterFirst).hasSize(1)
+        val listedPayload = queuedAfterFirst.first()
+        assertThat(listedPayload.beforeTags).isEmpty()
+        assertThat(listedPayload.afterTags).containsExactly("kotlin")
+        assertThat(listedPayload.recommendationAction).isEqualTo(PostRecommendationSideEffect.REFRESH)
+        assertThat(listedPayload.cacheInvalidationTargets)
+            .isEqualTo(PostReadCacheInvalidationScope.PublicPostCreated.targets())
+        val listedEvent = objectMapper.readValue(listedPayload.domainEventJson!!, PostWrittenEvent::class.java)
+        assertThat(listedEvent.beforeTags).isEmpty()
+        assertThat(listedEvent.afterTags).containsExactly("kotlin")
+
         val syncs = TransactionSynchronizationManager.getSynchronizations()
         assertThat(syncs).hasSize(1)
         `when`(failingCacheManager.getCache(anyString())).thenThrow(RuntimeException("cache down"))
         syncs.first().afterCommit()
         TransactionSynchronizationManager.clearSynchronization()
 
-        // 비-임시글(unlisted 유지) + 트랜잭션 동기화 비활성 경로 + 실제 캐시 무효화 검증
+        // 비목록(unlisted) 예약 글은 공개 피드·태그 캐시를 비우지 않고 추천 스토어 EVICT로 격리한다
         val workingCacheManager =
             ConcurrentMapCacheManager(
                 PostQueryCacheNames.DETAIL_PUBLIC_NEGATIVE,
                 PostQueryCacheNames.ADMIN_POSTS_FIRST_PAGE,
+                PostQueryCacheNames.FEED,
+                PostQueryCacheNames.EXPLORE,
+                PostQueryCacheNames.TAGS,
             )
         val negativeCache: Cache = workingCacheManager.getCache(PostQueryCacheNames.DETAIL_PUBLIC_NEGATIVE)!!
+        val adminFirstPageCache: Cache = workingCacheManager.getCache(PostQueryCacheNames.ADMIN_POSTS_FIRST_PAGE)!!
+        val feedCache: Cache = workingCacheManager.getCache(PostQueryCacheNames.FEED)!!
+        val exploreCache: Cache = workingCacheManager.getCache(PostQueryCacheNames.EXPLORE)!!
+        val tagsCache: Cache = workingCacheManager.getCache(PostQueryCacheNames.TAGS)!!
         negativeCache.put(22L, true)
+        adminFirstPageCache.put("page-1", "cached")
+        feedCache.put("page-1", "cached-feed")
+        exploreCache.put("page-1", "cached-explore")
+        tagsCache.put("public", "cached-tags")
         val workingExecutor =
             PostScheduledPublishExecutor(
                 postRepository = postRepository,
@@ -319,15 +352,36 @@ class PostPublishingMetadataValidatorAndSchedulerTest {
                 isTempDraft = false,
                 scheduledAt = fixedNow.minusSeconds(5),
             )
-        `when`(postRepository.findById(22L)).thenReturn(Optional.of(unlistedScheduled))
+        `when`(postRepository.findByIdForUpdate(22L)).thenReturn(Optional.of(unlistedScheduled))
         `when`(postTempDraftService.isTempDraft(unlistedScheduled)).thenReturn(false)
-        `when`(postTagIndexService.syncPostTags(unlistedScheduled)).thenReturn(emptyList())
+        `when`(postTagIndexService.syncPostTags(unlistedScheduled)).thenReturn(listOf("unlisted"))
 
         assertThat(workingExecutor.publishDuePost(22L, fixedNow)).isTrue()
         assertThat(unlistedScheduled.published).isTrue()
         assertThat(unlistedScheduled.listed).isFalse()
         assertThat(negativeCache.get(22L)).isNull()
+        assertThat(adminFirstPageCache.get("page-1")).isNull()
+        assertThat(feedCache.get("page-1")?.get()).isEqualTo("cached-feed")
+        assertThat(exploreCache.get("page-1")?.get()).isEqualTo("cached-explore")
+        assertThat(tagsCache.get("public")?.get()).isEqualTo("cached-tags")
+        verify(postRepository).findByIdForUpdate(22L)
         verify(postTempDraftService, never()).clearTrackedTempDraftIfMatches(author, 22L)
+
+        val allQueuedPayloads =
+            mockingDetails(taskFacade)
+                .invocations
+                .filter { it.method.name == "addToQueue" }
+                .map { it.getArgument<PostWriteSideEffectPayload>(0) }
+        assertThat(allQueuedPayloads).hasSize(2)
+        val unlistedPayload = allQueuedPayloads.last()
+        assertThat(unlistedPayload.beforeTags).isEmpty()
+        assertThat(unlistedPayload.afterTags).containsExactly("unlisted")
+        assertThat(unlistedPayload.recommendationAction).isEqualTo(PostRecommendationSideEffect.EVICT)
+        assertThat(unlistedPayload.cacheInvalidationTargets)
+            .isEqualTo(PostReadCacheInvalidationScope.AdminPostListAndDetail.targets())
+        val unlistedEvent = objectMapper.readValue(unlistedPayload.domainEventJson!!, PostWrittenEvent::class.java)
+        assertThat(unlistedEvent.beforeTags).isEmpty()
+        assertThat(unlistedEvent.afterTags).containsExactly("unlisted")
     }
 
     @Test

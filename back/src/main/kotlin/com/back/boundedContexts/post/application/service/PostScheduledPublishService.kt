@@ -37,7 +37,7 @@ class PostScheduledPublishExecutor(
         postId: Long,
         now: Instant,
     ): Boolean {
-        val post = postRepository.findById(postId).orElse(null) ?: return false
+        val post = postRepository.findByIdForUpdate(postId).orElse(null) ?: return false
         val scheduledAt = post.scheduledAt ?: return false
         if (post.deletedAt != null || post.published || postTempDraftService.isTempDraft(post) || scheduledAt.isAfter(now)) {
             return false
@@ -63,13 +63,27 @@ class PostScheduledPublishExecutor(
             maxRevisionsPerPost = MAX_REVISIONS_PER_POST,
         )
 
+        val isPublic = post.published && post.listed
+        val cacheInvalidationScope =
+            if (isPublic) {
+                PostReadCacheInvalidationScope.PublicPostCreated
+            } else {
+                PostReadCacheInvalidationScope.AdminPostListAndDetail
+            }
+        val recommendationAction =
+            if (isPublic) {
+                PostRecommendationSideEffect.REFRESH
+            } else {
+                PostRecommendationSideEffect.EVICT
+            }
+
         val domainEvent =
             PostWrittenEvent(
-                UUID.randomUUID(),
-                PostDto(post),
-                MemberDto(post.author),
-                afterTags,
-                emptyList(),
+                uid = UUID.randomUUID(),
+                postDto = PostDto(post),
+                actorDto = MemberDto(post.author),
+                beforeTags = emptyList(),
+                afterTags = afterTags,
             )
         val command =
             PostWriteSideEffectCommand(
@@ -79,9 +93,9 @@ class PostScheduledPublishExecutor(
                 deletedContent = null,
                 beforeTags = emptyList(),
                 afterTags = afterTags,
-                cacheInvalidationScope = PostReadCacheInvalidationScope.PublicPostCreated,
+                cacheInvalidationScope = cacheInvalidationScope,
                 evictReason = "scheduled-publish",
-                recommendationAction = PostRecommendationSideEffect.REFRESH,
+                recommendationAction = recommendationAction,
                 preExtractedCurrentKeys = currentAttachmentKeys,
             )
         val taskUid =
@@ -110,7 +124,7 @@ class PostScheduledPublishExecutor(
                 domainEventJson = objectMapper.writeValueAsString(domainEvent),
             ),
         )
-        invalidateCacheAfterCommit(post.id, afterTags)
+        invalidateCacheAfterCommit(post.id, afterTags, cacheInvalidationScope)
         logger.info("scheduled_post_published postId={} scheduledAt={}", post.id, scheduledAt)
         return true
     }
@@ -118,6 +132,7 @@ class PostScheduledPublishExecutor(
     private fun invalidateCacheAfterCommit(
         postId: Long,
         afterTags: List<String>,
+        scope: PostReadCacheInvalidationScope,
     ) {
         val invalidator = postReadCacheInvalidator ?: return
         val request =
@@ -125,7 +140,7 @@ class PostScheduledPublishExecutor(
                 postId = postId,
                 beforeTags = emptyList(),
                 afterTags = afterTags,
-                scope = PostReadCacheInvalidationScope.PublicPostCreated,
+                scope = scope,
                 evictReason = "scheduled-publish",
             )
         if (TransactionSynchronizationManager.isSynchronizationActive()) {

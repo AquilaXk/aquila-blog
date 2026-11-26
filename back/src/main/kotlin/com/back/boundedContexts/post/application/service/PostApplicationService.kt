@@ -318,7 +318,14 @@ class PostApplicationService(
                     HtmlContentSanitizer.sanitizeForPersistence(contentHtml)
                 }
             if (contentHtmlTrust == null) {
-                post.modify(title, content, published, listed, thumbnail = thumbnail)
+                post.modify(
+                    title = title,
+                    content = content,
+                    published = published,
+                    listed = listed,
+                    thumbnail = thumbnail,
+                    enforcePrivateUnlisted = normalizedMetadata == null,
+                )
             } else {
                 post.modify(
                     title = title,
@@ -330,6 +337,7 @@ class PostApplicationService(
                     contentHtmlSanitizerPolicyVersion = contentHtmlTrust.contentHtmlSanitizerPolicyVersion,
                     contentHtmlTrustState = contentHtmlTrust.contentHtmlTrustState,
                     thumbnail = thumbnail,
+                    enforcePrivateUnlisted = normalizedMetadata == null,
                 )
             }
             if (normalizedMetadata != null) {
@@ -1343,6 +1351,7 @@ class PostApplicationService(
     ) {
         if (post == null || post.deletedAt != null) return
         if (postTempDraftService.isTempDraft(post)) {
+            post.scheduledAt = null
             modify(
                 actor = actor,
                 post = post,
@@ -1359,13 +1368,14 @@ class PostApplicationService(
             return
         }
 
-        if (post.published == targetPublished && post.listed == targetListed) {
+        if (post.published == targetPublished && post.listed == targetListed && post.scheduledAt == null) {
             processedIds.add(post.id)
             return
         }
 
         val wasPublished = post.published
         val wasPublic = isPubliclyListed(post)
+        post.scheduledAt = null
         post.modify(
             title = post.title,
             content = post.content,

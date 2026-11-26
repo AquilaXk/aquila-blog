@@ -215,6 +215,7 @@ class Post(
         contentHtmlSanitizerPolicyVersion: String? = this.contentHtmlSanitizerPolicyVersion,
         contentHtmlTrustState: ContentHtmlTrustState? = this.contentHtmlTrustState,
         thumbnail: String? = this.thumbnail,
+        enforcePrivateUnlisted: Boolean = true,
     ) {
         this.title = title
         this.content = content
@@ -225,7 +226,9 @@ class Post(
         this.thumbnail = thumbnail
         published?.let { this.published = it }
         listed?.let { this.listed = it }
-        if (!this.published) this.listed = false
+        if (enforcePrivateUnlisted && !this.published && this.scheduledAt == null) {
+            this.listed = false
+        }
     }
 
     fun updateCanonicalSummary(
@@ -249,6 +252,9 @@ class Post(
         canonicalUrl: String?,
     ) {
         this.scheduledAt = if (this.published) null else scheduledAt
+        if (!this.published && this.scheduledAt == null) {
+            this.listed = false
+        }
         this.seriesName = seriesName
         this.seriesOrder = if (seriesName != null) seriesOrder else null
         this.canonicalUrl = canonicalUrl

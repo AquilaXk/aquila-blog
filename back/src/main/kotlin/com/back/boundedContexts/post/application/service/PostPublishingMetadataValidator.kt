@@ -62,7 +62,7 @@ object PostPublishingMetadataValidator {
         if (scheme != "http" && scheme != "https") {
             throw AppException(ErrorCode.BAD_REQUEST, "정본 URL은 http 또는 https 주소만 허용됩니다.")
         }
-        if (!parsed.rawUserInfo.isNullOrEmpty() || parsed.host.isNullOrBlank()) {
+        if (!parsed.rawUserInfo.isNullOrEmpty() || parsed.rawAuthority?.contains('@') == true || parsed.host.isNullOrBlank()) {
             throw AppException(ErrorCode.BAD_REQUEST, "유효한 호스트를 포함한 정본 URL만 사용할 수 있습니다.")
         }
         return parsed.toASCIIString()

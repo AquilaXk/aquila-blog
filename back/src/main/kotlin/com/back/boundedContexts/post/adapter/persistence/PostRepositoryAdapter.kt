@@ -47,6 +47,14 @@ class PostRepositoryAdapter(
             }
         }
 
+    override fun findByIdForUpdate(id: Long): Optional<Post> =
+        postRepository.findByIdForUpdate(id).also { optional ->
+            optional.ifPresent { post ->
+                Hibernate.initialize(post.likesCountAttr)
+                Hibernate.initialize(post.hitCountAttr)
+            }
+        }
+
     override fun findAllByIds(ids: Collection<Long>): List<Post> = postRepository.findAllById(ids)
 
     override fun existsById(id: Long): Boolean = postRepository.existsById(id)

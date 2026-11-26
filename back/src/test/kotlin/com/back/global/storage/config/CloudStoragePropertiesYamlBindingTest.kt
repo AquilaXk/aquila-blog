@@ -25,7 +25,7 @@ class CloudStoragePropertiesYamlBindingTest {
         )
         assertThat(applicationYaml).contains(
             "cloudVideoResumableStaleUploadingPartGraceSeconds: " +
-                "\${CUSTOM_STORAGE_CLOUD_VIDEO_RESUMABLE_STALEUPLOADINGPARTGRACESECONDS:604800}",
+                "\${CUSTOM_STORAGE_CLOUD_VIDEO_RESUMABLE_STALEUPLOADINGPARTGRACESECONDS:1800}",
         )
     }
 

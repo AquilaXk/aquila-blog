@@ -58,8 +58,20 @@ private val FILENAME_LINEBREAK_REGEX = Regex("[\\r\\n\\t]")
 private val FILENAME_SLASH_REGEX = Regex("[/\\\\]")
 private val FILENAME_CONTROL_REGEX = Regex("[\\p{Cc}\\p{Cf}\\p{Cs}]")
 private val WHITESPACE_REGEX = Regex("\\s+")
-private val MP4_FTYP_SIGNATURE = "ftyp".toByteArray(StandardCharsets.US_ASCII)
 private val EBML_HEADER_SIGNATURE = byteArrayOf(0x1A.toByte(), 0x45.toByte(), 0xDF.toByte(), 0xA3.toByte())
+private const val ISOBMFF_FTYP_WORD = 0x6674_7970
+private const val ISOBMFF_MOOV_WORD = 0x6D6F_6F76
+private const val ISOBMFF_WIDE_WORD = 0x7769_6465
+private const val ISOBMFF_MDAT_WORD = 0x6D64_6174
+private const val ISOBMFF_FREE_WORD = 0x6672_6565
+private const val ISOBMFF_SKIP_WORD = 0x736B_6970
+private const val ISOBMFF_AVIF_BRAND = 0x6176_6966
+private const val ISOBMFF_AVIS_BRAND = 0x6176_6973
+private const val ISOBMFF_M4A_BRAND = 0x4D34_4120
+private const val ISOBMFF_M4B_BRAND = 0x4D34_4220
+private const val ISOBMFF_M4P_BRAND = 0x4D34_5020
+private val EBML_DOCTYPE_WEBM = "webm".toByteArray(StandardCharsets.US_ASCII)
+private val EBML_DOCTYPE_MATROSKA = "matroska".toByteArray(StandardCharsets.US_ASCII)
 
 internal fun normalizeContentType(raw: String?): String =
     raw
@@ -142,13 +154,17 @@ internal fun normalizeVideoContentType(
     val fromContentType =
         when (normalized) {
             "video/mp4", "application/mp4" -> "video/mp4"
+            "video/quicktime" -> "video/quicktime"
             "video/webm" -> "video/webm"
+            "video/x-matroska", "video/matroska" -> "video/x-matroska"
             else -> null
         }
     val fromExtension =
         when (extension) {
-            "mp4", "m4v", "mov" -> "video/mp4"
+            "mp4", "m4v" -> "video/mp4"
+            "mov" -> "video/quicktime"
             "webm" -> "video/webm"
+            "mkv" -> "video/x-matroska"
             else -> null
         }
     return fromContentType ?: fromExtension ?: throw AppException(ErrorCode.BAD_REQUEST, "지원하지 않는 동영상 파일 형식입니다.")
@@ -166,14 +182,81 @@ internal fun matchesPrefix(
     return true
 }
 
-internal fun isMp4Container(bytes: ByteArray): Boolean = bytes.size >= 12 && matchesPrefix(bytes, MP4_FTYP_SIGNATURE, offset = 4)
+internal fun isMp4OrQuickTimeContainer(bytes: ByteArray): Boolean {
+    if (bytes.size < 8) return false
+    val boxSize =
+        ((bytes[0].toInt() and 0xFF).toLong() shl 24) or
+            ((bytes[1].toInt() and 0xFF).toLong() shl 16) or
+            ((bytes[2].toInt() and 0xFF).toLong() shl 8) or
+            (bytes[3].toInt() and 0xFF).toLong()
+    val validBoxSize = boxSize == 0L || boxSize == 1L || boxSize >= 8L
+    if (!validBoxSize) return false
+    val fourCc =
+        ((bytes[4].toInt() and 0xFF) shl 24) or
+            ((bytes[5].toInt() and 0xFF) shl 16) or
+            ((bytes[6].toInt() and 0xFF) shl 8) or
+            (bytes[7].toInt() and 0xFF)
+    if (fourCc == ISOBMFF_FTYP_WORD) {
+        if (bytes.size < 12) return false
+        val majorBrand =
+            ((bytes[8].toInt() and 0xFF) shl 24) or
+                ((bytes[9].toInt() and 0xFF) shl 16) or
+                ((bytes[10].toInt() and 0xFF) shl 8) or
+                (bytes[11].toInt() and 0xFF)
+        if (
+            majorBrand == ISOBMFF_AVIF_BRAND ||
+            majorBrand == ISOBMFF_AVIS_BRAND ||
+            majorBrand == ISOBMFF_M4A_BRAND ||
+            majorBrand == ISOBMFF_M4B_BRAND ||
+            majorBrand == ISOBMFF_M4P_BRAND
+        ) {
+            return false
+        }
+        return true
+    }
+    return fourCc == ISOBMFF_MOOV_WORD ||
+        fourCc == ISOBMFF_WIDE_WORD ||
+        fourCc == ISOBMFF_MDAT_WORD ||
+        fourCc == ISOBMFF_FREE_WORD ||
+        fourCc == ISOBMFF_SKIP_WORD
+}
 
 internal fun isWebmContainer(bytes: ByteArray): Boolean = matchesPrefix(bytes, EBML_HEADER_SIGNATURE)
 
-internal fun detectVideoFromSignature(bytes: ByteArray): String? =
+internal fun detectEbmlVideoContentType(
+    bytes: ByteArray,
+    declaredOrExtensionHint: String?,
+): String? {
+    if (!isWebmContainer(bytes)) return null
+    val docType = findEbmlDocType(bytes)
+    return when {
+        docType == "matroska" -> "video/x-matroska"
+        docType == "webm" -> "video/webm"
+        declaredOrExtensionHint == "video/x-matroska" -> "video/x-matroska"
+        else -> "video/webm"
+    }
+}
+
+private fun findEbmlDocType(bytes: ByteArray): String? {
+    val limit = minOf(bytes.size, 64)
+    for (i in 4 until limit) {
+        if (matchesPrefix(bytes, EBML_DOCTYPE_MATROSKA, offset = i)) return "matroska"
+        if (matchesPrefix(bytes, EBML_DOCTYPE_WEBM, offset = i)) return "webm"
+    }
+    return null
+}
+
+internal fun detectVideoFromSignature(bytes: ByteArray): String? = detectVideoFromSignature(bytes, null)
+
+internal fun detectVideoFromSignature(
+    bytes: ByteArray,
+    preferredContentType: String?,
+): String? =
     when {
-        isMp4Container(bytes) -> "video/mp4"
-        isWebmContainer(bytes) -> "video/webm"
+        isMp4OrQuickTimeContainer(bytes) ->
+            if (preferredContentType == "video/quicktime") "video/quicktime" else "video/mp4"
+        isWebmContainer(bytes) ->
+            detectEbmlVideoContentType(bytes, preferredContentType)
         else -> null
     }
 
@@ -219,6 +302,7 @@ internal fun CloudFile.toDto(clock: Clock): CloudFileDto =
         createdAt = runCatching { createdAt }.getOrDefault(clock.instant()),
         modifiedAt = runCatching { modifiedAt }.getOrDefault(clock.instant()),
         objectKey = objectKey,
+        checksumSha256 = checksumSha256,
     )
 
 internal fun CloudVideoUploadSession.toDto(parts: List<CloudVideoUploadPart>): CloudVideoUploadSessionDto =

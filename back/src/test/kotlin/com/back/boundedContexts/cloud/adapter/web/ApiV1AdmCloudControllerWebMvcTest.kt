@@ -11,6 +11,7 @@ import com.back.boundedContexts.cloud.model.CloudVideoUploadSessionStatus
 import com.back.boundedContexts.post.application.port.output.PostImageStoragePort
 import com.back.global.exception.application.AppException
 import com.back.global.security.domain.SecurityUser
+import com.back.global.storage.application.UploadedFileUrlCodec
 import com.back.global.storage.application.port.output.CloudStoragePort
 import com.back.support.BaseAdmCloudControllerWebMvcTest
 import jakarta.servlet.http.HttpServletRequest
@@ -1150,6 +1151,157 @@ class ApiV1AdmCloudControllerWebMvcTest : BaseAdmCloudControllerWebMvcTest() {
             completedFileId = null,
             failureReason = null,
         )
+
+    @Test
+    @DisplayName("관리자 content와 thumbnail은 checksumSha256 기반 ETag, 304, SVG CSP, share-links, 백슬래시 승격을 지원한다")
+    fun `adm cloud etag 304 thumbnail csp share links and backslash promote`() {
+        val admin = adminUser(id = 7L)
+        val shaDto =
+            CloudFileDto(
+                id = 51L,
+                ownerMemberId = 7L,
+                originalFilename = "photo.png",
+                contentType = "image/png",
+                byteSize = 10L,
+                mediaKind = CloudFileMediaKind.PHOTO,
+                folderPath = "",
+                createdAt = Instant.parse("2026-06-12T00:00:00Z"),
+                modifiedAt = Instant.parse("2026-06-12T00:00:00Z"),
+                checksumSha256 = "abc123",
+            )
+        given(cloudFileService.get(ownerMemberId = 7L, fileId = 51L)).willReturn(shaDto)
+        given(cloudFileService.openContent(ownerMemberId = 7L, fileId = 51L)).willReturn(
+            CloudFileContent(
+                file = shaDto,
+                storedObject =
+                    CloudStoragePort.StoredObject(
+                        inputStream = ByteArrayInputStream("0123456789".toByteArray()),
+                        contentType = "image/png",
+                        contentLength = 10L,
+                        originalFilename = "photo.png",
+                    ),
+            ),
+        )
+
+        mvc
+            .get("/system/api/v1/adm/cloud/files/51/thumbnail") {
+                header(HttpHeaders.IF_NONE_MATCH, "\"abc123-thumb\"")
+                with(user(admin))
+            }.andExpect {
+                status { isNotModified() }
+                header { string(HttpHeaders.ETAG, "\"abc123-thumb\"") }
+                header { string(HttpHeaders.CACHE_CONTROL, "private, max-age=0, must-revalidate") }
+            }
+        then(cloudFileService).should(never()).openContent(ownerMemberId = 7L, fileId = 51L)
+
+        mvc
+            .get("/system/api/v1/adm/cloud/files/51/thumbnail") {
+                with(user(admin))
+            }.andExpect {
+                status { isOk() }
+                header { string(HttpHeaders.ETAG, "\"abc123-thumb\"") }
+                header { string(HttpHeaders.CACHE_CONTROL, "private, max-age=0, must-revalidate") }
+            }
+
+        mvc
+            .perform(head("/system/api/v1/adm/cloud/files/51/thumbnail").with(user(admin)))
+            .andExpect(status().isOk)
+            .andExpect(header().string(HttpHeaders.ETAG, "\"abc123\""))
+
+        val svgDto = shaDto.copy(id = 52L, originalFilename = "a\\b[1].svg", contentType = "image/svg+xml")
+        given(cloudFileService.get(ownerMemberId = 7L, fileId = 52L)).willReturn(svgDto)
+        mvc
+            .post("/system/api/v1/adm/cloud/files/52/promote-post-asset") {
+                with(user(admin))
+            }.andExpect {
+                status { isBadRequest() }
+                jsonPath("$.msg") { value("게시글 에셋 승격은 정적 래스터 이미지(JPEG·PNG·GIF·WebP)만 지원합니다.") }
+            }
+
+        val slashPng = shaDto.copy(id = 53L, originalFilename = "a\\b[1].png")
+        given(cloudFileService.get(ownerMemberId = 7L, fileId = 53L)).willReturn(slashPng)
+        given(storageProperties.maxFileSizeBytes).willReturn(10L * 1024 * 1024)
+        given(cloudFileService.openContent(7L, 53L)).willReturn(
+            CloudFileContent(
+                file = slashPng,
+                storedObject =
+                    CloudStoragePort.StoredObject(
+                        inputStream = ByteArrayInputStream(byteArrayOf(1, 2, 3)),
+                        contentType = "image/png",
+                        contentLength = 10L,
+                        originalFilename = "a\\b[1].png",
+                    ),
+            ),
+        )
+        given(postImageStorageService.uploadPostImage(anyUploadRequest())).willReturn("post-images/k.webp")
+        val expectedUrl = UploadedFileUrlCodec.buildImageUrl("post-images/k.webp")
+        mvc
+            .post("/system/api/v1/adm/cloud/files/53/promote-post-asset") {
+                with(user(admin))
+            }.andExpect {
+                status { isCreated() }
+                jsonPath("$.data.markdown") { value("![a\\\\b\\[1\\].png]($expectedUrl)") }
+            }
+
+        given(cloudExternalPlaybackTokenService.issueShareLink(ownerMemberId = 7L, fileId = 52L, ttlSeconds = 86_400L))
+            .willReturn(
+                CloudExternalPlaybackTokenDto(
+                    fileId = 52L,
+                    token = "share-tok",
+                    expiresAt = Instant.parse("2026-06-27T00:00:00Z"),
+                    contentPath = "/system/api/v1/public/cloud/files/52/share?token=share-tok",
+                ),
+            )
+        mvc
+            .post("/system/api/v1/adm/cloud/files/52/share-links") {
+                contentType = MediaType.APPLICATION_JSON
+                content = """{"ttlSeconds":86400}"""
+                with(user(admin))
+            }.andExpect {
+                status { isCreated() }
+                jsonPath("$.data.contentPath") { value("/system/api/v1/public/cloud/files/52/share?token=share-tok") }
+            }
+
+        given(cloudExternalPlaybackTokenService.listShareTokens(7L, 52L)).willReturn(emptyList())
+        mvc.get("/system/api/v1/adm/cloud/files/52/share-links") { with(user(admin)) }.andExpect { status { isOk() } }
+
+        mvc.delete("/system/api/v1/adm/cloud/files/52/share-links/99") { with(user(admin)) }.andExpect { status { isOk() } }
+        then(cloudExternalPlaybackTokenService).should().revokeShareToken(7L, 52L, 99L)
+
+        assertThat(
+            mvc.post("/system/api/v1/adm/cloud/files/52/share-links") { with(user(admin)) },
+        ).isNotNull()
+
+        val badStream = CloseAwareInputStream("data".toByteArray())
+        val rangeBadMimeDto = shaDto.copy(id = 54L, contentType = "invalid mime")
+        given(cloudFileService.get(7L, 54L)).willReturn(rangeBadMimeDto)
+        given(cloudFileService.openContentRange(file = rangeBadMimeDto, range = 0L..3L)).willReturn(
+            CloudFileContent(
+                file = rangeBadMimeDto,
+                storedObject =
+                    CloudStoragePort.StoredObject(
+                        inputStream = badStream,
+                        contentType = "invalid mime",
+                        contentLength = 4L,
+                        originalFilename = "bad.bin",
+                    ),
+            ),
+        )
+        mvc
+            .get("/system/api/v1/adm/cloud/files/54/content") {
+                header(HttpHeaders.RANGE, "bytes=0-3")
+                with(user(admin))
+            }.andExpect { status { isInternalServerError() } }
+        assertThat(badStream.closed).isTrue()
+
+        given(cloudExternalPlaybackTokenService.revokeAllShareTokens(7L, 52L)).willReturn(2)
+        mvc
+            .delete("/system/api/v1/adm/cloud/files/52/share-links") { with(user(admin)) }
+            .andExpect {
+                status { isOk() }
+                jsonPath("$.data.revokedCount") { value(2) }
+            }
+    }
 
     private fun anyInputStream(): InputStream = ArgumentMatchers.any(InputStream::class.java) ?: ByteArrayInputStream(ByteArray(0))
 

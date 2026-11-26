@@ -17,7 +17,7 @@ object PublicApiCaddyReadPaths {
 
     fun isEdgePublicReadRoute(pattern: String): Boolean =
         pattern.startsWith("/post/api/") ||
-            (pattern.contains("/cloud/files/") && pattern.contains("playback"))
+            (pattern.contains("/cloud/files/") && (pattern.contains("playback") || pattern.contains("share")))
 
     fun toCaddyPath(pattern: String): String {
         var path = pattern

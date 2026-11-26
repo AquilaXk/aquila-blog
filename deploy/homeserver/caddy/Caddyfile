@@ -55,9 +55,9 @@
 # traffic in both vhosts - on the web vhost only because the import already sits inside the
 # backend-prefix handle.
 (backend_edge_gates) {
-	# Align with Cloudflare free-plan body limit (100 MiB). Oversized bodies get 413 before Spring.
+	# Align with Cloudflare free-plan body limit (100 MiB = 104857600 bytes). Oversized bodies get 413 before Spring.
 	request_body {
-		max_size 100MB
+		max_size 100MiB
 	}
 
 	header {
@@ -68,7 +68,7 @@
 		Permissions-Policy "camera=(), microphone=(), geolocation=()"
 	}
 
-	@cloudPlaybackSensitive path /system/api/v1/public/cloud/files/*/playback
+	@cloudPlaybackSensitive path /system/api/v1/public/cloud/files/*/playback /system/api/v1/public/cloud/files/*/share
 	log_skip @cloudPlaybackSensitive
 
 	@publicSearchSensitive path /post/api/v1/posts/search
@@ -92,10 +92,33 @@
 		respond 403
 	}
 
+	# Public cloud binary streams skip gzip/zstd re-compression and allow up to 90s origin headers (under Cloudflare 100s cap).
+	@publicCloudStream {
+		path /system/api/v1/public/cloud/files/*/playback /system/api/v1/public/cloud/files/*/share
+		method GET HEAD OPTIONS
+	}
+	handle @publicCloudStream {
+		reverse_proxy {$READ_API_UPSTREAM:back_blue}:8080 {
+			import trusted_edge_client_ip
+			header_up Host {host}
+			header_up X-Forwarded-Proto https
+			header_up X-Forwarded-Port 443
+			header_down -Strict-Transport-Security
+			header_down -X-Content-Type-Options
+			header_down -X-Frame-Options
+			header_down -Referrer-Policy
+			header_down -Permissions-Policy
+			transport http {
+				dial_timeout 3s
+				response_header_timeout 90s
+			}
+		}
+	}
+
 	# read 런타임 분리: 공개 read API를 별도 upstream으로 점진 분리할 수 있다.
 	# Paths must match PublicApiRouteContributor SoT export (tools/guards/public-api-read-caddy-paths.sot).
 	@publicReadFallback {
-		path /post/api/v1/images/* /post/api/v1/posts /post/api/v1/posts/* /post/api/v1/posts/*/adjacent /post/api/v1/posts/*/backlinks /post/api/v1/posts/*/content /post/api/v1/posts/*/meta /post/api/v1/posts/bootstrap /post/api/v1/posts/explore /post/api/v1/posts/explore/cursor /post/api/v1/posts/feed /post/api/v1/posts/feed/cursor /post/api/v1/posts/related/author /post/api/v1/posts/search /post/api/v1/posts/sitemap /post/api/v1/posts/tags /post/api/v1/posts/wikilink-catalog /system/api/v1/public/cloud/files/*/playback
+		path /post/api/v1/images/* /post/api/v1/posts /post/api/v1/posts/* /post/api/v1/posts/*/adjacent /post/api/v1/posts/*/backlinks /post/api/v1/posts/*/content /post/api/v1/posts/*/meta /post/api/v1/posts/bootstrap /post/api/v1/posts/explore /post/api/v1/posts/explore/cursor /post/api/v1/posts/feed /post/api/v1/posts/feed/cursor /post/api/v1/posts/related/author /post/api/v1/posts/search /post/api/v1/posts/sitemap /post/api/v1/posts/tags /post/api/v1/posts/wikilink-catalog /system/api/v1/public/cloud/files/*/playback /system/api/v1/public/cloud/files/*/share
 		not path /post/api/v1/posts/mine /post/api/v1/posts/temp
 		method GET HEAD OPTIONS
 	}
@@ -115,6 +138,28 @@
 			transport http {
 				dial_timeout 3s
 				response_header_timeout 12s
+			}
+		}
+	}
+
+	# Admin cloud upload/part/complete/content/thumbnail bypass gzip/zstd and allow up to 90s response headers (under Cloudflare 100s limit).
+	@adminCloudTransfer {
+		path /system/api/v1/adm/cloud/files /system/api/v1/adm/cloud/files/*/content /system/api/v1/adm/cloud/files/*/thumbnail /system/api/v1/adm/cloud/files/video-upload-sessions /system/api/v1/adm/cloud/files/video-upload-sessions/*/parts/* /system/api/v1/adm/cloud/files/video-upload-sessions/*/complete
+	}
+	handle @adminCloudTransfer {
+		reverse_proxy {$ADMIN_API_UPSTREAM:back_blue}:8080 {
+			import trusted_edge_client_ip
+			header_up Host {host}
+			header_up X-Forwarded-Proto https
+			header_up X-Forwarded-Port 443
+			header_down -Strict-Transport-Security
+			header_down -X-Content-Type-Options
+			header_down -X-Frame-Options
+			header_down -Referrer-Policy
+			header_down -Permissions-Policy
+			transport http {
+				dial_timeout 3s
+				response_header_timeout 90s
 			}
 		}
 	}

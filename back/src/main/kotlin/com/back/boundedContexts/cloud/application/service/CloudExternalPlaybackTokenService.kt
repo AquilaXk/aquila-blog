@@ -39,6 +39,7 @@ data class CloudExternalPlaybackTokenSummaryDto(
     val fileId: Long,
     val createdAt: Instant,
     val expiresAt: Instant,
+    val purpose: CloudExternalPlaybackTokenPurpose = CloudExternalPlaybackTokenPurpose.EXTERNAL_PLAYBACK,
 )
 
 data class CloudExternalPlaybackTokenListResBody(
@@ -51,6 +52,7 @@ data class RevokeExternalPlaybackTokensResBody(
 
 /**
  * 참조 구현: strapi/strapi (MIT) — media token lifecycle & revocation
+ *         supabase/supabase (Apache-2.0) CustomExpiryModal — 1h/6h/24h/7d selectable expiry
  */
 @Service
 class CloudExternalPlaybackTokenService(
@@ -67,6 +69,7 @@ class CloudExternalPlaybackTokenService(
     fun issue(
         ownerMemberId: Long,
         fileId: Long,
+        ttlSeconds: Long? = null,
     ): CloudExternalPlaybackTokenDto {
         val file =
             try {
@@ -75,24 +78,62 @@ class CloudExternalPlaybackTokenService(
                 CloudMediaMetrics.recordTokenOperation(meterRegistry, op = "denied")
                 throw ex
             }
+        return createTokenRecord(
+            file = file,
+            purpose = CloudExternalPlaybackTokenPurpose.EXTERNAL_PLAYBACK,
+            ttl = resolveTtlDuration(ttlSeconds),
+        )
+    }
+
+    @Transactional
+    fun issueShareLink(
+        ownerMemberId: Long,
+        fileId: Long,
+        ttlSeconds: Long? = null,
+    ): CloudExternalPlaybackTokenDto {
+        val file =
+            try {
+                findActiveOwnedFile(ownerMemberId, fileId)
+            } catch (ex: AppException) {
+                CloudMediaMetrics.recordTokenOperation(meterRegistry, op = "denied")
+                throw ex
+            }
+        return createTokenRecord(
+            file = file,
+            purpose = CloudExternalPlaybackTokenPurpose.SHARE_LINK,
+            ttl = resolveTtlDuration(ttlSeconds),
+        )
+    }
+
+    private fun createTokenRecord(
+        file: CloudFile,
+        purpose: CloudExternalPlaybackTokenPurpose,
+        ttl: Duration,
+    ): CloudExternalPlaybackTokenDto {
         val rawToken = generateRawToken()
-        val expiresAt = clock.instant().plus(TOKEN_TTL)
+        val expiresAt = clock.instant().plus(ttl)
         cloudExternalPlaybackTokenRepository.save(
             CloudExternalPlaybackToken.create(
                 tokenHash = hashToken(rawToken),
                 fileId = file.id,
                 memberId = file.ownerMemberId,
-                purpose = CloudExternalPlaybackTokenPurpose.EXTERNAL_PLAYBACK,
+                purpose = purpose,
                 expiresAt = expiresAt,
             ),
         )
         CloudMediaMetrics.recordTokenOperation(meterRegistry, op = "issued")
 
+        val contentPath =
+            when (purpose) {
+                CloudExternalPlaybackTokenPurpose.EXTERNAL_PLAYBACK -> externalContentPath(file.id, rawToken)
+                CloudExternalPlaybackTokenPurpose.SHARE_LINK -> externalSharePath(file.id, rawToken)
+            }
+
         return CloudExternalPlaybackTokenDto(
             fileId = file.id,
             token = rawToken,
             expiresAt = expiresAt,
-            contentPath = externalContentPath(file.id, rawToken),
+            contentPath = contentPath,
         )
     }
 
@@ -100,13 +141,37 @@ class CloudExternalPlaybackTokenService(
     fun getFile(
         token: String,
         fileId: Long,
-    ): CloudFileDto = resolveTokenFile(token, fileId).toDto()
+    ): CloudFileDto = resolveTokenFile(token, fileId, CloudExternalPlaybackTokenPurpose.EXTERNAL_PLAYBACK).toDto()
+
+    @Transactional(readOnly = true)
+    fun getSharedFile(
+        token: String,
+        fileId: Long,
+    ): CloudFileDto = resolveTokenFile(token, fileId, CloudExternalPlaybackTokenPurpose.SHARE_LINK).toDto()
 
     fun openContent(
         token: String,
         fileId: Long,
     ): CloudFileContent {
-        val file = executeReadOnlyTransaction { resolveTokenFile(token, fileId).toDto() }
+        val file =
+            executeReadOnlyTransaction {
+                resolveTokenFile(token, fileId, CloudExternalPlaybackTokenPurpose.EXTERNAL_PLAYBACK).toDto()
+            }
+        return openStoredContent(file)
+    }
+
+    fun openSharedContent(
+        token: String,
+        fileId: Long,
+    ): CloudFileContent {
+        val file =
+            executeReadOnlyTransaction {
+                resolveTokenFile(token, fileId, CloudExternalPlaybackTokenPurpose.SHARE_LINK).toDto()
+            }
+        return openStoredContent(file)
+    }
+
+    private fun openStoredContent(file: CloudFileDto): CloudFileContent {
         val storedObject =
             cloudStoragePort.open(file.objectKey)
                 ?: throw AppException(ErrorCode.NOT_FOUND, "클라우드 파일을 찾을 수 없습니다.")
@@ -136,7 +201,10 @@ class CloudExternalPlaybackTokenService(
         fileId: Long,
         range: LongRange,
     ): CloudFileContent {
-        val file = executeReadOnlyTransaction { resolveTokenFile(token, fileId).toDto() }
+        val file =
+            executeReadOnlyTransaction {
+                resolveTokenFile(token, fileId, CloudExternalPlaybackTokenPurpose.EXTERNAL_PLAYBACK).toDto()
+            }
         return openContentRange(file, range)
     }
 
@@ -172,13 +240,27 @@ class CloudExternalPlaybackTokenService(
         fileId: Long,
     ): List<CloudExternalPlaybackTokenSummaryDto> {
         findVideoFile(ownerMemberId, fileId)
+        return listActiveTokenSummaries(fileId)
+    }
+
+    @Transactional(readOnly = true)
+    fun listShareTokens(
+        ownerMemberId: Long,
+        fileId: Long,
+    ): List<CloudExternalPlaybackTokenSummaryDto> {
+        findActiveOwnedFile(ownerMemberId, fileId)
+        return listActiveTokenSummaries(fileId)
+    }
+
+    private fun listActiveTokenSummaries(fileId: Long): List<CloudExternalPlaybackTokenSummaryDto> {
         val activeTokens = cloudExternalPlaybackTokenRepository.findActiveByFileId(fileId, clock.instant())
         return activeTokens.map {
             CloudExternalPlaybackTokenSummaryDto(
                 id = it.id,
                 fileId = it.fileId,
-                createdAt = it.createdAt,
+                createdAt = runCatching { it.createdAt }.getOrDefault(clock.instant()),
                 expiresAt = it.expiresAt,
+                purpose = it.purpose,
             )
         }
     }
@@ -190,6 +272,24 @@ class CloudExternalPlaybackTokenService(
         tokenId: Long,
     ) {
         findVideoFile(ownerMemberId, fileId)
+        deleteSingleToken(ownerMemberId, fileId, tokenId)
+    }
+
+    @Transactional
+    fun revokeShareToken(
+        ownerMemberId: Long,
+        fileId: Long,
+        tokenId: Long,
+    ) {
+        findActiveOwnedFile(ownerMemberId, fileId)
+        deleteSingleToken(ownerMemberId, fileId, tokenId)
+    }
+
+    private fun deleteSingleToken(
+        ownerMemberId: Long,
+        fileId: Long,
+        tokenId: Long,
+    ) {
         val deleted =
             cloudExternalPlaybackTokenRepository.deleteByIdAndFileIdAndMemberId(
                 id = tokenId,
@@ -208,6 +308,22 @@ class CloudExternalPlaybackTokenService(
         fileId: Long,
     ): Int {
         findVideoFile(ownerMemberId, fileId)
+        return deleteAllFileTokens(ownerMemberId, fileId)
+    }
+
+    @Transactional
+    fun revokeAllShareTokens(
+        ownerMemberId: Long,
+        fileId: Long,
+    ): Int {
+        findActiveOwnedFile(ownerMemberId, fileId)
+        return deleteAllFileTokens(ownerMemberId, fileId)
+    }
+
+    private fun deleteAllFileTokens(
+        ownerMemberId: Long,
+        fileId: Long,
+    ): Int {
         val deleted =
             cloudExternalPlaybackTokenRepository.deleteByFileIdAndMemberId(
                 fileId = fileId,
@@ -217,13 +333,18 @@ class CloudExternalPlaybackTokenService(
         return deleted
     }
 
+    private fun findActiveOwnedFile(
+        ownerMemberId: Long,
+        fileId: Long,
+    ): CloudFile =
+        cloudFileRepository.findActiveByIdAndOwner(fileId, ownerMemberId)
+            ?: throw AppException(ErrorCode.NOT_FOUND, "클라우드 파일을 찾을 수 없습니다.")
+
     private fun findVideoFile(
         ownerMemberId: Long,
         fileId: Long,
     ): CloudFile {
-        val file =
-            cloudFileRepository.findActiveByIdAndOwner(fileId, ownerMemberId)
-                ?: throw AppException(ErrorCode.NOT_FOUND, "클라우드 파일을 찾을 수 없습니다.")
+        val file = findActiveOwnedFile(ownerMemberId, fileId)
         if (file.mediaKind != CloudFileMediaKind.VIDEO) {
             throw AppException(ErrorCode.BAD_REQUEST, "동영상 파일만 외부 재생할 수 있습니다.")
         }
@@ -233,6 +354,7 @@ class CloudExternalPlaybackTokenService(
     private fun resolveTokenFile(
         token: String,
         fileId: Long,
+        purpose: CloudExternalPlaybackTokenPurpose,
     ): CloudFile {
         val normalizedToken = token.trim()
         if (normalizedToken.isBlank()) {
@@ -243,7 +365,7 @@ class CloudExternalPlaybackTokenService(
             cloudExternalPlaybackTokenRepository.findValid(
                 tokenHash = hashToken(normalizedToken),
                 fileId = fileId,
-                purpose = CloudExternalPlaybackTokenPurpose.EXTERNAL_PLAYBACK,
+                purpose = purpose,
                 now = clock.instant(),
             )
         if (playbackToken == null) {
@@ -252,7 +374,10 @@ class CloudExternalPlaybackTokenService(
         }
 
         return try {
-            findVideoFile(playbackToken.memberId, fileId)
+            when (purpose) {
+                CloudExternalPlaybackTokenPurpose.EXTERNAL_PLAYBACK -> findVideoFile(playbackToken.memberId, fileId)
+                CloudExternalPlaybackTokenPurpose.SHARE_LINK -> findActiveOwnedFile(playbackToken.memberId, fileId)
+            }
         } catch (ex: AppException) {
             CloudMediaMetrics.recordTokenOperation(meterRegistry, op = "denied")
             throw ex
@@ -271,10 +396,20 @@ class CloudExternalPlaybackTokenService(
             createdAt = runCatching { createdAt }.getOrDefault(clock.instant()),
             modifiedAt = runCatching { modifiedAt }.getOrDefault(clock.instant()),
             objectKey = objectKey,
+            checksumSha256 = checksumSha256,
         )
+
+    private fun resolveTtlDuration(ttlSeconds: Long?): Duration {
+        if (ttlSeconds == null) return TOKEN_TTL
+        if (ttlSeconds !in ALLOWED_SHARE_TTL_SECONDS) {
+            throw AppException(ErrorCode.BAD_REQUEST, "지원하지 않는 공유 만료 기한입니다.")
+        }
+        return Duration.ofSeconds(ttlSeconds)
+    }
 
     companion object {
         private val TOKEN_TTL: Duration = Duration.ofHours(6)
+        val ALLOWED_SHARE_TTL_SECONDS: Set<Long> = setOf(3_600L, 21_600L, 86_400L, 604_800L)
         private val secureRandom = SecureRandom()
 
         fun hashToken(token: String): String =
@@ -295,6 +430,13 @@ class CloudExternalPlaybackTokenService(
             token: String,
         ): String =
             "/system/api/v1/public/cloud/files/$fileId/playback?token=" +
+                URLEncoder.encode(token, StandardCharsets.UTF_8)
+
+        private fun externalSharePath(
+            fileId: Long,
+            token: String,
+        ): String =
+            "/system/api/v1/public/cloud/files/$fileId/share?token=" +
                 URLEncoder.encode(token, StandardCharsets.UTF_8)
     }
 }

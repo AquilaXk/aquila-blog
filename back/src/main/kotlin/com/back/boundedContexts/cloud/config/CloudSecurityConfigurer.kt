@@ -12,6 +12,8 @@ class CloudSecurityConfigurer : PublicApiRouteContributor {
         listOf(
             PublicApiRouteSpec("/system/api/v1/public/cloud/files/*/playback", HttpMethod.GET),
             PublicApiRouteSpec("/system/api/v1/public/cloud/files/*/playback", HttpMethod.HEAD),
+            PublicApiRouteSpec("/system/api/v1/public/cloud/files/*/share", HttpMethod.GET),
+            PublicApiRouteSpec("/system/api/v1/public/cloud/files/*/share", HttpMethod.HEAD),
         )
 
     fun configure(authorize: AuthorizeHttpRequestsDsl) {

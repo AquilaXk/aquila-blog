@@ -16,16 +16,33 @@ import org.springframework.http.HttpStatus
 import org.springframework.http.MediaType
 import org.springframework.http.ResponseEntity
 import java.nio.charset.StandardCharsets
+import java.util.Locale
 
 object CloudContentWebSupport {
-    fun headMetadataResponse(file: CloudFileDto): ResponseEntity<Void> =
-        noStoreHeaders(
+    private const val SANDBOX_CSP = "default-src 'none'; style-src 'unsafe-inline'; sandbox"
+
+    private val ACTIVE_SCRIPT_CONTENT_TYPES =
+        setOf(
+            "image/svg+xml",
+            "text/html",
+            "application/xhtml+xml",
+            "text/xml",
+            "application/xml",
+            "text/javascript",
+            "application/javascript",
+        )
+
+    fun headMetadataResponse(file: CloudFileDto): ResponseEntity<Void> {
+        val builder =
             ResponseEntity
                 .ok()
                 .contentType(safeMediaType(file.contentType))
                 .header(HttpHeaders.ACCEPT_RANGES, "bytes")
-                .contentLength(file.byteSize),
-        ).build()
+                .contentLength(file.byteSize)
+        applySecurityHeaders(builder, file.contentType)
+        applyCacheHeaders(builder, file, thumbnail = false)
+        return builder.build()
+    }
 
     fun contentResponse(
         request: HttpServletRequest,
@@ -40,6 +57,7 @@ object CloudContentWebSupport {
             meterRegistry = meterRegistry,
             endpoint = endpoint,
             download = false,
+            thumbnail = false,
             loadFile = loadFile,
             openRange = openRange,
             openFull = openFull,
@@ -50,6 +68,7 @@ object CloudContentWebSupport {
         meterRegistry: MeterRegistry?,
         endpoint: String,
         download: Boolean,
+        thumbnail: Boolean = false,
         loadFile: () -> CloudFileDto,
         openRange: (CloudFileDto, LongRange) -> CloudFileContent,
         openFull: () -> CloudFileContent,
@@ -77,49 +96,83 @@ object CloudContentWebSupport {
                 }
                 val content = openRange(file, range)
                 val storedObject = content.storedObject
-                val bytesSent = range.last - range.first + 1
+                try {
+                    val bytesSent = range.last - range.first + 1
+                    CloudMediaMetrics.recordPlaybackRequest(
+                        meterRegistry,
+                        statusClass = "2xx",
+                        range = "partial",
+                        endpoint = endpoint,
+                        bytesSent = bytesSent,
+                    )
+
+                    val responseBuilder =
+                        noStoreHeaders(
+                            ResponseEntity
+                                .status(HttpStatus.PARTIAL_CONTENT)
+                                .contentType(safeMediaType(storedObject.contentType))
+                                .header(HttpHeaders.ACCEPT_RANGES, "bytes")
+                                .header(HttpHeaders.CONTENT_RANGE, "bytes ${range.first}-${range.last}/$totalLength")
+                                .header(
+                                    HttpHeaders.CONTENT_DISPOSITION,
+                                    resolveDisposition(storedObject.contentType, content.file.originalFilename, download),
+                                ).contentLength(bytesSent),
+                        )
+                    applySecurityHeaders(responseBuilder, storedObject.contentType)
+                    return responseBuilder.body(InputStreamResource(storedObject.inputStream))
+                } catch (ex: Throwable) {
+                    runCatching { storedObject.inputStream.close() }
+                    throw ex
+                }
+            }
+
+            resolveMatchedEtag(request, loadFile, thumbnail)?.let { etag ->
+                val notModifiedBuilder =
+                    ResponseEntity
+                        .status(HttpStatus.NOT_MODIFIED)
+                        .header("X-Content-Type-Options", "nosniff")
+                        .header(HttpHeaders.CACHE_CONTROL, "private, max-age=0, must-revalidate")
+                        .header(HttpHeaders.ETAG, etag)
                 CloudMediaMetrics.recordPlaybackRequest(
                     meterRegistry,
-                    statusClass = "2xx",
-                    range = "partial",
+                    statusClass = "3xx",
+                    range = "full",
                     endpoint = endpoint,
-                    bytesSent = bytesSent,
                 )
-
-                return noStoreHeaders(
-                    ResponseEntity
-                        .status(HttpStatus.PARTIAL_CONTENT)
-                        .contentType(safeMediaType(storedObject.contentType))
-                        .header(HttpHeaders.ACCEPT_RANGES, "bytes")
-                        .header(HttpHeaders.CONTENT_RANGE, "bytes ${range.first}-${range.last}/$totalLength")
-                        .header(HttpHeaders.CONTENT_DISPOSITION, contentDisposition(content.file.originalFilename, download))
-                        .contentLength(bytesSent),
-                ).body(InputStreamResource(storedObject.inputStream))
+                return notModifiedBuilder.build()
             }
 
             val content = openFull()
             val storedObject = content.storedObject
-            val totalLength = storedObject.contentLength ?: -1L
-            CloudMediaMetrics.recordPlaybackRequest(
-                meterRegistry,
-                statusClass = "2xx",
-                range = "full",
-                endpoint = endpoint,
-                bytesSent = totalLength.coerceAtLeast(0L),
-            )
-            val responseBuilder =
-                noStoreHeaders(
+            try {
+                val totalLength = storedObject.contentLength ?: -1L
+                CloudMediaMetrics.recordPlaybackRequest(
+                    meterRegistry,
+                    statusClass = "2xx",
+                    range = "full",
+                    endpoint = endpoint,
+                    bytesSent = totalLength.coerceAtLeast(0L),
+                )
+                val responseBuilder =
                     ResponseEntity
                         .ok()
                         .contentType(safeMediaType(storedObject.contentType))
                         .header(HttpHeaders.ACCEPT_RANGES, "bytes")
-                        .header(HttpHeaders.CONTENT_DISPOSITION, contentDisposition(content.file.originalFilename, download)),
-                )
-            if (totalLength >= 0L) {
-                responseBuilder.contentLength(totalLength)
-            }
+                        .header(
+                            HttpHeaders.CONTENT_DISPOSITION,
+                            resolveDisposition(storedObject.contentType, content.file.originalFilename, download),
+                        )
+                applySecurityHeaders(responseBuilder, storedObject.contentType)
+                applyCacheHeaders(responseBuilder, content.file, thumbnail = thumbnail)
+                if (totalLength >= 0L) {
+                    responseBuilder.contentLength(totalLength)
+                }
 
-            responseBuilder.body(InputStreamResource(storedObject.inputStream))
+                responseBuilder.body(InputStreamResource(storedObject.inputStream))
+            } catch (ex: Throwable) {
+                runCatching { storedObject.inputStream.close() }
+                throw ex
+            }
         } catch (ex: AppException) {
             val statusClass =
                 when {
@@ -159,10 +212,81 @@ object CloudContentWebSupport {
             .build()
             .toString()
 
-    private fun contentDisposition(
+    private fun resolveDisposition(
+        contentType: String,
         filename: String,
         download: Boolean,
-    ): String = if (download) attachmentDisposition(filename) else inlineDisposition(filename)
+    ): String {
+        val forceAttachment = download || isActiveScriptContentType(contentType)
+        return if (forceAttachment) attachmentDisposition(filename) else inlineDisposition(filename)
+    }
+
+    private fun isActiveScriptContentType(contentType: String): Boolean {
+        val normalized = contentType.substringBefore(';').trim().lowercase(Locale.ROOT)
+        return normalized in ACTIVE_SCRIPT_CONTENT_TYPES
+    }
+
+    private fun <T : ResponseEntity.BodyBuilder> applySecurityHeaders(
+        builder: T,
+        contentType: String,
+    ): T {
+        builder.header("X-Content-Type-Options", "nosniff")
+        if (isActiveScriptContentType(contentType)) {
+            builder.header("Content-Security-Policy", SANDBOX_CSP)
+        }
+        return builder
+    }
+
+    internal fun resolveEtag(
+        file: CloudFileDto,
+        thumbnail: Boolean,
+    ): String? {
+        val checksum = file.checksumSha256?.trim()?.takeIf { it.isNotEmpty() } ?: return null
+        return if (thumbnail) "\"$checksum-thumb\"" else "\"$checksum\""
+    }
+
+    private fun <T : ResponseEntity.BodyBuilder> applyCacheHeaders(
+        builder: T,
+        file: CloudFileDto,
+        thumbnail: Boolean,
+    ): T {
+        val etag = resolveEtag(file, thumbnail)
+        if (etag == null) {
+            return noStoreHeaders(builder)
+        }
+        builder.header(HttpHeaders.CACHE_CONTROL, "private, max-age=0, must-revalidate")
+        builder.header(HttpHeaders.ETAG, etag)
+        builder.header("X-Content-Type-Options", "nosniff")
+        return builder
+    }
+
+    private fun resolveMatchedEtag(
+        request: HttpServletRequest,
+        loadFile: () -> CloudFileDto,
+        thumbnail: Boolean,
+    ): String? {
+        val headerValues = request.getHeaders(HttpHeaders.IF_NONE_MATCH)?.toList().orEmpty()
+        if (headerValues.isEmpty()) return null
+        val etag = resolveEtag(loadFile(), thumbnail) ?: return null
+        val normalizedTarget = normalizeEtagToken(etag)
+        val matched =
+            headerValues.any { raw ->
+                raw
+                    .split(',')
+                    .asSequence()
+                    .map { it.trim() }
+                    .any { token ->
+                        token == "*" || normalizeEtagToken(token) == normalizedTarget
+                    }
+            }
+        return if (matched) etag else null
+    }
+
+    private fun normalizeEtagToken(token: String): String =
+        token
+            .removePrefix("W/")
+            .removePrefix("w/")
+            .trim()
 
     fun safeMediaType(contentType: String): MediaType =
         runCatching { MediaType.parseMediaType(contentType) }

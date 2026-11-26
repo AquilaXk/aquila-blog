@@ -1154,11 +1154,11 @@ class CloudVideoUploadSessionServiceTest {
         service.uploadPart(7L, session.id, 1, mp4Part(TEST_PART_SIZE_BYTES.toInt()))
         val stored = sessionRepository.savedSessions.single { it.id == session.id }
         stored.status = CloudVideoUploadSessionStatus.UPLOADING_PART
-        // Claim-time modifiedAt; 90 minutes later is still within absolute-max grace.
+        // Claim-time modifiedAt; 20 minutes later is still within 30-minute grace.
         stored.modifiedAt = Instant.parse("2026-06-17T00:00:00Z")
         val staleService =
             createService(
-                clock = Clock.fixed(Instant.parse("2026-06-17T01:30:00Z"), ZoneOffset.UTC),
+                clock = Clock.fixed(Instant.parse("2026-06-17T00:20:00Z"), ZoneOffset.UTC),
             )
 
         val recovered = staleService.purgeStaleIntermediateSessions(batchSize = 100)
@@ -1684,27 +1684,42 @@ class CloudVideoUploadSessionServiceTest {
     }
 
     @Test
-    @DisplayName("선점 상태의 세션은 cancel과 cleanup이 동시에 처리하지 않는다")
+    @DisplayName("COMPLETING 선점 세션은 cancel과 cleanup을 막고 UPLOADING_PART는 사용자 취소를 허용한다")
     fun `선점 상태는 cancel과 cleanup을 막는다`() {
-        val session =
+        val completingSession =
             service.createSession(
                 ownerMemberId = 7L,
-                originalFilename = "movie.mp4",
+                originalFilename = "completing.mp4",
                 contentType = "video/mp4",
                 byteSize = TEST_PART_SIZE_BYTES,
                 folderPath = "",
             )
         sessionRepository.transitionStatus(
-            id = session.id,
+            id = completingSession.id,
             expectedStatus = CloudVideoUploadSessionStatus.IN_PROGRESS,
-            nextStatus = CloudVideoUploadSessionStatus.UPLOADING_PART,
+            nextStatus = CloudVideoUploadSessionStatus.COMPLETING,
             now = clock.instant(),
         )
 
         assertThatThrownBy {
-            service.cancel(7L, session.id)
+            service.cancel(7L, completingSession.id)
         }.isInstanceOf(AppException::class.java)
             .hasMessageContaining("진행 중")
+
+        val uploadingSession =
+            service.createSession(
+                ownerMemberId = 7L,
+                originalFilename = "uploading.mp4",
+                contentType = "video/mp4",
+                byteSize = TEST_PART_SIZE_BYTES,
+                folderPath = "",
+            )
+        sessionRepository.transitionStatus(
+            id = uploadingSession.id,
+            expectedStatus = CloudVideoUploadSessionStatus.IN_PROGRESS,
+            nextStatus = CloudVideoUploadSessionStatus.UPLOADING_PART,
+            now = clock.instant(),
+        )
 
         val expiredService =
             createService(
@@ -1712,6 +1727,11 @@ class CloudVideoUploadSessionServiceTest {
             )
         assertThat(expiredService.purgeExpiredSessions(batchSize = 100)).isZero()
         assertThat(storage.abortedUploads).isEmpty()
+
+        service.cancel(7L, uploadingSession.id)
+        assertThat(sessionRepository.savedSessions.single { it.id == uploadingSession.id }.status)
+            .isEqualTo(CloudVideoUploadSessionStatus.CANCELLED)
+        assertThat(storage.abortedUploads).hasSize(1)
     }
 
     @Test
@@ -1829,6 +1849,31 @@ class CloudVideoUploadSessionServiceTest {
         assertThat(partRepository.findBySessionId(session.id)).hasSize(1)
         assertThat(sessionRepository.savedSessions.single { it.id == session.id }.status)
             .isEqualTo(CloudVideoUploadSessionStatus.UPLOADING_PART)
+    }
+
+    @Test
+    @DisplayName("파트 저장 중 세션이 동시에 CANCELLED로 전이되면 방금 저장된 파트를 정리하고 409를 반환한다")
+    fun `파트 저장 중 취소되면 파트를 정리하고 409를 반환한다`() {
+        val session =
+            service.createSession(
+                ownerMemberId = 7L,
+                originalFilename = "movie.mp4",
+                contentType = "video/mp4",
+                byteSize = TEST_PART_SIZE_BYTES,
+                folderPath = "",
+            )
+        sessionRepository.failingTransitions +=
+            CloudVideoUploadSessionStatus.UPLOADING_PART to CloudVideoUploadSessionStatus.IN_PROGRESS
+        storage.onUploadMultipartPart = {
+            sessionRepository.savedSessions.single { it.id == session.id }.status = CloudVideoUploadSessionStatus.CANCELLED
+        }
+
+        assertThatThrownBy {
+            service.uploadPart(7L, session.id, 1, mp4Part(TEST_PART_SIZE_BYTES.toInt()))
+        }.isInstanceOf(AppException::class.java)
+            .hasMessageContaining("상태가 변경")
+
+        assertThat(partRepository.findBySessionId(session.id)).isEmpty()
     }
 
     @Test
@@ -2318,6 +2363,7 @@ class CloudVideoUploadSessionServiceTest {
         var completedObjectContentLengthOverride: Long? = null
         var omitHeadOnComplete = false
         var failInitiate = false
+        var onUploadMultipartPart: (() -> Unit)? = null
 
         override fun upload(request: CloudStoragePort.UploadRequest): CloudStoragePort.UploadResult =
             CloudStoragePort.UploadResult(request.objectKey, "checksum")
@@ -2338,6 +2384,7 @@ class CloudVideoUploadSessionServiceTest {
         override fun uploadMultipartPart(
             request: CloudStoragePort.MultipartUploadPartRequest,
         ): CloudStoragePort.MultipartUploadPartResult {
+            onUploadMultipartPart?.invoke()
             if (request.partNumber in ioFailingPartNumbers) {
                 throw java.io.IOException("part io failure")
             }

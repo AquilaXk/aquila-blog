@@ -20,11 +20,9 @@ const val DEFAULT_CLOUD_VIDEO_RESUMABLE_STALE_INITIATING_GRACE_SECONDS: Long = 1
 const val DEFAULT_CLOUD_VIDEO_RESUMABLE_STALE_COMPLETING_GRACE_SECONDS: Long = 30L * 60
 
 /**
- * UPLOADING_PART stale grace. modifiedAt is set when the part claim starts, not during streaming,
- * so this must cover a full large-part upload window — default equals absolute max session lifetime.
+ * UPLOADING_PART stale grace. Short 30-minute recovery cutoff for crashed/abandoned chunk claims.
  */
-const val DEFAULT_CLOUD_VIDEO_RESUMABLE_STALE_UPLOADING_PART_GRACE_SECONDS: Long =
-    DEFAULT_CLOUD_VIDEO_RESUMABLE_ABSOLUTE_MAX_SECONDS
+const val DEFAULT_CLOUD_VIDEO_RESUMABLE_STALE_UPLOADING_PART_GRACE_SECONDS: Long = 30L * 60
 const val DEFAULT_CLOUD_RECONCILE_OBJECT_GRACE_SECONDS: Long = 24L * 60 * 60
 const val DEFAULT_CLOUD_RECONCILE_INVENTORY_LIMIT: Int = 1_000
 const val DEFAULT_CLOUD_RECONCILE_SAFETY_THRESHOLD: Int = 25
@@ -59,8 +57,7 @@ data class CloudStorageProperties(
     var cloudVideoResumableStaleInitiatingGraceSeconds: Long = DEFAULT_CLOUD_VIDEO_RESUMABLE_STALE_INITIATING_GRACE_SECONDS,
     var cloudVideoResumableStaleCompletingGraceSeconds: Long = DEFAULT_CLOUD_VIDEO_RESUMABLE_STALE_COMPLETING_GRACE_SECONDS,
     /**
-     * UPLOADING_PART `modifiedAt` stale cutoff (default = absolute max).
-     * Claim bumps modifiedAt once at upload start; a short grace can abort in-flight large parts.
+     * UPLOADING_PART `modifiedAt` stale cutoff (default = 1800s / 30m).
      */
     var cloudVideoResumableStaleUploadingPartGraceSeconds: Long = DEFAULT_CLOUD_VIDEO_RESUMABLE_STALE_UPLOADING_PART_GRACE_SECONDS,
     var cloudReconcileInventoryLimit: Int = DEFAULT_CLOUD_RECONCILE_INVENTORY_LIMIT,

@@ -10,7 +10,7 @@
 | --- | --- | --- | --- |
 | Cloudflare edge (free) | 요청 본문 **100 MiB** | Cloudflare plan (고정) | 초과 시 edge **413** — origin 미도달 |
 | Cloudflare Tunnel | edge와 동일 | Tunnel Public Hostname | plan 본문 한도를 따름 |
-| Caddy | **100MB** (`request_body.max_size`) | `deploy/homeserver/caddy/Caddyfile` | 백엔드 전 예측 가능 413 |
+| Caddy | **100 MiB** (104 857 600 B, `request_body.max_size 100MiB`) | `deploy/homeserver/caddy/Caddyfile` | Cloudflare edge 정렬, 바이너리/업로드 경로 `response_header_timeout 90s` 및 `encode` 제외 |
 | Spring multipart file | **95MB** | `spring.servlet.multipart.max-file-size` / `CUSTOM_STORAGE_MULTIPART_MAX_FILE_SIZE` | multipart 오버헤드 여유 |
 | Spring multipart request | **100MB** | `spring.servlet.multipart.max-request-size` / `CUSTOM_STORAGE_MULTIPART_MAX_REQUEST_SIZE` | edge와 정렬 (구 104MB 금지) |
 | 직접 업로드 (document/archive/video non-resumable) | **95 MiB** (99 614 720 B) | `custom.storage.*MaxFileSizeBytes` | 기동 가드: ≤ edge − 5 MiB |

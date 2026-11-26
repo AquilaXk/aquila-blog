@@ -605,9 +605,11 @@ test("공개 API 게이트는 두 vhost가 같은 snippet을 공유하고 front 
   for (const gate of [
     "@denyPrometheus",
     "@denyAdminEmailAuthReadiness",
+    "@publicCloudStream",
     "@publicReadFallback",
+    "@adminCloudTransfer",
     "@adminApi",
-    "max_size 100MB",
+    "max_size 100MiB",
   ]) {
     assert.equal(
       caddyfile.split(gate).length - 1,
@@ -675,21 +677,28 @@ test("Caddy routes tokenized cloud external content through public read upstream
   const caddyfile = readFileSync(caddyfilePath, "utf8")
   const sensitiveMatcherIndex = caddyfile.indexOf("@cloudPlaybackSensitive path /system/api/v1/public/cloud/files/*/playback")
   const logSkipIndex = caddyfile.indexOf("log_skip @cloudPlaybackSensitive")
+  const publicCloudStreamIndex = caddyfile.indexOf("@publicCloudStream")
   const publicReadMatcherIndex = caddyfile.indexOf("@publicReadFallback")
   const externalContentIndex = caddyfile.indexOf("/system/api/v1/public/cloud/files/*/playback", publicReadMatcherIndex)
+  const shareContentIndex = caddyfile.indexOf("/system/api/v1/public/cloud/files/*/share", publicReadMatcherIndex)
   const readProxyIndex = caddyfile.indexOf("reverse_proxy {$READ_API_UPSTREAM:back_blue}:8080", publicReadMatcherIndex)
+  const adminCloudTransferIndex = caddyfile.indexOf("@adminCloudTransfer")
   const adminMatcherIndex = caddyfile.indexOf("@adminApi")
 
   assert.notEqual(sensitiveMatcherIndex, -1, "cloud playback sensitive matcher must be configured")
   assert.notEqual(logSkipIndex, -1, "cloud playback access log skip must be configured")
+  assert.notEqual(publicCloudStreamIndex, -1, "public cloud stream matcher must be configured")
   assert.notEqual(publicReadMatcherIndex, -1, "public read matcher must be configured")
   assert.notEqual(externalContentIndex, -1, "cloud playback route must be in the public read matcher")
+  assert.notEqual(shareContentIndex, -1, "cloud share route must be in the public read matcher")
   assert.notEqual(readProxyIndex, -1, "public read matcher must proxy to READ_API_UPSTREAM")
+  assert.notEqual(adminCloudTransferIndex, -1, "admin cloud transfer matcher must be configured")
   assert.notEqual(adminMatcherIndex, -1, "admin API matcher must be configured")
   assert(logSkipIndex > sensitiveMatcherIndex, "cloud playback log_skip must reference the sensitive matcher")
-  assert(logSkipIndex < publicReadMatcherIndex, "cloud playback log_skip must be declared before routing")
+  assert(logSkipIndex < publicCloudStreamIndex, "cloud playback log_skip must be declared before routing")
   assert(externalContentIndex < readProxyIndex, "cloud playback route must be matched before read proxy handling")
-  assert(readProxyIndex < adminMatcherIndex, "public read proxy must be declared before admin API matcher")
+  assert(readProxyIndex < adminCloudTransferIndex, "public read proxy must precede admin cloud transfer handle")
+  assert(adminCloudTransferIndex < adminMatcherIndex, "admin cloud transfer handle must precede admin API matcher")
 })
 
 test("backend vhost keeps only the internal entry point after legacy API domain retirement", () => {

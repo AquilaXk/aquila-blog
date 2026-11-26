@@ -75,32 +75,35 @@ class ApiRateLimitBackstopFilterTest {
     }
 
     @Test
-    @DisplayName("외부 cloud content GET HEAD는 public read bucket으로 제한한다")
-    fun `external cloud content get and head use public read bucket`() {
+    @DisplayName("클라우드 바이너리 스트림 GET HEAD는 stream-read 전용 bucket으로 분리 제한한다")
+    fun `cloud binary stream get and head use stream read bucket`() {
         val redis = InMemoryRedisKeyValuePort()
-        val filter = createFilter(redis = redis, publicReadLimitPerMinute = 2)
+        val filter = createFilter(redis = redis, publicReadLimitPerMinute = 2, privateReadLimitPerMinute = 2, streamReadLimitPerMinute = 5)
 
-        assertPublicReadBucketLimit(
-            filter = filter,
-            redis = redis,
-            path = "/system/api/v1/public/cloud/files/12/playback",
-        )
-    }
+        val streamPaths =
+            listOf(
+                "/system/api/v1/public/cloud/files/12/playback",
+                "/system/api/v1/public/cloud/files/12/share",
+                "/system/api/v1/adm/cloud/files/12/content",
+                "/system/api/v1/adm/cloud/files/12/thumbnail",
+            )
+        streamPaths.forEach { path ->
+            assertThat(runFilter(filter, "GET", path).status).isEqualTo(HttpServletResponse.SC_OK)
+        }
+        assertThat(runFilter(filter, "HEAD", "/system/api/v1/public/cloud/files/12/playback").status)
+            .isEqualTo(HttpServletResponse.SC_OK)
 
-    private fun assertPublicReadBucketLimit(
-        filter: ApiRateLimitBackstopFilter,
-        redis: InMemoryRedisKeyValuePort,
-        path: String,
-    ) {
-        assertThat(runFilter(filter, "GET", path).status).isEqualTo(HttpServletResponse.SC_OK)
-        assertThat(runFilter(filter, "HEAD", path).status).isEqualTo(HttpServletResponse.SC_OK)
-        val limited = runFilter(filter, "GET", path)
-
+        val limited = runFilter(filter, "GET", "/system/api/v1/adm/cloud/files/12/content")
         assertThat(limited.status).isEqualTo(429)
         assertThat(limited.contentAsString)
             .contains("\"resultCode\":\"429-10\"")
             .doesNotContain("\"bucket\"")
-        assertThat(redis.expiredKeys()).anyMatch { it.contains("public-read") }
+        assertThat(redis.expiredKeys()).anyMatch { it.contains("stream-read") }
+
+        assertThatThrownBy {
+            createFilter(redis = redis, streamReadLimitPerMinute = 0)
+        }.isInstanceOf(IllegalArgumentException::class.java)
+            .hasMessageContaining("streamReadLimitPerMinute")
     }
 
     @Test
@@ -111,6 +114,7 @@ class ApiRateLimitBackstopFilterTest {
 
         assertThat(runFilter(disabled, "GET", "/post/api/v1/posts/feed").status).isEqualTo(HttpServletResponse.SC_OK)
         assertThat(runFilter(enabled, "GET", "/actuator/health/readiness").status).isEqualTo(HttpServletResponse.SC_OK)
+        assertThat(runFilter(enabled, "GET", "/health").status).isEqualTo(HttpServletResponse.SC_OK)
         assertThat(runFilter(enabled, "OPTIONS", "/post/api/v1/posts/feed").status).isEqualTo(HttpServletResponse.SC_OK)
     }
 
@@ -469,6 +473,7 @@ class ApiRateLimitBackstopFilterTest {
         requireRedisInProd: Boolean = false,
         publicReadLimitPerMinute: Int = 120,
         privateReadLimitPerMinute: Int = 120,
+        streamReadLimitPerMinute: Int = 600,
         mutationLimitPerMinute: Int = 60,
         authLimitPerMinute: Int = 20,
         prodRuntime: Boolean = false,
@@ -486,6 +491,7 @@ class ApiRateLimitBackstopFilterTest {
         requireRedisInProd = requireRedisInProd,
         publicReadLimitPerMinute = publicReadLimitPerMinute,
         privateReadLimitPerMinute = privateReadLimitPerMinute,
+        streamReadLimitPerMinute = streamReadLimitPerMinute,
         mutationLimitPerMinute = mutationLimitPerMinute,
         authLimitPerMinute = authLimitPerMinute,
     )

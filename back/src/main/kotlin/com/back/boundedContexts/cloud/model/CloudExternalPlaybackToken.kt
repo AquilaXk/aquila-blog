@@ -15,6 +15,7 @@ import java.time.Instant
 
 enum class CloudExternalPlaybackTokenPurpose {
     EXTERNAL_PLAYBACK,
+    SHARE_LINK,
 }
 
 /**

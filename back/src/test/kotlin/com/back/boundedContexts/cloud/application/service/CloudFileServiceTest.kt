@@ -631,14 +631,13 @@ class CloudFileServiceTest {
     }
 
     @Test
-    @DisplayName("사진 업로드 시 손상된 헤더나 APNG·초대형 차원은 storage 저장 전에 차단한다")
-    fun `upload는 손상된 사진과 APNG 및 차원 초과 이미지를 storage 저장 전에 차단한다`() {
+    @DisplayName("사진 업로드 시 손상된 헤더나 16384px 초과 차원은 차단하고 APNG·고해상도 원본은 허용한다")
+    fun `upload는 손상된 사진과 16384px 초과 이미지는 차단하고 APNG와 고해상도 원본은 허용한다`() {
         val maliciousPhotos =
             listOf(
                 Triple("truncated.jpg", "image/jpeg", byteArrayOf(0xFF.toByte(), 0xD8.toByte(), 0xFF.toByte())),
                 Triple("truncated.png", "image/png", PNG_BYTES),
-                Triple("apng.png", "image/png", apngWithActlChunk(validRasterImageBytes("png"))),
-                Triple("oversized.png", "image/png", oversizedHeaderPngBytes(5000, 5000)),
+                Triple("oversized.png", "image/png", oversizedHeaderPngBytes(17_000, 17_000)),
             )
 
         maliciousPhotos.forEach { (filename, contentType, bytes) ->
@@ -656,6 +655,27 @@ class CloudFileServiceTest {
 
         assertThat(storage.uploaded).isEmpty()
         assertThat(repository.savedFiles).isEmpty()
+
+        val highRes = validRasterImageBytes("png", width = 5_000, height = 1)
+        val apng = apngWithActlChunk(validRasterImageBytes("png"))
+        val uploadedHighRes =
+            service.upload(
+                ownerMemberId = 7L,
+                originalFilename = "panorama.png",
+                contentType = "image/png",
+                bytes = highRes,
+                folderPath = "photos",
+            )
+        val uploadedApng =
+            service.upload(
+                ownerMemberId = 7L,
+                originalFilename = "sticker.png",
+                contentType = "image/png",
+                bytes = apng,
+                folderPath = "photos",
+            )
+        assertThat(uploadedHighRes.mediaKind).isEqualTo(CloudFileMediaKind.PHOTO)
+        assertThat(uploadedApng.mediaKind).isEqualTo(CloudFileMediaKind.PHOTO)
     }
 
     @Test
@@ -1686,8 +1706,12 @@ class CloudFileServiceTest {
             return output.toByteArray()
         }
 
-        private fun validRasterImageBytes(format: String): ByteArray {
-            val image = java.awt.image.BufferedImage(4, 4, java.awt.image.BufferedImage.TYPE_INT_RGB)
+        private fun validRasterImageBytes(
+            format: String,
+            width: Int = 4,
+            height: Int = 4,
+        ): ByteArray {
+            val image = java.awt.image.BufferedImage(width, height, java.awt.image.BufferedImage.TYPE_INT_RGB)
             val output = ByteArrayOutputStream()
             check(javax.imageio.ImageIO.write(image, format, output)) { "Unsupported test format: $format" }
             return output.toByteArray()

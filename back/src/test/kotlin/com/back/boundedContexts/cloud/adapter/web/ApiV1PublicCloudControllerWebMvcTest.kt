@@ -255,4 +255,80 @@ class ApiV1PublicCloudControllerWebMvcTest : BasePublicCloudControllerWebMvcTest
         then(cloudExternalPlaybackTokenService).should().getFile(token = "raw-token", fileId = 12L)
         then(cloudExternalPlaybackTokenService).shouldHaveNoMoreInteractions()
     }
+
+    @Test
+    @DisplayName("범용 공유 링크는 일반 파일 inline, Range, SVG CSP sandbox + attachment 헤더를 차등 적용한다")
+    fun `universal share endpoint supports inline range head and differential csp headers`() {
+        val svgDto =
+            sampleDto(
+                id = 44L,
+                originalFilename = "icon.svg",
+                contentType = "image/svg+xml",
+                mediaKind = CloudFileMediaKind.PHOTO,
+                byteSize = 7L,
+            )
+        given(cloudExternalPlaybackTokenService.openSharedContent(token = "share-svg", fileId = 44L))
+            .willReturn(
+                CloudFileContent(
+                    file = svgDto,
+                    storedObject =
+                        CloudStoragePort.StoredObject(
+                            inputStream = ByteArrayInputStream("<svg/>".toByteArray()),
+                            contentType = "image/svg+xml",
+                            contentLength = 7L,
+                            originalFilename = "icon.svg",
+                        ),
+                ),
+            )
+        mvc
+            .get("/system/api/v1/public/cloud/files/44/share") {
+                param("token", "share-svg")
+            }.andExpect {
+                status { isOk() }
+                header { string("Content-Security-Policy", "default-src 'none'; style-src 'unsafe-inline'; sandbox") }
+                header { string("X-Content-Type-Options", "nosniff") }
+                header { string(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"icon.svg\"; filename*=UTF-8''icon.svg") }
+            }
+
+        val pdfDto =
+            sampleDto(
+                id = 45L,
+                originalFilename = "spec.pdf",
+                contentType = "application/pdf",
+                mediaKind = CloudFileMediaKind.DOCUMENT,
+                byteSize = 100L,
+            )
+        given(cloudExternalPlaybackTokenService.getSharedFile(token = "share-pdf", fileId = 45L))
+            .willReturn(pdfDto)
+        given(cloudExternalPlaybackTokenService.openContentRange(file = pdfDto, range = 0L..9L))
+            .willReturn(
+                CloudFileContent(
+                    file = pdfDto,
+                    storedObject =
+                        CloudStoragePort.StoredObject(
+                            inputStream = ByteArrayInputStream("0123456789".toByteArray()),
+                            contentType = "application/pdf",
+                            contentLength = 10L,
+                            originalFilename = "spec.pdf",
+                        ),
+                ),
+            )
+
+        mvc
+            .get("/system/api/v1/public/cloud/files/45/share") {
+                param("token", "share-pdf")
+                header(HttpHeaders.RANGE, "bytes=0-9")
+            }.andExpect {
+                status { isPartialContent() }
+                header { doesNotExist("Content-Security-Policy") }
+                header { string(HttpHeaders.CONTENT_DISPOSITION, "inline; filename=\"spec.pdf\"; filename*=UTF-8''spec.pdf") }
+            }
+
+        mvc
+            .perform(
+                head("/system/api/v1/public/cloud/files/45/share")
+                    .param("token", "share-pdf"),
+            ).andExpect(status().isOk)
+            .andExpect(header().longValue(HttpHeaders.CONTENT_LENGTH, 100L))
+    }
 }

@@ -186,6 +186,7 @@ custom:
       enabled: ${CUSTOM__SECURITY__API_RATE_LIMIT__ENABLED:true}
       requireRedisInProd: ${CUSTOM__SECURITY__API_RATE_LIMIT__REQUIRE_REDIS_IN_PROD:true}
       publicReadLimitPerMinute: ${CUSTOM__SECURITY__API_RATE_LIMIT__PUBLIC_READ_LIMIT_PER_MINUTE:120}
+      streamReadLimitPerMinute: ${CUSTOM__SECURITY__API_RATE_LIMIT__STREAM_READ_LIMIT_PER_MINUTE:600}
       mutationLimitPerMinute: ${CUSTOM__SECURITY__API_RATE_LIMIT__MUTATION_LIMIT_PER_MINUTE:60}
       authLimitPerMinute: ${CUSTOM__SECURITY__API_RATE_LIMIT__AUTH_LIMIT_PER_MINUTE:20}
   auth:
@@ -317,9 +318,8 @@ custom:
     cloudVideoResumablePartSizeBytes: ${CUSTOM_STORAGE_CLOUD_VIDEO_RESUMABLE_PARTSIZEBYTES:67108864}
     cloudVideoResumableExpiresSeconds: ${CUSTOM_STORAGE_CLOUD_VIDEO_RESUMABLE_EXPIRESSECONDS:86400}
     cloudVideoResumableAbsoluteMaxSeconds: ${CUSTOM_STORAGE_CLOUD_VIDEO_RESUMABLE_ABSOLUTEMAXSECONDS:604800}
-    # UPLOADING_PART stale grace: modifiedAt is claim-time only (not refreshed while streaming),
-    # so default matches absolute max (7d) to avoid aborting in-flight large part uploads.
-    cloudVideoResumableStaleUploadingPartGraceSeconds: ${CUSTOM_STORAGE_CLOUD_VIDEO_RESUMABLE_STALEUPLOADINGPARTGRACESECONDS:604800}
+    # UPLOADING_PART stale grace: 30m recovery cutoff for abandoned/crashed chunk claims.
+    cloudVideoResumableStaleUploadingPartGraceSeconds: ${CUSTOM_STORAGE_CLOUD_VIDEO_RESUMABLE_STALEUPLOADINGPARTGRACESECONDS:1800}
     retention:
       tempUploadSeconds: ${CUSTOM__STORAGE__RETENTION__TEMP_UPLOAD_SECONDS:86400}
       replacedProfileImageSeconds: ${CUSTOM__STORAGE__RETENTION__REPLACED_PROFILE_IMAGE_SECONDS:259200}

@@ -16,3 +16,4 @@
 /post/api/v1/posts/tags
 /post/api/v1/posts/wikilink-catalog
 /system/api/v1/public/cloud/files/*/playback
+/system/api/v1/public/cloud/files/*/share

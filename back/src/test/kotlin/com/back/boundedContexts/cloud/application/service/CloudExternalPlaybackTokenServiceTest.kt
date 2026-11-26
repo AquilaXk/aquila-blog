@@ -73,6 +73,60 @@ class CloudExternalPlaybackTokenServiceTest {
     }
 
     @Test
+    @DisplayName("범용 공유 링크는 모든 파일 유형에 대해 선택된 TTL(1h/6h/24h/7d)로 발급되고 목적 간 격리된다")
+    fun `universal share link works across document photo video with selectable ttl and purpose isolation`() {
+        val doc = documentFile(id = 20L, ownerMemberId = 7L)
+        files.savedFiles += doc
+        storage.objects[doc.objectKey] =
+            CloudStoragePort.StoredObject(
+                inputStream = ByteArrayInputStream("pdf-bytes".toByteArray()),
+                contentType = "application/pdf",
+                contentLength = 9L,
+                originalFilename = "spec.pdf",
+            )
+
+        val share1h = service.issueShareLink(ownerMemberId = 7L, fileId = 20L, ttlSeconds = 3_600L)
+        val playback1h =
+            service
+                .apply {
+                    files.savedFiles += videoFile(id = 21L, ownerMemberId = 7L)
+                }.issue(ownerMemberId = 7L, fileId = 21L, ttlSeconds = 3_600L)
+        assertThat(playback1h.expiresAt).isEqualTo(Instant.parse("2026-06-26T13:00:00Z"))
+        assertThatThrownBy { service.issueShareLink(ownerMemberId = 7L, fileId = 999L) }
+            .isInstanceOf(AppException::class.java)
+            .hasMessageContaining("클라우드 파일을 찾을 수 없습니다")
+        val share7d = service.issueShareLink(ownerMemberId = 7L, fileId = 20L, ttlSeconds = 604_800L)
+
+        assertThat(share1h.expiresAt).isEqualTo(Instant.parse("2026-06-26T13:00:00Z"))
+        assertThat(share7d.expiresAt).isEqualTo(Instant.parse("2026-07-03T12:00:00Z"))
+        assertThat(share1h.contentPath).startsWith("/system/api/v1/public/cloud/files/20/share?token=")
+
+        assertThatThrownBy {
+            service.issueShareLink(ownerMemberId = 7L, fileId = 20L, ttlSeconds = 123L)
+        }.isInstanceOf(AppException::class.java)
+            .hasMessageContaining("지원하지 않는 공유 만료 기한")
+
+        val sharedMeta = service.getSharedFile(share1h.token, 20L)
+        assertThat(sharedMeta.id).isEqualTo(20L)
+        assertThat(service.openSharedContent(share1h.token, 20L).storedObject.contentLength).isEqualTo(9L)
+
+        // SHARE_LINK 토큰은 동영상 전용 playback 엔드포인트에서 거부된다.
+        assertThatThrownBy { service.getFile(share1h.token, 20L) }
+            .isInstanceOf(AppException::class.java)
+            .hasMessageContaining("올바르지 않거나 만료")
+
+        val listed = service.listShareTokens(ownerMemberId = 7L, fileId = 20L)
+        assertThat(listed).hasSize(2)
+        assertThat(listed.map { it.purpose }).containsOnly(CloudExternalPlaybackTokenPurpose.SHARE_LINK)
+
+        service.revokeShareToken(ownerMemberId = 7L, fileId = 20L, tokenId = listed.first().id)
+        assertThat(service.listShareTokens(ownerMemberId = 7L, fileId = 20L)).hasSize(1)
+
+        assertThat(service.revokeAllShareTokens(ownerMemberId = 7L, fileId = 20L)).isEqualTo(1)
+        assertThat(service.listShareTokens(ownerMemberId = 7L, fileId = 20L)).isEmpty()
+    }
+
+    @Test
     @DisplayName("외부 재생 token은 비디오가 아닌 파일에는 발급하지 않는다")
     fun issueRejectsNonVideoFile() {
         files.savedFiles += documentFile(id = 12L, ownerMemberId = 7L)
@@ -434,10 +488,28 @@ class CloudExternalPlaybackTokenServiceTest {
 
     private class FakeCloudExternalPlaybackTokenRepository : CloudExternalPlaybackTokenRepositoryPort {
         val savedTokens = mutableListOf<CloudExternalPlaybackToken>()
+        private var nextId = 1L
 
         override fun save(token: CloudExternalPlaybackToken): CloudExternalPlaybackToken {
-            savedTokens += token
-            return token
+            val persisted =
+                if (token.id == 0L) {
+                    CloudExternalPlaybackToken(
+                        id = nextId++,
+                        tokenHash = token.tokenHash,
+                        fileId = token.fileId,
+                        memberId = token.memberId,
+                        purpose = token.purpose,
+                        expiresAt = token.expiresAt,
+                    )
+                } else {
+                    token
+                }.apply {
+                    val now = Instant.parse("2026-06-26T12:00:00Z")
+                    runCatching { createdAt }.getOrElse { createdAt = now }
+                    runCatching { modifiedAt }.getOrElse { modifiedAt = now }
+                }
+            savedTokens += persisted
+            return persisted
         }
 
         override fun findValid(

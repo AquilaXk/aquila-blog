@@ -32,14 +32,47 @@ class ImageUploadAdmissionValidator(
     fun validate(
         path: Path,
         declaredContentType: String?,
-    ): ValidatedImage = validateWithReaders(path, declaredContentType, ImageIO::getImageReaders)
+    ): ValidatedImage = validate(path, declaredContentType, ImageValidationPolicy.POST_STRICT)
+
+    fun validate(
+        path: Path,
+        declaredContentType: String?,
+        policy: ImageValidationPolicy,
+    ): ValidatedImage = validateWithReaders(path, declaredContentType, policy, ImageIO::getImageReaders)
 
     internal fun validateWithReaders(
         path: Path,
         declaredContentType: String?,
         imageReadersFactory: (ImageInputStream) -> Iterator<ImageReader>,
+    ): ValidatedImage =
+        validateWithReaders(
+            path = path,
+            declaredContentType = declaredContentType,
+            policy = ImageValidationPolicy.POST_STRICT,
+            imageReadersFactory = imageReadersFactory,
+        )
+
+    internal fun validateWithReaders(
+        path: Path,
+        declaredContentType: String?,
+        policy: ImageValidationPolicy,
+        imageReadersFactory: (ImageInputStream) -> Iterator<ImageReader>,
     ): ValidatedImage {
-        val preScreened = preScreenImageHeader(path, declaredContentType)
+        val preScreened = preScreenImageHeader(path, declaredContentType, policy)
+        if (preScreened.contentType == AVIF_CONTENT_TYPE) {
+            preScreenAvifContainer(path, policy)
+            return ValidatedImage(
+                contentType = preScreened.contentType,
+                extension = preScreened.extension,
+            )
+        }
+        if (preScreened.contentType == ICO_CONTENT_TYPE) {
+            preScreenIcoContainer(path, policy)
+            return ValidatedImage(
+                contentType = preScreened.contentType,
+                extension = preScreened.extension,
+            )
+        }
         val imageInput = ImageIO.createImageInputStream(path.toFile()) ?: throw invalidImage()
 
         imageInput.use { input ->
@@ -51,25 +84,33 @@ class ImageUploadAdmissionValidator(
                 var hasDecoderWarning = false
                 reader.addIIOReadWarningListener { _, _ -> hasDecoderWarning = true }
                 reader.setInput(input, false, true)
-                val canonicalFormat = canonicalFormat(reader.formatName) ?: throw invalidImage()
+                val canonicalFormat = canonicalFormat(reader.formatName, policy) ?: throw invalidImage()
                 if (canonicalFormat.contentType != preScreened.contentType) {
                     throw invalidImage()
                 }
 
-                if (canonicalFormat.contentType == PNG_CONTENT_TYPE) rejectAnimatedPng(path)
+                if (!policy.allowAnimated && canonicalFormat.contentType == PNG_CONTENT_TYPE) {
+                    rejectAnimatedPng(path)
+                }
                 val decodedImage =
                     decodeWithConcurrencyLimit {
-                        if (reader.getNumImages(true) != 1) throw invalidImage()
+                        val imageCount = reader.getNumImages(true)
+                        if (if (policy.allowAnimated) imageCount < 1 else imageCount != 1) {
+                            throw invalidImage()
+                        }
 
-                        validateBounds(reader.getWidth(0), reader.getHeight(0))
+                        val width = reader.getWidth(0)
+                        val height = reader.getHeight(0)
+                        validateBounds(width, height, policy)
+                        val step = computeSubsamplingStep(width, height)
                         val readParam =
                             reader.defaultReadParam.apply {
-                                setSourceSubsampling(DECODE_SUBSAMPLING_STEP, DECODE_SUBSAMPLING_STEP, 0, 0)
+                                setSourceSubsampling(step, step, 0, 0)
                             }
                         reader.read(0, readParam)
                     } ?: throw invalidImage()
                 if (hasDecoderWarning) throw invalidImage()
-                validateBounds(decodedImage.width, decodedImage.height)
+                validateBounds(decodedImage.width, decodedImage.height, policy)
 
                 return ValidatedImage(
                     contentType = canonicalFormat.contentType,
@@ -88,49 +129,86 @@ class ImageUploadAdmissionValidator(
     fun validateBounds(
         width: Int,
         height: Int,
+    ) = validateBounds(width, height, ImageValidationPolicy.POST_STRICT)
+
+    fun validateBounds(
+        width: Int,
+        height: Int,
+        policy: ImageValidationPolicy,
     ) {
-        if (width <= 0 || height <= 0 || width > MAX_IMAGE_WIDTH || height > MAX_IMAGE_HEIGHT) {
+        if (width <= 0 || height <= 0 || width > policy.maxWidth || height > policy.maxHeight) {
             throw invalidImage()
         }
-        validateDecodedPixelCount(width.toLong() * height.toLong())
+        validateDecodedPixelCount(width.toLong() * height.toLong(), policy)
     }
 
     fun validateDecodedPixelCount(pixelCount: Long) {
-        if (pixelCount <= 0 || pixelCount > MAX_DECODED_PIXELS) throw invalidImage()
+        validateDecodedPixelCount(pixelCount, ImageValidationPolicy.POST_STRICT)
+    }
+
+    fun validateDecodedPixelCount(
+        pixelCount: Long,
+        policy: ImageValidationPolicy,
+    ) {
+        if (pixelCount <= 0 || pixelCount > policy.maxDecodedPixels) throw invalidImage()
+    }
+
+    private fun computeSubsamplingStep(
+        width: Int,
+        height: Int,
+    ): Int {
+        val pixels = width.toLong() * height.toLong()
+        if (pixels <= DECODE_TARGET_SAMPLE_PIXELS) return DECODE_SUBSAMPLING_STEP
+        val ratio = (pixels + DECODE_TARGET_SAMPLE_PIXELS - 1L) / DECODE_TARGET_SAMPLE_PIXELS
+        var step = DECODE_SUBSAMPLING_STEP
+        while (step.toLong() * step.toLong() < ratio) {
+            step += 1
+        }
+        return step
     }
 
     private fun preScreenImageHeader(
         path: Path,
         declaredContentType: String?,
+        policy: ImageValidationPolicy,
     ): CanonicalImageFormat {
         val header = ByteArray(HEADER_PROBE_BYTES)
         val headerLength =
             BufferedInputStream(Files.newInputStream(path), IO_BUFFER_BYTES).use { stream ->
                 readUpTo(stream, header, HEADER_PROBE_BYTES)
             }
-        val detected = detectImageFormatFromHeader(header, headerLength) ?: throw invalidImage()
+        val detected = detectImageFormatFromHeader(header, headerLength, policy.allowExtendedRaster) ?: throw invalidImage()
         val normalizedDeclaredType = normalizeImageMediaContentType(declaredContentType)
         if (normalizedDeclaredType != null && normalizedDeclaredType != detected.contentType) {
             throw invalidImage()
         }
         if (detected.contentType == WEBP_CONTENT_TYPE) {
-            preScreenWebpContainer(path)
+            preScreenWebpContainer(path, policy)
         }
         return detected
     }
 
-    private fun preScreenWebpContainer(path: Path) {
+    private fun preScreenWebpContainer(
+        path: Path,
+        policy: ImageValidationPolicy,
+    ) {
         val fileSize = Files.size(path)
         if (fileSize < WEBP_MIN_FILE_BYTES) throw invalidImage()
 
         BufferedInputStream(Files.newInputStream(path), IO_BUFFER_BYTES).use { input ->
-            preScreenWebpStream(input, fileSize)
+            preScreenWebpStream(input, fileSize, policy)
         }
     }
 
     internal fun preScreenWebpStream(
         input: InputStream,
         fileSize: Long,
+    ) = preScreenWebpStream(input, fileSize, ImageValidationPolicy.POST_STRICT)
+
+    internal fun preScreenWebpStream(
+        input: InputStream,
+        fileSize: Long,
+        policy: ImageValidationPolicy,
     ) {
         if (fileSize < WEBP_MIN_FILE_BYTES) throw invalidImage()
         val riffHeader = ByteArray(RIFF_HEADER_BYTES)
@@ -170,7 +248,7 @@ class ImageUploadAdmissionValidator(
             val paddedChunkSize = chunkSize + (chunkSize and 1L)
             val bytesToConsume = minOf(paddedChunkSize, remainingInRiff)
 
-            if (chunkFourCc == WEBP_ANIM_CHUNK_WORD || chunkFourCc == WEBP_ANMF_CHUNK_WORD) {
+            if (!policy.allowAnimated && (chunkFourCc == WEBP_ANIM_CHUNK_WORD || chunkFourCc == WEBP_ANMF_CHUNK_WORD)) {
                 throw invalidImage()
             }
             if (chunkCount == 1 && !isFirstWebpChunk(chunkFourCc)) {
@@ -196,7 +274,7 @@ class ImageUploadAdmissionValidator(
                     }
                     val width = (payloadHead[6].toInt() and 0xFF) or ((payloadHead[7].toInt() and 0x3F) shl 8)
                     val height = (payloadHead[8].toInt() and 0xFF) or ((payloadHead[9].toInt() and 0x3F) shl 8)
-                    validateBounds(width, height)
+                    validateBounds(width, height, policy)
                     sawImageChunk = true
                 }
                 WEBP_VP8L_CHUNK_WORD -> {
@@ -211,7 +289,7 @@ class ImageUploadAdmissionValidator(
                     val packedDims = readInt32LE(payloadHead, 1)
                     val width = (packedDims and 0x3FFF) + 1
                     val height = ((packedDims ushr 14) and 0x3FFF) + 1
-                    validateBounds(width, height)
+                    validateBounds(width, height, policy)
                     sawImageChunk = true
                 }
                 WEBP_VP8X_CHUNK_WORD -> {
@@ -222,12 +300,12 @@ class ImageUploadAdmissionValidator(
                         throw invalidImage()
                     }
                     consumed = WEBP_VP8X_PAYLOAD_BYTES.toLong()
-                    if ((payloadHead[0].toInt() and WEBP_VP8X_ANIMATION_FLAG) != 0) {
+                    if (!policy.allowAnimated && (payloadHead[0].toInt() and WEBP_VP8X_ANIMATION_FLAG) != 0) {
                         throw invalidImage()
                     }
                     val canvasWidth = readUint24LE(payloadHead, 4) + 1
                     val canvasHeight = readUint24LE(payloadHead, 7) + 1
-                    validateBounds(canvasWidth, canvasHeight)
+                    validateBounds(canvasWidth, canvasHeight, policy)
                     sawImageChunk = true
                 }
             }
@@ -311,16 +389,89 @@ class ImageUploadAdmissionValidator(
         throw invalidImage()
     }
 
-    internal fun canonicalFormat(formatName: String): CanonicalImageFormat? =
+    internal fun canonicalFormat(formatName: String): CanonicalImageFormat? = canonicalFormat(formatName, ImageValidationPolicy.POST_STRICT)
+
+    internal fun canonicalFormat(
+        formatName: String,
+        policy: ImageValidationPolicy,
+    ): CanonicalImageFormat? =
         when (formatName.trim().lowercase(Locale.ROOT)) {
             "jpeg", "jpg" -> CanonicalImageFormat(JPEG_CONTENT_TYPE, ".jpg")
             "png" -> CanonicalImageFormat(PNG_CONTENT_TYPE, ".png")
             "gif" -> CanonicalImageFormat(GIF_CONTENT_TYPE, ".gif")
             "webp" -> CanonicalImageFormat(WEBP_CONTENT_TYPE, ".webp")
+            "bmp" -> if (policy.allowExtendedRaster) CanonicalImageFormat(BMP_CONTENT_TYPE, ".bmp") else null
             else -> null
         }
 
+    private fun preScreenIcoContainer(
+        path: Path,
+        policy: ImageValidationPolicy,
+    ) {
+        val fileSize = Files.size(path)
+        if (fileSize < ICO_HEADER_BYTES + ICO_ENTRY_BYTES || fileSize > MAX_ICO_FILE_BYTES) throw invalidImage()
+        val bytes = Files.readAllBytes(path)
+        val count = (bytes[4].toInt() and 0xFF) or ((bytes[5].toInt() and 0xFF) shl 8)
+        if (count !in 1..MAX_ICO_IMAGES || bytes.size < ICO_HEADER_BYTES + count * ICO_ENTRY_BYTES) {
+            throw invalidImage()
+        }
+        for (index in 0 until count) {
+            val base = ICO_HEADER_BYTES + index * ICO_ENTRY_BYTES
+            val width = (bytes[base].toInt() and 0xFF).let { if (it == 0) 256 else it }
+            val height = (bytes[base + 1].toInt() and 0xFF).let { if (it == 0) 256 else it }
+            validateBounds(width, height, policy)
+            val dataSize = readUint32LE(bytes, base + 8)
+            val dataOffset = readUint32LE(bytes, base + 12)
+            if (dataSize <= 0 || dataOffset < ICO_HEADER_BYTES + count * ICO_ENTRY_BYTES || dataOffset + dataSize > fileSize) {
+                throw invalidImage()
+            }
+        }
+    }
+
+    private fun preScreenAvifContainer(
+        path: Path,
+        policy: ImageValidationPolicy,
+    ) {
+        val fileSize = Files.size(path)
+        if (fileSize < AVIF_MIN_FILE_BYTES) throw invalidImage()
+        val probeLimit = minOf(fileSize, AVIF_HEADER_SCAN_LIMIT_BYTES).toInt()
+        val buffer = ByteArray(probeLimit)
+        BufferedInputStream(Files.newInputStream(path), IO_BUFFER_BYTES).use { stream ->
+            if (readFully(stream, buffer, probeLimit) < AVIF_MIN_FILE_BYTES) throw invalidImage()
+        }
+        val dimensions = extractAvifDimensions(buffer, probeLimit) ?: throw invalidImage()
+        validateBounds(dimensions.first, dimensions.second, policy)
+    }
+
     private fun invalidImage(): AppException = AppException(ErrorCode.BAD_REQUEST, "지원하지 않는 이미지 형식입니다.")
+
+    data class ImageValidationPolicy(
+        val maxWidth: Int,
+        val maxHeight: Int,
+        val maxDecodedPixels: Long,
+        val allowAnimated: Boolean,
+        val allowExtendedRaster: Boolean,
+    ) {
+        companion object {
+            val POST_STRICT =
+                ImageValidationPolicy(
+                    maxWidth = MAX_IMAGE_WIDTH,
+                    maxHeight = MAX_IMAGE_HEIGHT,
+                    maxDecodedPixels = MAX_DECODED_PIXELS,
+                    allowAnimated = false,
+                    allowExtendedRaster = false,
+                )
+
+            val CLOUD_PHOTO =
+                ImageValidationPolicy(
+                    maxWidth = MAX_CLOUD_IMAGE_WIDTH,
+                    maxHeight = MAX_CLOUD_IMAGE_HEIGHT,
+                    maxDecodedPixels = MAX_CLOUD_DECODED_PIXELS,
+                    allowAnimated = true,
+                    allowExtendedRaster = true,
+                )
+        }
+    }
 
     data class ValidatedImage(
         val contentType: String,
@@ -336,7 +487,11 @@ class ImageUploadAdmissionValidator(
         private const val MAX_IMAGE_WIDTH = 4_096
         private const val MAX_IMAGE_HEIGHT = 4_096
         private const val MAX_DECODED_PIXELS = 16_777_216L
+        private const val MAX_CLOUD_IMAGE_WIDTH = 16_384
+        private const val MAX_CLOUD_IMAGE_HEIGHT = 16_384
+        private const val MAX_CLOUD_DECODED_PIXELS = 100_000_000L
         private const val DECODE_SUBSAMPLING_STEP = 4
+        private const val DECODE_TARGET_SAMPLE_PIXELS = 4_194_304L
         private const val MAX_CONCURRENT_DECODES = 2
         private const val DECODE_WAIT_TIMEOUT_SECONDS = 30L
         private const val IO_BUFFER_BYTES = 8_192
@@ -346,6 +501,13 @@ class ImageUploadAdmissionValidator(
         private const val PNG_CRC_BYTES = 4L
         private const val PNG_CHUNK_OVERHEAD = 12L
         private const val MAX_PNG_CHUNKS = 65_536
+        private const val ICO_HEADER_BYTES = 6
+        private const val ICO_ENTRY_BYTES = 16
+        private const val MAX_ICO_IMAGES = 64
+        private const val MAX_ICO_FILE_BYTES = 2L * 1024 * 1024
+        private const val AVIF_MIN_FILE_BYTES = 24L
+        private const val AVIF_HEADER_SCAN_LIMIT_BYTES = 262_144L
+        private const val MAX_ISOBMFF_DEPTH = 6
 
         private val PNG_SIGNATURE_WORD: Long = 0x8950_4E47_0D0A_1A0AuL.toLong()
         private const val APNG_ACTL_CHUNK_WORD = 0x6163_544C
@@ -358,6 +520,13 @@ class ImageUploadAdmissionValidator(
         private const val WEBP_VP8X_CHUNK_WORD = 0x5650_3858
         private const val WEBP_ANIM_CHUNK_WORD = 0x414E_494D
         private const val WEBP_ANMF_CHUNK_WORD = 0x414E_4D46
+        private const val FTYP_BOX_WORD = 0x6674_7970
+        private const val AVIF_BRAND_WORD = 0x6176_6966
+        private const val AVIS_BRAND_WORD = 0x6176_6973
+        private const val META_BOX_WORD = 0x6D65_7461
+        private const val IPRP_BOX_WORD = 0x6970_7270
+        private const val IPCO_BOX_WORD = 0x6970_636F
+        private const val ISPE_BOX_WORD = 0x6973_7065
         private const val RIFF_HEADER_BYTES = 12
         private const val RIFF_CHUNK_HEADER_BYTES = 8
         private const val WEBP_MIN_FILE_BYTES = 20L
@@ -372,6 +541,9 @@ class ImageUploadAdmissionValidator(
         private const val PNG_CONTENT_TYPE = "image/png"
         private const val GIF_CONTENT_TYPE = "image/gif"
         private const val WEBP_CONTENT_TYPE = "image/webp"
+        private const val BMP_CONTENT_TYPE = "image/bmp"
+        private const val ICO_CONTENT_TYPE = "image/x-icon"
+        private const val AVIF_CONTENT_TYPE = "image/avif"
 
         private val DEFAULT_DECODE_SEMAPHORE = Semaphore(MAX_CONCURRENT_DECODES, true)
 
@@ -381,6 +553,9 @@ class ImageUploadAdmissionValidator(
                 "image/pjpeg" to JPEG_CONTENT_TYPE,
                 "image/x-png" to PNG_CONTENT_TYPE,
                 "image/x-webp" to WEBP_CONTENT_TYPE,
+                "image/x-ms-bmp" to BMP_CONTENT_TYPE,
+                "image/vnd.microsoft.icon" to ICO_CONTENT_TYPE,
+                "image/ico" to ICO_CONTENT_TYPE,
             )
 
         val ALLOWED_IMAGE_CONTENT_TYPES: Set<String> =
@@ -405,6 +580,12 @@ class ImageUploadAdmissionValidator(
         fun detectImageFormatFromHeader(
             header: ByteArray,
             length: Int,
+        ): CanonicalImageFormat? = detectImageFormatFromHeader(header, length, allowExtendedRaster = false)
+
+        fun detectImageFormatFromHeader(
+            header: ByteArray,
+            length: Int,
+            allowExtendedRaster: Boolean,
         ): CanonicalImageFormat? {
             if (
                 length >= 3 &&
@@ -431,6 +612,89 @@ class ImageUploadAdmissionValidator(
                 readInt32BE(header, 8) == WEBP_WORD
             ) {
                 return CanonicalImageFormat(WEBP_CONTENT_TYPE, ".webp")
+            }
+            if (!allowExtendedRaster) return null
+            if (
+                length >= 14 &&
+                header[0] == 'B'.code.toByte() &&
+                header[1] == 'M'.code.toByte()
+            ) {
+                return CanonicalImageFormat(BMP_CONTENT_TYPE, ".bmp")
+            }
+            if (
+                length >= ICO_HEADER_BYTES &&
+                header[0].toInt() == 0 &&
+                header[1].toInt() == 0 &&
+                header[2].toInt() == 1 &&
+                header[3].toInt() == 0
+            ) {
+                return CanonicalImageFormat(ICO_CONTENT_TYPE, ".ico")
+            }
+            if (isAvifFtypHeader(header, length)) {
+                return CanonicalImageFormat(AVIF_CONTENT_TYPE, ".avif")
+            }
+            return null
+        }
+
+        private fun isAvifFtypHeader(
+            header: ByteArray,
+            length: Int,
+        ): Boolean {
+            if (length < 12 || readInt32BE(header, 4) != FTYP_BOX_WORD) return false
+            val boxSize = readUint32BE(header, 0).toInt().coerceIn(12, length)
+            val majorBrand = readInt32BE(header, 8)
+            if (majorBrand == AVIF_BRAND_WORD || majorBrand == AVIS_BRAND_WORD) return true
+            var offset = 16
+            while (offset + 4 <= boxSize) {
+                val compatible = readInt32BE(header, offset)
+                if (compatible == AVIF_BRAND_WORD || compatible == AVIS_BRAND_WORD) return true
+                offset += 4
+            }
+            return false
+        }
+
+        internal fun extractAvifDimensions(
+            bytes: ByteArray,
+            length: Int,
+            start: Int = 0,
+            end: Int = length,
+            depth: Int = 0,
+        ): Pair<Int, Int>? {
+            if (depth > MAX_ISOBMFF_DEPTH) return null
+            var cursor = start
+            var boxCount = 0
+            while (cursor + 8 <= end) {
+                boxCount += 1
+                if (boxCount > 256) return null
+                val rawSize = readUint32BE(bytes, cursor)
+                val type = readInt32BE(bytes, cursor + 4)
+                val headerSize = if (rawSize == 1L) 16 else 8
+                val boxSizeLong =
+                    when {
+                        rawSize == 0L -> (end - cursor).toLong()
+                        rawSize == 1L && cursor + 16 <= end -> readInt64BE(bytes, cursor + 8)
+                        else -> rawSize
+                    }
+                if (boxSizeLong < headerSize || cursor + boxSizeLong > end) return null
+                val boxEnd = (cursor + boxSizeLong).toInt()
+                val payloadStart = cursor + headerSize
+                when (type) {
+                    ISPE_BOX_WORD -> {
+                        if (boxEnd - payloadStart < 12) return null
+                        val width = readInt32BE(bytes, payloadStart + 4)
+                        val height = readInt32BE(bytes, payloadStart + 8)
+                        return width to height
+                    }
+                    META_BOX_WORD -> {
+                        if (payloadStart + 4 <= boxEnd) {
+                            extractAvifDimensions(bytes, length, payloadStart + 4, boxEnd, depth + 1)?.let { return it }
+                        }
+                    }
+                    IPRP_BOX_WORD, IPCO_BOX_WORD -> {
+                        extractAvifDimensions(bytes, length, payloadStart, boxEnd, depth + 1)?.let { return it }
+                    }
+                }
+                cursor = boxEnd
             }
             return null
         }

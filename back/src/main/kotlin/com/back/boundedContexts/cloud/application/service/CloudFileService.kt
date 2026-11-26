@@ -25,7 +25,6 @@ import java.nio.file.Files
 import java.nio.file.Path
 import java.time.Clock
 import java.time.Instant
-import java.util.zip.ZipFile
 
 data class CloudFileDto(
     val id: Long,
@@ -39,6 +38,8 @@ data class CloudFileDto(
     val modifiedAt: Instant,
     @get:JsonIgnore
     val objectKey: String = "",
+    @get:JsonIgnore
+    val checksumSha256: String? = null,
 )
 
 data class CloudFileContent(
@@ -83,10 +84,17 @@ class CloudFileService(
                 val detected = detectContent(tempFile, contentType, safeFilename)
                 validateFileSize(contentLength, detected)
                 val validatedContentType =
-                    if (detected.mediaKind == CloudFileMediaKind.PHOTO) {
-                        imageAdmissionValidator.validate(tempFile, detected.contentType).contentType
-                    } else {
-                        detected.contentType
+                    when {
+                        detected.mediaKind == CloudFileMediaKind.PHOTO && detected.contentType == SVG_CONTENT_TYPE ->
+                            detected.contentType
+                        detected.mediaKind == CloudFileMediaKind.PHOTO ->
+                            imageAdmissionValidator
+                                .validate(
+                                    tempFile,
+                                    detected.contentType,
+                                    ImageUploadAdmissionValidator.ImageValidationPolicy.CLOUD_PHOTO,
+                                ).contentType
+                        else -> detected.contentType
                     }
                 val objectKey =
                     buildObjectKey(
@@ -376,6 +384,8 @@ class CloudFileService(
             when {
                 detected.contentType == ZIP_CONTENT_TYPE ->
                     UploadLimit("ZIP", cloudStorageProperties.cloudArchiveMaxFileSizeBytes)
+                detected.contentType in ARCHIVE_CONTENT_TYPES ->
+                    UploadLimit("아카이브", cloudStorageProperties.cloudArchiveMaxFileSizeBytes)
                 detected.mediaKind == CloudFileMediaKind.PHOTO ->
                     UploadLimit("사진", cloudStorageProperties.cloudPhotoMaxFileSizeBytes)
                 detected.mediaKind == CloudFileMediaKind.VIDEO ->
@@ -397,7 +407,7 @@ class CloudFileService(
         val header = ByteArray(SIGNATURE_HEADER_BYTES)
         val headerLen = readHeader(file, header)
         val detected =
-            detectFromSignature(file, header, headerLen, filename)
+            detectFromSignature(file, header, headerLen, normalizedDeclared, filename)
                 ?: throw AppException(ErrorCode.BAD_REQUEST, "지원하지 않는 클라우드 파일 형식입니다.")
 
         if (
@@ -416,7 +426,11 @@ class CloudFileService(
         detectedContentType: String,
     ): Boolean =
         declaredContentType == detectedContentType ||
-            (detectedContentType == HWPX_CONTENT_TYPE && declaredContentType == ZIP_CONTENT_TYPE)
+            (detectedContentType == HWPX_CONTENT_TYPE && declaredContentType == ZIP_CONTENT_TYPE) ||
+            (detectedContentType == "video/quicktime" && declaredContentType == "video/mp4") ||
+            (detectedContentType == "video/mp4" && declaredContentType == "video/quicktime") ||
+            (declaredContentType in AUDIO_CONTENT_TYPES && detectedContentType in AUDIO_CONTENT_TYPES) ||
+            (declaredContentType in TEXT_CONTENT_TYPES && detectedContentType in TEXT_CONTENT_TYPES)
 
     private fun resolveDeclaredContentType(raw: String?): String? {
         val normalized = normalizeContentType(raw)
@@ -428,6 +442,7 @@ class CloudFileService(
         file: Path,
         header: ByteArray,
         headerLen: Int,
+        declaredContentType: String?,
         filename: String,
     ): DetectedContent? {
         if (
@@ -437,22 +452,68 @@ class CloudFileService(
         ) {
             return DetectedContent("application/pdf", CloudFileMediaKind.DOCUMENT)
         }
-        ImageUploadAdmissionValidator.detectImageFormatFromHeader(header, headerLen)?.let {
-            return DetectedContent(it.contentType, CloudFileMediaKind.PHOTO)
-        }
-        if (headerLen >= 12 && ImageUploadAdmissionValidator.readInt32BE(header, 4) == MP4_FTYP_WORD) {
-            return DetectedContent("video/mp4", CloudFileMediaKind.VIDEO)
-        }
-        if (headerLen >= 4 && ImageUploadAdmissionValidator.readInt32BE(header, 0) == EBML_MAGIC_WORD) {
-            return DetectedContent("video/webm", CloudFileMediaKind.VIDEO)
-        }
+        ImageUploadAdmissionValidator
+            .detectImageFormatFromHeader(header, headerLen, allowExtendedRaster = true)
+            ?.let { return DetectedContent(it.contentType, CloudFileMediaKind.PHOTO) }
+
         val extension = extractLowerExtension(filename)
-        if (extension == "hwpx" && isHwpxPackage(file, header, headerLen)) {
-            return DetectedContent(HWPX_CONTENT_TYPE, CloudFileMediaKind.DOCUMENT)
+        if (extension == "svg" || declaredContentType == SVG_CONTENT_TYPE) {
+            if (CloudArchiveAndDocumentInspector.validateSafeSvg(file)) {
+                return DetectedContent(SVG_CONTENT_TYPE, CloudFileMediaKind.PHOTO)
+            }
+            return null
         }
-        if (extension == "zip" && isValidZipArchive(file, header, headerLen)) {
-            return DetectedContent(ZIP_CONTENT_TYPE, CloudFileMediaKind.DOCUMENT)
+
+        CloudArchiveAndDocumentInspector
+            .detectAudioFromSignature(header, headerLen, declaredContentType, extension)
+            ?.let { return DetectedContent(it, CloudFileMediaKind.DOCUMENT) }
+
+        val videoPreferred =
+            if (extension == "mov" || declaredContentType == "video/quicktime") {
+                "video/quicktime"
+            } else if (extension == "mkv" || declaredContentType == "video/x-matroska") {
+                "video/x-matroska"
+            } else {
+                null
+            }
+        detectVideoFromSignature(header.copyOf(headerLen), videoPreferred)?.let { videoMime ->
+            return DetectedContent(videoMime, CloudFileMediaKind.VIDEO)
         }
+
+        if (CloudArchiveAndDocumentInspector.isZipSignature(header, headerLen)) {
+            val resolvedZipMime = CloudArchiveAndDocumentInspector.inspectZipOrOffice(file, extension)
+            if (resolvedZipMime != null) {
+                return DetectedContent(resolvedZipMime, CloudFileMediaKind.DOCUMENT)
+            }
+            return null
+        }
+        if (extension == "tar" || declaredContentType == CloudArchiveAndDocumentInspector.TAR_CONTENT_TYPE) {
+            if (CloudArchiveAndDocumentInspector.inspectTar(file)) {
+                return DetectedContent(CloudArchiveAndDocumentInspector.TAR_CONTENT_TYPE, CloudFileMediaKind.DOCUMENT)
+            }
+            return null
+        }
+        if (
+            (headerLen >= 2 && (header[0].toInt() and 0xFF) == 0x1F && (header[1].toInt() and 0xFF) == 0x8B) ||
+            extension == "gz" ||
+            extension == "tgz" ||
+            declaredContentType == CloudArchiveAndDocumentInspector.GZIP_CONTENT_TYPE
+        ) {
+            if (CloudArchiveAndDocumentInspector.inspectGzip(file, extension)) {
+                return DetectedContent(CloudArchiveAndDocumentInspector.GZIP_CONTENT_TYPE, CloudFileMediaKind.DOCUMENT)
+            }
+            return null
+        }
+        if (extension == "7z" || declaredContentType == CloudArchiveAndDocumentInspector.SEVEN_ZIP_CONTENT_TYPE) {
+            if (CloudArchiveAndDocumentInspector.inspect7z(file, header, headerLen)) {
+                return DetectedContent(CloudArchiveAndDocumentInspector.SEVEN_ZIP_CONTENT_TYPE, CloudFileMediaKind.DOCUMENT)
+            }
+            return null
+        }
+
+        CloudArchiveAndDocumentInspector
+            .inspectUtf8TextFile(file, declaredContentType, extension)
+            ?.let { return DetectedContent(it, CloudFileMediaKind.DOCUMENT) }
 
         return null
     }
@@ -464,37 +525,6 @@ class CloudFileService(
         BufferedInputStream(Files.newInputStream(file), IO_BUFFER_BYTES).use { stream ->
             ImageUploadAdmissionValidator.readUpTo(stream, buffer, buffer.size)
         }
-
-    private fun isHwpxPackage(
-        file: Path,
-        header: ByteArray,
-        headerLen: Int,
-    ): Boolean {
-        if (!isZipSignature(header, headerLen)) return false
-
-        val entries = readZipEntryNames(file)
-
-        return HWPX_MANIFEST_ENTRY in entries && entries.any { it in HWPX_DOCUMENT_ENTRIES }
-    }
-
-    private fun isValidZipArchive(
-        file: Path,
-        header: ByteArray,
-        headerLen: Int,
-    ): Boolean =
-        isZipSignature(header, headerLen) &&
-            runCatching {
-                ZipFile(file.toFile()).use { zip -> zip.entries().hasMoreElements() || Files.size(file) >= ZIP_EOCD_MIN_SIZE }
-            }.getOrDefault(false)
-
-    private fun isZipSignature(
-        bytes: ByteArray,
-        length: Int,
-    ): Boolean {
-        if (length < 4) return false
-        val word = ImageUploadAdmissionValidator.readInt32BE(bytes, 0)
-        return word == ZIP_LOCAL_HEADER_WORD || word == ZIP_EOCD_WORD || word == ZIP_SPANNED_WORD
-    }
 
     internal fun <T> executeWriteTransaction(block: () -> T): T {
         val manager = transactionManager ?: return block()
@@ -513,25 +543,6 @@ class CloudFileService(
             ?: throw IllegalStateException("Read-only transaction returned null")
     }
 
-    private fun readZipEntryNames(file: Path): Set<String> =
-        runCatching {
-            ZipFile(file.toFile()).use { zip ->
-                val names = LinkedHashSet<String>()
-                val entries = zip.entries()
-                var count = 0
-                while (entries.hasMoreElements()) {
-                    count += 1
-                    if (count > MAX_ZIP_ENTRIES) {
-                        throw AppException(ErrorCode.BAD_REQUEST, "ZIP 아카이브 엔트리 수가 허용 상한을 초과했습니다.")
-                    }
-                    names.add(entries.nextElement().name.replace('\\', '/'))
-                }
-                names
-            }
-        }.onFailure { ex ->
-            if (ex is AppException) throw ex
-        }.getOrDefault(emptySet())
-
     private data class DetectedContent(
         val contentType: String,
         val mediaKind: CloudFileMediaKind,
@@ -547,42 +558,73 @@ class CloudFileService(
         private const val IO_BUFFER_BYTES = 8_192
         private const val SIGNATURE_HEADER_BYTES = 64
         private const val PDF_MAGIC_WORD = 0x2550_4446
-        private const val MP4_FTYP_WORD = 0x6674_7970
-        private const val EBML_MAGIC_WORD = 0x1A45_DFA3
-        private const val ZIP_LOCAL_HEADER_WORD = 0x504B_0304
-        private const val ZIP_EOCD_WORD = 0x504B_0506
-        private const val ZIP_SPANNED_WORD = 0x504B_0708
-        private const val HWPX_CONTENT_TYPE = "application/haansofthwpx"
-        private const val ZIP_CONTENT_TYPE = "application/zip"
-        private const val HWPX_MANIFEST_ENTRY = "Contents/content.hpf"
-        private const val ZIP_EOCD_MIN_SIZE = 22
-        private const val MAX_ZIP_ENTRIES = 10_000
-        private val HWPX_DOCUMENT_ENTRIES =
+        private const val HWPX_CONTENT_TYPE = CloudArchiveAndDocumentInspector.HWPX_CONTENT_TYPE
+        private const val ZIP_CONTENT_TYPE = CloudArchiveAndDocumentInspector.ZIP_CONTENT_TYPE
+        private const val SVG_CONTENT_TYPE = CloudArchiveAndDocumentInspector.SVG_CONTENT_TYPE
+        private val ARCHIVE_CONTENT_TYPES =
             setOf(
-                "Contents/header.xml",
-                "Contents/section0.xml",
-                "META-INF/container.xml",
+                ZIP_CONTENT_TYPE,
+                CloudArchiveAndDocumentInspector.TAR_CONTENT_TYPE,
+                CloudArchiveAndDocumentInspector.GZIP_CONTENT_TYPE,
+                CloudArchiveAndDocumentInspector.SEVEN_ZIP_CONTENT_TYPE,
             )
+        private val AUDIO_CONTENT_TYPES =
+            setOf(
+                "audio/mpeg",
+                "audio/wav",
+                "audio/ogg",
+                "audio/opus",
+                "audio/mp4",
+                "audio/aac",
+                "audio/flac",
+            )
+        private val TEXT_CONTENT_TYPES =
+            CloudArchiveAndDocumentInspector.TEXT_EXTENSION_CONTENT_TYPES.values.toSet() + "text/xml"
         private val CONTENT_TYPE_ALIASES =
             mapOf(
                 "image/jpg" to "image/jpeg",
                 "image/pjpeg" to "image/jpeg",
                 "image/x-png" to "image/png",
                 "image/x-webp" to "image/webp",
+                "image/x-ms-bmp" to "image/bmp",
+                "image/vnd.microsoft.icon" to "image/x-icon",
+                "image/ico" to "image/x-icon",
                 "application/x-hwpx" to HWPX_CONTENT_TYPE,
+                "application/vnd.hancom.hwpx" to HWPX_CONTENT_TYPE,
                 "application/x-zip-compressed" to ZIP_CONTENT_TYPE,
+                "application/x-gzip" to CloudArchiveAndDocumentInspector.GZIP_CONTENT_TYPE,
+                "audio/x-wav" to "audio/wav",
+                "audio/x-flac" to "audio/flac",
+                "audio/x-m4a" to "audio/mp4",
+                "application/mp4" to "video/mp4",
+                "video/matroska" to "video/x-matroska",
+                "application/x-yaml" to "application/yaml",
+                "text/yaml" to "application/yaml",
+                "text/javascript" to "application/javascript",
             )
         private val KNOWN_CONTENT_TYPES =
             setOf(
                 "application/pdf",
                 HWPX_CONTENT_TYPE,
                 ZIP_CONTENT_TYPE,
+                CloudArchiveAndDocumentInspector.DOCX_CONTENT_TYPE,
+                CloudArchiveAndDocumentInspector.XLSX_CONTENT_TYPE,
+                CloudArchiveAndDocumentInspector.PPTX_CONTENT_TYPE,
+                CloudArchiveAndDocumentInspector.TAR_CONTENT_TYPE,
+                CloudArchiveAndDocumentInspector.GZIP_CONTENT_TYPE,
+                CloudArchiveAndDocumentInspector.SEVEN_ZIP_CONTENT_TYPE,
                 "image/jpeg",
                 "image/png",
                 "image/gif",
                 "image/webp",
+                "image/bmp",
+                "image/x-icon",
+                "image/avif",
+                SVG_CONTENT_TYPE,
                 "video/mp4",
+                "video/quicktime",
                 "video/webm",
-            )
+                "video/x-matroska",
+            ) + AUDIO_CONTENT_TYPES + TEXT_CONTENT_TYPES
     }
 }

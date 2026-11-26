@@ -73,4 +73,57 @@ class ApiV1PublicCloudController(
                 fileId = id,
             ),
         )
+
+    @GetMapping("/files/{id}/share")
+    @Operation(summary = "서명 공유 링크 파일 콘텐츠 조회")
+    fun shareContent(
+        @PathVariable
+        @Positive
+        id: Long,
+        @RequestParam
+        token: String,
+        @RequestParam(defaultValue = "false")
+        download: Boolean,
+        request: HttpServletRequest,
+    ): ResponseEntity<Resource> =
+        CloudContentWebSupport.contentResponse(
+            request = request,
+            meterRegistry = meterRegistry,
+            endpoint = "share",
+            download = download,
+            loadFile = {
+                cloudExternalPlaybackTokenService.getSharedFile(
+                    token = token,
+                    fileId = id,
+                )
+            },
+            openRange = { loaded, range ->
+                cloudExternalPlaybackTokenService.openContentRange(
+                    file = loaded,
+                    range = range,
+                )
+            },
+            openFull = {
+                cloudExternalPlaybackTokenService.openSharedContent(
+                    token = token,
+                    fileId = id,
+                )
+            },
+        )
+
+    @RequestMapping(method = [RequestMethod.HEAD], path = ["/files/{id}/share"])
+    @Operation(summary = "서명 공유 링크 파일 메타데이터 조회")
+    fun shareHead(
+        @PathVariable
+        @Positive
+        id: Long,
+        @RequestParam
+        token: String,
+    ): ResponseEntity<Void> =
+        CloudContentWebSupport.headMetadataResponse(
+            cloudExternalPlaybackTokenService.getSharedFile(
+                token = token,
+                fileId = id,
+            ),
+        )
 }

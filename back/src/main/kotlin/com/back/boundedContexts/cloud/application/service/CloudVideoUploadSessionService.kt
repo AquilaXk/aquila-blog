@@ -340,11 +340,19 @@ class CloudVideoUploadSessionService(
                 )
                 throw ex
             }
-        transitionStatus(
-            session.id,
-            expectedStatus = CloudVideoUploadSessionStatus.UPLOADING_PART,
-            nextStatus = CloudVideoUploadSessionStatus.IN_PROGRESS,
-        )
+        val unlocked =
+            transitionStatus(
+                session.id,
+                expectedStatus = CloudVideoUploadSessionStatus.UPLOADING_PART,
+                nextStatus = CloudVideoUploadSessionStatus.IN_PROGRESS,
+            )
+        if (!unlocked) {
+            val currentStatus = sessionRepository.findByIdAndOwner(session.id, session.ownerMemberId)?.status
+            if (currentStatus == CloudVideoUploadSessionStatus.ABORTING || currentStatus == CloudVideoUploadSessionStatus.CANCELLED) {
+                runCatching { partRepository.delete(savedPart) }
+            }
+            throw AppException(ErrorCode.CLOUD_UPLOAD_CONFLICT, "대용량 업로드 세션 상태가 변경되었습니다.")
+        }
         session.transitionTo(CloudVideoUploadSessionStatus.IN_PROGRESS, clock.instant())
         extendSessionExpiry(session)
         CloudMediaMetrics.recordPartUpload(
@@ -397,13 +405,17 @@ class CloudVideoUploadSessionService(
     ) {
         val session = findOwnedSession(ownerMemberId, sessionId)
         if (isTerminalStatus(session.status)) return
-        if (session.status != CloudVideoUploadSessionStatus.IN_PROGRESS) {
-            throw AppException(ErrorCode.CLOUD_UPLOAD_CONFLICT, "다른 업로드 작업이 진행 중입니다.")
-        }
+        val expectedCancelStatus =
+            when (session.status) {
+                CloudVideoUploadSessionStatus.IN_PROGRESS,
+                CloudVideoUploadSessionStatus.UPLOADING_PART,
+                -> session.status
+                else -> throw AppException(ErrorCode.CLOUD_UPLOAD_CONFLICT, "다른 업로드 작업이 진행 중입니다.")
+            }
 
         claimStatus(
             session,
-            expectedStatus = CloudVideoUploadSessionStatus.IN_PROGRESS,
+            expectedStatus = expectedCancelStatus,
             nextStatus = CloudVideoUploadSessionStatus.ABORTING,
             conflictMessage = "다른 업로드 작업이 진행 중입니다.",
         )
@@ -452,7 +464,6 @@ class CloudVideoUploadSessionService(
                 session.id,
                 expectedStatus = CloudVideoUploadSessionStatus.IN_PROGRESS,
                 nextStatus = CloudVideoUploadSessionStatus.ABORTING,
-                throwOnFailure = false,
             )
         if (!claimed) return false
         session.transitionTo(CloudVideoUploadSessionStatus.ABORTING, clock.instant())
@@ -729,7 +740,6 @@ class CloudVideoUploadSessionService(
                 session.id,
                 expectedStatus = expectedStatus,
                 nextStatus = CloudVideoUploadSessionStatus.ABORTING,
-                throwOnFailure = false,
             )
         if (!claimed) return false
         session.transitionTo(CloudVideoUploadSessionStatus.ABORTING, clock.instant())
@@ -756,7 +766,6 @@ class CloudVideoUploadSessionService(
                 session.id,
                 expectedStatus = expectedStatus,
                 nextStatus = nextStatus,
-                throwOnFailure = false,
             )
         if (!claimed) {
             throw AppException(ErrorCode.CLOUD_UPLOAD_CONFLICT, conflictMessage)
@@ -768,7 +777,6 @@ class CloudVideoUploadSessionService(
         sessionId: Long,
         expectedStatus: CloudVideoUploadSessionStatus,
         nextStatus: CloudVideoUploadSessionStatus,
-        throwOnFailure: Boolean = true,
     ): Boolean {
         val changed =
             sessionRepository.transitionStatus(
@@ -783,9 +791,6 @@ class CloudVideoUploadSessionService(
                 from = expectedStatus.name,
                 to = nextStatus.name,
             )
-        }
-        if (!changed && throwOnFailure) {
-            throw AppException(ErrorCode.CLOUD_UPLOAD_CONFLICT, "대용량 업로드 세션 상태가 변경되었습니다.")
         }
         return changed
     }
@@ -817,7 +822,6 @@ class CloudVideoUploadSessionService(
             sessionId,
             expectedStatus = CloudVideoUploadSessionStatus.UPLOADING_PART,
             nextStatus = CloudVideoUploadSessionStatus.IN_PROGRESS,
-            throwOnFailure = false,
         )
     }
 
@@ -971,9 +975,9 @@ class CloudVideoUploadSessionService(
         file: Path,
     ) {
         if (partNumber != 1) return
-        val bytes = Files.newInputStream(file).use { it.readNBytes(12) }
+        val bytes = Files.newInputStream(file).use { it.readNBytes(64) }
         val detected =
-            detectVideoFromSignature(bytes)
+            detectVideoFromSignature(bytes, session.contentType)
                 ?: throw AppException(ErrorCode.BAD_REQUEST, "지원하지 않는 동영상 파일 형식입니다.")
         if (detected != session.contentType) {
             throw AppException(ErrorCode.BAD_REQUEST, "동영상 파일 내용과 콘텐츠 타입이 일치하지 않습니다.")

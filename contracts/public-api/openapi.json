@@ -529,6 +529,107 @@
         }
       }
     },
+    "/system/api/v1/adm/cloud/files/{id}/share-links": {
+      "get": {
+        "tags": [
+          "api-v-1-adm-cloud-controller"
+        ],
+        "operationId": "listShareLinks",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64",
+              "exclusiveMinimum": 0
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/CloudExternalPlaybackTokenListResBody"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "api-v-1-adm-cloud-controller"
+        ],
+        "operationId": "issueShareLink",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64",
+              "exclusiveMinimum": 0
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/IssueCloudExternalTokenReqBody"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Created",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/RsDataCloudExternalPlaybackTokenDto"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "api-v-1-adm-cloud-controller"
+        ],
+        "operationId": "revokeAllShareLinks",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64",
+              "exclusiveMinimum": 0
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/RsDataRevokeExternalPlaybackTokensResBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/system/api/v1/adm/cloud/files/{id}/promote-post-asset": {
       "post": {
         "tags": [
@@ -579,6 +680,15 @@
             }
           }
         ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/IssueCloudExternalTokenReqBody"
+              }
+            }
+          }
+        },
         "responses": {
           "201": {
             "description": "Created",
@@ -1328,6 +1438,89 @@
         }
       }
     },
+    "/system/api/v1/public/cloud/files/{id}/share": {
+      "get": {
+        "tags": [
+          "ApiV1PublicCloudController"
+        ],
+        "summary": "서명 공유 링크 파일 콘텐츠 조회",
+        "operationId": "shareContent",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64",
+              "exclusiveMinimum": 0
+            }
+          },
+          {
+            "name": "token",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "download",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean",
+              "default": false
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              }
+            }
+          }
+        }
+      },
+      "head": {
+        "tags": [
+          "ApiV1PublicCloudController"
+        ],
+        "summary": "서명 공유 링크 파일 메타데이터 조회",
+        "operationId": "shareHead",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64",
+              "exclusiveMinimum": 0
+            }
+          },
+          {
+            "name": "token",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
     "/system/api/v1/public/cloud/files/{id}/playback": {
       "get": {
         "tags": [
@@ -1402,6 +1595,62 @@
         }
       }
     },
+    "/system/api/v1/adm/cloud/files/{id}/thumbnail": {
+      "get": {
+        "tags": [
+          "api-v-1-adm-cloud-controller"
+        ],
+        "operationId": "thumbnail",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64",
+              "exclusiveMinimum": 0
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              }
+            }
+          }
+        }
+      },
+      "head": {
+        "tags": [
+          "api-v-1-adm-cloud-controller"
+        ],
+        "operationId": "thumbnailHead",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64",
+              "exclusiveMinimum": 0
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
     "/system/api/v1/adm/cloud/files/{id}/content": {
       "get": {
         "tags": [
@@ -1421,6 +1670,15 @@
           },
           {
             "name": "download",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean",
+              "default": false
+            }
+          },
+          {
+            "name": "thumbnail",
             "in": "query",
             "required": false,
             "schema": {
@@ -3067,6 +3325,48 @@
         }
       }
     },
+    "/system/api/v1/adm/cloud/files/{id}/share-links/{tokenId}": {
+      "delete": {
+        "tags": [
+          "api-v-1-adm-cloud-controller"
+        ],
+        "operationId": "revokeShareLink",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64",
+              "exclusiveMinimum": 0
+            }
+          },
+          {
+            "name": "tokenId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64",
+              "exclusiveMinimum": 0
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/RsDataVoid"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/system/api/v1/adm/cloud/files/{id}/external-playback-tokens/{tokenId}": {
       "delete": {
         "tags": [
@@ -4113,35 +4413,15 @@
           }
         }
       },
-      "PromoteCloudPostAssetResBody": {
+      "IssueCloudExternalTokenReqBody": {
         "type": "object",
         "properties": {
-          "fileId": {
-            "type": "integer",
+          "ttlSeconds": {
+            "type": [
+              "integer",
+              "null"
+            ],
             "format": "int64"
-          },
-          "key": {
-            "type": "string"
-          },
-          "url": {
-            "type": "string"
-          },
-          "markdown": {
-            "type": "string"
-          }
-        }
-      },
-      "RsDataPromoteCloudPostAssetResBody": {
-        "type": "object",
-        "properties": {
-          "resultCode": {
-            "type": "string"
-          },
-          "msg": {
-            "type": "string"
-          },
-          "data": {
-            "$ref": "#/components/schemas/PromoteCloudPostAssetResBody"
           }
         }
       },
@@ -4175,6 +4455,38 @@
           },
           "data": {
             "$ref": "#/components/schemas/CloudExternalPlaybackTokenDto"
+          }
+        }
+      },
+      "PromoteCloudPostAssetResBody": {
+        "type": "object",
+        "properties": {
+          "fileId": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "key": {
+            "type": "string"
+          },
+          "url": {
+            "type": "string"
+          },
+          "markdown": {
+            "type": "string"
+          }
+        }
+      },
+      "RsDataPromoteCloudPostAssetResBody": {
+        "type": "object",
+        "properties": {
+          "resultCode": {
+            "type": "string"
+          },
+          "msg": {
+            "type": "string"
+          },
+          "data": {
+            "$ref": "#/components/schemas/PromoteCloudPostAssetResBody"
           }
         }
       },
@@ -5600,6 +5912,13 @@
           "expiresAt": {
             "type": "string",
             "format": "date-time"
+          },
+          "purpose": {
+            "type": "string",
+            "enum": [
+              "EXTERNAL_PLAYBACK",
+              "SHARE_LINK"
+            ]
           }
         }
       },

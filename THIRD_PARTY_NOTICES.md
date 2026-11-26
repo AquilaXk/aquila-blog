@@ -319,4 +319,19 @@ SOFTWARE.
    limitations under the License.
 ```
 
+---
+
+## 13. supabase/supabase
+
+- **Project**: Supabase Studio (`CustomExpiryModal`)
+- **License**: Apache License 2.0
+- **Source**: https://github.com/supabase/supabase
+- **Usage**:
+  - Selectable expiration presets (`1h` / `6h` / `24h` / `7d`) and signed external share link issuance lifecycle in `com.back.boundedContexts.cloud.application.service.CloudExternalPlaybackTokenService` and `com.back.boundedContexts.cloud.adapter.web.ApiV1AdmCloudController`
+
+```
+                                 Apache License
+                           Version 2.0, January 2004
+                        http://www.apache.org/licenses/
+```
 

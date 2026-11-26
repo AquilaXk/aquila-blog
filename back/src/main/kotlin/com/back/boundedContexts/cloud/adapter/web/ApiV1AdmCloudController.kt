@@ -5,6 +5,7 @@ import com.back.boundedContexts.cloud.application.service.CloudExternalPlaybackT
 import com.back.boundedContexts.cloud.application.service.CloudExternalPlaybackTokenService
 import com.back.boundedContexts.cloud.application.service.CloudFileDto
 import com.back.boundedContexts.cloud.application.service.CloudFileService
+import com.back.boundedContexts.cloud.application.service.CloudThumbnailRenderer
 import com.back.boundedContexts.cloud.application.service.CloudVideoUploadPartResultDto
 import com.back.boundedContexts.cloud.application.service.CloudVideoUploadSessionDto
 import com.back.boundedContexts.cloud.application.service.CloudVideoUploadSessionService
@@ -99,6 +100,10 @@ class ApiV1AdmCloudController(
         val key: String,
         val url: String,
         val markdown: String,
+    )
+
+    data class IssueCloudExternalTokenReqBody(
+        val ttlSeconds: Long? = null,
     )
 
     data class CreateVideoUploadSessionReqBody(
@@ -321,11 +326,14 @@ class ApiV1AdmCloudController(
         @PathVariable
         @Positive
         id: Long,
+        @RequestBody(required = false)
+        body: IssueCloudExternalTokenReqBody? = null,
     ): ResponseEntity<RsData<CloudExternalPlaybackTokenDto>> {
         val issued =
             cloudExternalPlaybackTokenService.issue(
                 ownerMemberId = securityUser.id,
                 fileId = id,
+                ttlSeconds = body?.ttlSeconds,
             )
 
         return ResponseEntity
@@ -334,7 +342,6 @@ class ApiV1AdmCloudController(
     }
 
     @GetMapping("/files/{id}/content")
-    @Transactional(readOnly = true)
     fun content(
         @AuthenticationPrincipal securityUser: SecurityUser,
         @PathVariable
@@ -342,13 +349,16 @@ class ApiV1AdmCloudController(
         id: Long,
         @RequestParam(defaultValue = "false")
         download: Boolean,
+        @RequestParam(defaultValue = "false")
+        thumbnail: Boolean,
         request: HttpServletRequest,
     ): ResponseEntity<Resource> =
         CloudContentWebSupport.contentResponse(
             request = request,
             meterRegistry = meterRegistry,
-            endpoint = "content",
+            endpoint = if (thumbnail) "thumbnail" else "content",
             download = download,
+            thumbnail = thumbnail,
             loadFile = {
                 cloudFileService.get(
                     ownerMemberId = securityUser.id,
@@ -362,15 +372,28 @@ class ApiV1AdmCloudController(
                 )
             },
             openFull = {
-                cloudFileService.openContent(
-                    ownerMemberId = securityUser.id,
-                    fileId = id,
-                )
+                if (thumbnail) {
+                    val file =
+                        cloudFileService.get(
+                            ownerMemberId = securityUser.id,
+                            fileId = id,
+                        )
+                    CloudThumbnailRenderer.openThumbnailOrFallback(file) {
+                        cloudFileService.openContent(
+                            ownerMemberId = securityUser.id,
+                            fileId = id,
+                        )
+                    }
+                } else {
+                    cloudFileService.openContent(
+                        ownerMemberId = securityUser.id,
+                        fileId = id,
+                    )
+                }
             },
         )
 
     @RequestMapping(method = [RequestMethod.HEAD], path = ["/files/{id}/content"])
-    @Transactional(readOnly = true)
     fun contentHead(
         @AuthenticationPrincipal securityUser: SecurityUser,
         @PathVariable
@@ -382,6 +405,34 @@ class ApiV1AdmCloudController(
                 ownerMemberId = securityUser.id,
                 fileId = id,
             ),
+        )
+
+    @GetMapping("/files/{id}/thumbnail")
+    fun thumbnail(
+        @AuthenticationPrincipal securityUser: SecurityUser,
+        @PathVariable
+        @Positive
+        id: Long,
+        request: HttpServletRequest,
+    ): ResponseEntity<Resource> =
+        content(
+            securityUser = securityUser,
+            id = id,
+            download = false,
+            thumbnail = true,
+            request = request,
+        )
+
+    @RequestMapping(method = [RequestMethod.HEAD], path = ["/files/{id}/thumbnail"])
+    fun thumbnailHead(
+        @AuthenticationPrincipal securityUser: SecurityUser,
+        @PathVariable
+        @Positive
+        id: Long,
+    ): ResponseEntity<Void> =
+        contentHead(
+            securityUser = securityUser,
+            id = id,
         )
 
     @PatchMapping("/files/{id}")
@@ -420,6 +471,14 @@ class ApiV1AdmCloudController(
         if (file.mediaKind != CloudFileMediaKind.PHOTO) {
             throw AppException(ErrorCode.BAD_REQUEST, "이미지 파일만 게시글 에셋으로 승격할 수 있습니다.")
         }
+        val normalizedType =
+            file.contentType
+                .substringBefore(';')
+                .trim()
+                .lowercase()
+        if (normalizedType !in setOf("image/jpeg", "image/png", "image/gif", "image/webp")) {
+            throw AppException(ErrorCode.BAD_REQUEST, "게시글 에셋 승격은 정적 래스터 이미지(JPEG·PNG·GIF·WebP)만 지원합니다.")
+        }
         val maxAllowedBytes = minOf(8L * 1024 * 1024, storageProperties?.maxFileSizeBytes ?: (8L * 1024 * 1024))
         if (file.byteSize > maxAllowedBytes) {
             val limitMb = (maxAllowedBytes + (1024 * 1024) - 1) / (1024 * 1024)
@@ -453,7 +512,11 @@ class ApiV1AdmCloudController(
         )
 
         val url = UploadedFileUrlCodec.buildImageUrl(key)
-        val escapedName = file.originalFilename.replace("[", "\\[").replace("]", "\\]")
+        val escapedName =
+            file.originalFilename
+                .replace("\\", "\\\\")
+                .replace("[", "\\[")
+                .replace("]", "\\]")
         val markdown = "![$escapedName]($url)"
 
         return ResponseEntity
@@ -470,6 +533,81 @@ class ApiV1AdmCloudController(
                     ),
                 ),
             )
+    }
+
+    @PostMapping("/files/{id}/share-links")
+    @ApiResponse(responseCode = "201", description = "Created")
+    fun issueShareLink(
+        @AuthenticationPrincipal securityUser: SecurityUser,
+        @PathVariable
+        @Positive
+        id: Long,
+        @RequestBody(required = false)
+        body: IssueCloudExternalTokenReqBody? = null,
+    ): ResponseEntity<RsData<CloudExternalPlaybackTokenDto>> {
+        val issued =
+            cloudExternalPlaybackTokenService.issueShareLink(
+                ownerMemberId = securityUser.id,
+                fileId = id,
+                ttlSeconds = body?.ttlSeconds,
+            )
+
+        return ResponseEntity
+            .status(HttpStatus.CREATED)
+            .body(RsData("201-1", "외부 공유 링크가 발급되었습니다.", issued))
+    }
+
+    @GetMapping("/files/{id}/share-links")
+    @Transactional(readOnly = true)
+    fun listShareLinks(
+        @AuthenticationPrincipal securityUser: SecurityUser,
+        @PathVariable
+        @Positive
+        id: Long,
+    ): CloudExternalPlaybackTokenListResBody =
+        CloudExternalPlaybackTokenListResBody(
+            tokens =
+                cloudExternalPlaybackTokenService.listShareTokens(
+                    ownerMemberId = securityUser.id,
+                    fileId = id,
+                ),
+        )
+
+    @DeleteMapping("/files/{id}/share-links/{tokenId}")
+    fun revokeShareLink(
+        @AuthenticationPrincipal securityUser: SecurityUser,
+        @PathVariable
+        @Positive
+        id: Long,
+        @PathVariable
+        @Positive
+        tokenId: Long,
+    ): RsData<Void> {
+        cloudExternalPlaybackTokenService.revokeShareToken(
+            ownerMemberId = securityUser.id,
+            fileId = id,
+            tokenId = tokenId,
+        )
+        return RsData("200-1", "외부 공유 링크가 폐기되었습니다.")
+    }
+
+    @DeleteMapping("/files/{id}/share-links")
+    fun revokeAllShareLinks(
+        @AuthenticationPrincipal securityUser: SecurityUser,
+        @PathVariable
+        @Positive
+        id: Long,
+    ): RsData<RevokeExternalPlaybackTokensResBody> {
+        val count =
+            cloudExternalPlaybackTokenService.revokeAllShareTokens(
+                ownerMemberId = securityUser.id,
+                fileId = id,
+            )
+        return RsData(
+            "200-1",
+            "외부 공유 링크가 모두 폐기되었습니다.",
+            RevokeExternalPlaybackTokensResBody(revokedCount = count),
+        )
     }
 
     @GetMapping("/files/{id}/external-playback-tokens")

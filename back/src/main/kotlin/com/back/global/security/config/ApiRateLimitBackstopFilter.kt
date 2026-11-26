@@ -37,6 +37,8 @@ class ApiRateLimitBackstopFilter(
     private val publicReadLimitPerMinute: Int = 120,
     @param:Value("\${custom.security.apiRateLimit.privateReadLimitPerMinute:120}")
     private val privateReadLimitPerMinute: Int = 120,
+    @param:Value("\${custom.security.apiRateLimit.streamReadLimitPerMinute:600}")
+    private val streamReadLimitPerMinute: Int = 600,
     @param:Value("\${custom.security.apiRateLimit.mutationLimitPerMinute:60}")
     private val mutationLimitPerMinute: Int = 60,
     @param:Value("\${custom.security.apiRateLimit.authLimitPerMinute:20}")
@@ -45,6 +47,7 @@ class ApiRateLimitBackstopFilter(
     init {
         require(publicReadLimitPerMinute > 0) { "publicReadLimitPerMinute must be > 0" }
         require(privateReadLimitPerMinute > 0) { "privateReadLimitPerMinute must be > 0" }
+        require(streamReadLimitPerMinute > 0) { "streamReadLimitPerMinute must be > 0" }
         require(mutationLimitPerMinute > 0) { "mutationLimitPerMinute must be > 0" }
         require(authLimitPerMinute > 0) { "authLimitPerMinute must be > 0" }
     }
@@ -111,6 +114,9 @@ class ApiRateLimitBackstopFilter(
         if (isAuthPath(path)) {
             return Bucket("auth", authLimitPerMinute)
         }
+        if (method in SAFE_METHODS && isCloudStreamReadPath(path)) {
+            return Bucket("stream-read", streamReadLimitPerMinute)
+        }
         if (method in SAFE_METHODS && publicApiRequestMatcher.isPublicReadSafe(method, path)) {
             return Bucket("public-read", publicReadLimitPerMinute)
         }
@@ -124,6 +130,8 @@ class ApiRateLimitBackstopFilter(
     }
 
     private fun isAuthPath(path: String): Boolean = AUTH_PATHS.any { it.matches(path) }
+
+    private fun isCloudStreamReadPath(path: String): Boolean = CLOUD_STREAM_READ_PATHS.any { it.matches(path) }
 
     private fun shouldFailClosedWithoutRedis(): Boolean = environment.matchesProfiles("prod") && requireRedisInProd
 
@@ -196,6 +204,13 @@ class ApiRateLimitBackstopFilter(
         private val AUTH_PATHS =
             listOf(
                 Regex("^/member/api/v\\d+/auth/admin-email/(request|verify)/?$"),
+            )
+        private val CLOUD_STREAM_READ_PATHS =
+            listOf(
+                Regex("^/system/api/v\\d+/adm/cloud/files/\\d+/content/?$"),
+                Regex("^/system/api/v\\d+/adm/cloud/files/\\d+/thumbnail/?$"),
+                Regex("^/system/api/v\\d+/public/cloud/files/\\d+/playback/?$"),
+                Regex("^/system/api/v\\d+/public/cloud/files/\\d+/share/?$"),
             )
     }
 }

@@ -252,6 +252,25 @@ class PostPublishingMetadataIntegrationTest : BaseControllerIntegrationTest() {
             }
 
         val dueFuture = Instant.now().plus(2, ChronoUnit.HOURS).truncatedTo(ChronoUnit.SECONDS)
+        // 미승격 임시초안(isTempDraft=true)에 예약 시각이 저장되더라도 확정 승격 전에는 자동 발행되지 않는다
+        mvc
+            .put("/post/api/v1/posts/temp/$d2Id") {
+                contentType = MediaType.APPLICATION_JSON
+                content =
+                    """
+                    {
+                      "title": "미확정 임시초안 예약 테스트",
+                      "content": "자동 발행되면 안 되는 미승격 임시초안 본문입니다.",
+                      "version": 0,
+                      "scheduledAt": "$dueFuture"
+                    }
+                    """.trimIndent()
+            }.andExpect {
+                status { isOk() }
+                jsonPath("$.data.id") { value(d2Id) }
+                jsonPath("$.data.scheduledAt") { exists() }
+            }
+
         val scheduledRes =
             mvc
                 .post("/post/api/v1/posts") {
@@ -276,12 +295,40 @@ class PostPublishingMetadataIntegrationTest : BaseControllerIntegrationTest() {
                 }.andReturn()
         val scheduledId = JsonPath.read<Int>(scheduledRes.response.contentAsString, "$.data.id").toLong()
 
+        val unlistedScheduledRes =
+            mvc
+                .post("/post/api/v1/posts") {
+                    contentType = MediaType.APPLICATION_JSON
+                    content =
+                        """
+                        {
+                          "title": "비목록 예약 글",
+                          "content": "비목록 공개 설정이 보존되는지 검증합니다.",
+                          "summaryMode": "AUTO",
+                          "published": false,
+                          "listed": false,
+                          "scheduledAt": "$dueFuture"
+                        }
+                        """.trimIndent()
+                }.andExpect {
+                    status { isCreated() }
+                }.andReturn()
+        val unlistedScheduledId = JsonPath.read<Int>(unlistedScheduledRes.response.contentAsString, "$.data.id").toLong()
+
         mvc.get("/post/api/v1/posts/$scheduledId").andExpect {
             status { isNotFound() }
         }
 
         val publishedCount = scheduledPublishUseCase.publishDueScheduledPosts(now = dueFuture.plusSeconds(10), batchSize = 50)
-        assertThat(publishedCount).isGreaterThanOrEqualTo(1)
+        assertThat(publishedCount).isEqualTo(2)
+
+        val unpromotedTempDraft: Post = postFacade.findById(d2Id).getOrThrow()
+        assertThat(unpromotedTempDraft.isTempDraft).isTrue()
+        assertThat(unpromotedTempDraft.published).isFalse()
+
+        val promotedUnlisted: Post = postFacade.findById(unlistedScheduledId).getOrThrow()
+        assertThat(promotedUnlisted.published).isTrue()
+        assertThat(promotedUnlisted.listed).isFalse()
 
         val promoted: Post = postFacade.findById(scheduledId).getOrThrow()
         assertThat(promoted.published).isTrue()

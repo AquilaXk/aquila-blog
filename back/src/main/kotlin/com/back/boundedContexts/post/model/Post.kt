@@ -97,7 +97,7 @@ import java.time.Instant
     """
     CREATE INDEX IF NOT EXISTS post_idx_scheduled_publish_due
     ON post (scheduled_at ASC, id ASC)
-    WHERE deleted_at IS NULL AND published = FALSE AND scheduled_at IS NOT NULL
+    WHERE deleted_at IS NULL AND published = FALSE AND is_temp_draft = FALSE AND scheduled_at IS NOT NULL
     """,
 )
 @AfterDDL(

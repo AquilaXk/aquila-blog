@@ -1017,6 +1017,7 @@ class PostRepositoryImpl(
             .where(
                 post.deletedAt.isNull,
                 post.published.isFalse,
+                post.isTempDraft.isFalse,
                 post.scheduledAt.isNotNull,
                 post.scheduledAt.loe(now),
             ).orderBy(post.scheduledAt.asc(), post.id.asc())

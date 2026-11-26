@@ -177,10 +177,11 @@ class PostPublishingMetadataValidatorAndSchedulerTest {
     @Test
     fun `예약 발행 실행기는 미도래·삭제·기발행·존재하지 않는 글을 건너뛴다`() {
         val postRepository = mock(PostRepositoryPort::class.java)
+        val postTempDraftService = mock(PostTempDraftService::class.java)
         val executor =
             PostScheduledPublishExecutor(
                 postRepository = postRepository,
-                postTempDraftService = mock(PostTempDraftService::class.java),
+                postTempDraftService = postTempDraftService,
                 postTagIndexService = mock(PostTagIndexService::class.java),
                 postHydrationService = mock(PostHydrationService::class.java),
                 taskFacade = mock(TaskFacade::class.java),
@@ -206,6 +207,21 @@ class PostPublishingMetadataValidatorAndSchedulerTest {
         val futureSchedule = buildPost(14L, author, scheduledAt = fixedNow.plusSeconds(60))
         `when`(postRepository.findById(14L)).thenReturn(Optional.of(futureSchedule))
         assertThat(executor.publishDuePost(14L, fixedNow)).isFalse()
+
+        val tempDraftPost =
+            buildPost(
+                15L,
+                author,
+                published = false,
+                listed = false,
+                isTempDraft = true,
+                scheduledAt = fixedNow.minusSeconds(10),
+            )
+        `when`(postRepository.findById(15L)).thenReturn(Optional.of(tempDraftPost))
+        `when`(postTempDraftService.isTempDraft(tempDraftPost)).thenReturn(true)
+        assertThat(executor.publishDuePost(15L, fixedNow)).isFalse()
+        assertThat(tempDraftPost.published).isFalse()
+        assertThat(tempDraftPost.isTempDraft).isTrue()
     }
 
     @Test
@@ -233,38 +249,38 @@ class PostPublishingMetadataValidatorAndSchedulerTest {
             )
 
         val author = buildMember(7L)
-        val dueTempDraft =
+        val dueScheduledPost =
             buildPost(
                 id = 21L,
                 author = author,
                 published = false,
-                listed = false,
-                isTempDraft = true,
+                listed = true,
+                isTempDraft = false,
                 scheduledAt = fixedNow.minusSeconds(5),
             )
-        `when`(postRepository.findById(21L)).thenReturn(Optional.of(dueTempDraft))
-        `when`(postTempDraftService.isTempDraft(dueTempDraft)).thenReturn(true)
-        `when`(postTagIndexService.syncPostTags(dueTempDraft)).thenReturn(listOf("kotlin"))
+        `when`(postRepository.findById(21L)).thenReturn(Optional.of(dueScheduledPost))
+        `when`(postTempDraftService.isTempDraft(dueScheduledPost)).thenReturn(false)
+        `when`(postTagIndexService.syncPostTags(dueScheduledPost)).thenReturn(listOf("kotlin"))
 
         TransactionSynchronizationManager.initSynchronization()
         val result = executor.publishDuePost(21L, fixedNow)
         assertThat(result).isTrue()
-        assertThat(dueTempDraft.published).isTrue()
-        assertThat(dueTempDraft.listed).isTrue()
-        assertThat(dueTempDraft.isTempDraft).isFalse()
-        assertThat(dueTempDraft.scheduledAt).isNull()
-        verify(postTempDraftService).clearTrackedTempDraftIfMatches(author, 21L)
+        assertThat(dueScheduledPost.published).isTrue()
+        assertThat(dueScheduledPost.listed).isTrue()
+        assertThat(dueScheduledPost.isTempDraft).isFalse()
+        assertThat(dueScheduledPost.scheduledAt).isNull()
+        verify(postTempDraftService, never()).clearTrackedTempDraftIfMatches(author, 21L)
         val expectedKeys =
             UploadedFileUrlCodec
-                .extractPartitionedObjectKeysFromContent(dueTempDraft.content)
+                .extractPartitionedObjectKeysFromContent(dueScheduledPost.content)
                 .allKeys()
         verify(postRepository).syncImageReferences(21L, expectedKeys)
         verify(revisionRepository).appendAndTrimRevisions(
             postId = 21L,
             authorId = 7L,
-            title = dueTempDraft.title,
-            content = dueTempDraft.content,
-            summaryText = dueTempDraft.summaryText,
+            title = dueScheduledPost.title,
+            content = dueScheduledPost.content,
+            summaryText = dueScheduledPost.summaryText,
             maxRevisionsPerPost = 20,
         )
         verify(failingCacheManager, never()).getCache(anyString())

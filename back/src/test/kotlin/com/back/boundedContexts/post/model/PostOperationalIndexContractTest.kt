@@ -213,6 +213,8 @@ class PostOperationalIndexContractTest {
             assertThat(indexSql).contains(expectedIndex)
             assertThat(postAfterDdl).contains(expectedIndex)
         }
+        assertThat(indexSql).contains("is_temp_draft = FALSE")
+        assertThat(postAfterDdl).contains("is_temp_draft = FALSE")
     }
 
     @Test

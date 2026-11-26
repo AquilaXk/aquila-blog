@@ -39,24 +39,16 @@ class PostScheduledPublishExecutor(
     ): Boolean {
         val post = postRepository.findById(postId).orElse(null) ?: return false
         val scheduledAt = post.scheduledAt ?: return false
-        if (post.deletedAt != null || post.published || scheduledAt.isAfter(now)) {
+        if (post.deletedAt != null || post.published || postTempDraftService.isTempDraft(post) || scheduledAt.isAfter(now)) {
             return false
         }
 
         postHydrationService.hydratePostAttrs(post)
         postHydrationService.hydrateMembersPublishedProfileWorkspaces(listOf(post.author))
-        val wasTempDraft = postTempDraftService.isTempDraft(post)
 
         post.published = true
-        if (wasTempDraft) {
-            post.listed = true
-        }
         post.isTempDraft = false
         post.scheduledAt = null
-
-        if (wasTempDraft) {
-            postTempDraftService.clearTrackedTempDraftIfMatches(post.author, post.id)
-        }
         postRepository.flush()
 
         val afterTags = postTagIndexService.syncPostTags(post)

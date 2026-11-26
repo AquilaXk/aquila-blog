@@ -399,13 +399,7 @@ class ApiV1AdmCloudController(
         @PathVariable
         @Positive
         id: Long,
-    ): ResponseEntity<Void> =
-        CloudContentWebSupport.headMetadataResponse(
-            cloudFileService.get(
-                ownerMemberId = securityUser.id,
-                fileId = id,
-            ),
-        )
+    ): ResponseEntity<Void> = headMetadata(securityUser = securityUser, id = id, thumbnail = false)
 
     @GetMapping("/files/{id}/thumbnail")
     fun thumbnail(
@@ -429,10 +423,20 @@ class ApiV1AdmCloudController(
         @PathVariable
         @Positive
         id: Long,
+    ): ResponseEntity<Void> = headMetadata(securityUser = securityUser, id = id, thumbnail = true)
+
+    private fun headMetadata(
+        securityUser: SecurityUser,
+        id: Long,
+        thumbnail: Boolean,
     ): ResponseEntity<Void> =
-        contentHead(
-            securityUser = securityUser,
-            id = id,
+        CloudContentWebSupport.headMetadataResponse(
+            file =
+                cloudFileService.get(
+                    ownerMemberId = securityUser.id,
+                    fileId = id,
+                ),
+            thumbnail = thumbnail,
         )
 
     @PatchMapping("/files/{id}")

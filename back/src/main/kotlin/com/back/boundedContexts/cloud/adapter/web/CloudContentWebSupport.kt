@@ -32,7 +32,12 @@ object CloudContentWebSupport {
             "application/javascript",
         )
 
-    fun headMetadataResponse(file: CloudFileDto): ResponseEntity<Void> {
+    fun headMetadataResponse(file: CloudFileDto): ResponseEntity<Void> = headMetadataResponse(file, thumbnail = false)
+
+    fun headMetadataResponse(
+        file: CloudFileDto,
+        thumbnail: Boolean,
+    ): ResponseEntity<Void> {
         val builder =
             ResponseEntity
                 .ok()
@@ -40,7 +45,7 @@ object CloudContentWebSupport {
                 .header(HttpHeaders.ACCEPT_RANGES, "bytes")
                 .contentLength(file.byteSize)
         applySecurityHeaders(builder, file.contentType)
-        applyCacheHeaders(builder, file, thumbnail = false)
+        applyCacheHeaders(builder, file, thumbnail = thumbnail)
         return builder.build()
     }
 
@@ -230,9 +235,9 @@ object CloudContentWebSupport {
         builder: T,
         contentType: String,
     ): T {
-        builder.header("X-Content-Type-Options", "nosniff")
+        builder.headers { it.set("X-Content-Type-Options", "nosniff") }
         if (isActiveScriptContentType(contentType)) {
-            builder.header("Content-Security-Policy", SANDBOX_CSP)
+            builder.headers { it.set("Content-Security-Policy", SANDBOX_CSP) }
         }
         return builder
     }
@@ -256,7 +261,7 @@ object CloudContentWebSupport {
         }
         builder.header(HttpHeaders.CACHE_CONTROL, "private, max-age=0, must-revalidate")
         builder.header(HttpHeaders.ETAG, etag)
-        builder.header("X-Content-Type-Options", "nosniff")
+        builder.headers { it.set("X-Content-Type-Options", "nosniff") }
         return builder
     }
 
@@ -296,7 +301,7 @@ object CloudContentWebSupport {
         builder.header(HttpHeaders.CACHE_CONTROL, "private, no-store, max-age=0")
         builder.header(HttpHeaders.PRAGMA, "no-cache")
         builder.header(HttpHeaders.EXPIRES, "0")
-        builder.header("X-Content-Type-Options", "nosniff")
+        builder.headers { it.set("X-Content-Type-Options", "nosniff") }
         return builder
     }
 

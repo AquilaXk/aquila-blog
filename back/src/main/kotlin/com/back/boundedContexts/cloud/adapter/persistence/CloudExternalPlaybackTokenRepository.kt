@@ -37,12 +37,14 @@ interface CloudExternalPlaybackTokenRepository :
         SELECT t
         FROM CloudExternalPlaybackToken t
         WHERE t.fileId = :fileId
+          AND t.purpose = :purpose
           AND t.expiresAt > :now
         ORDER BY t.createdAt DESC, t.id DESC
         """,
     )
     override fun findActiveByFileId(
         @Param("fileId") fileId: Long,
+        @Param("purpose") purpose: CloudExternalPlaybackTokenPurpose,
         @Param("now") now: Instant,
     ): List<CloudExternalPlaybackToken>
 
@@ -53,12 +55,14 @@ interface CloudExternalPlaybackTokenRepository :
         WHERE t.id = :id
           AND t.fileId = :fileId
           AND t.memberId = :memberId
+          AND t.purpose = :purpose
         """,
     )
     override fun deleteByIdAndFileIdAndMemberId(
         @Param("id") id: Long,
         @Param("fileId") fileId: Long,
         @Param("memberId") memberId: Long,
+        @Param("purpose") purpose: CloudExternalPlaybackTokenPurpose,
     ): Int
 
     @Modifying(flushAutomatically = true, clearAutomatically = false)
@@ -67,11 +71,13 @@ interface CloudExternalPlaybackTokenRepository :
         DELETE FROM CloudExternalPlaybackToken t
         WHERE t.fileId = :fileId
           AND t.memberId = :memberId
+          AND t.purpose = :purpose
         """,
     )
     override fun deleteByFileIdAndMemberId(
         @Param("fileId") fileId: Long,
         @Param("memberId") memberId: Long,
+        @Param("purpose") purpose: CloudExternalPlaybackTokenPurpose,
     ): Int
 
     @Modifying(flushAutomatically = true, clearAutomatically = false)

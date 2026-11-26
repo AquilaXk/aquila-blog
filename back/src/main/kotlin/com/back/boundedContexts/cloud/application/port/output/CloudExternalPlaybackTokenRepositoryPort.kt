@@ -19,6 +19,7 @@ interface CloudExternalPlaybackTokenRepositoryPort {
 
     fun findActiveByFileId(
         fileId: Long,
+        purpose: CloudExternalPlaybackTokenPurpose,
         now: Instant,
     ): List<CloudExternalPlaybackToken>
 
@@ -26,11 +27,13 @@ interface CloudExternalPlaybackTokenRepositoryPort {
         id: Long,
         fileId: Long,
         memberId: Long,
+        purpose: CloudExternalPlaybackTokenPurpose,
     ): Int
 
     fun deleteByFileIdAndMemberId(
         fileId: Long,
         memberId: Long,
+        purpose: CloudExternalPlaybackTokenPurpose,
     ): Int
 
     fun deleteByExpiresAtBefore(

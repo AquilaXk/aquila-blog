@@ -240,7 +240,7 @@ class CloudExternalPlaybackTokenService(
         fileId: Long,
     ): List<CloudExternalPlaybackTokenSummaryDto> {
         findVideoFile(ownerMemberId, fileId)
-        return listActiveTokenSummaries(fileId)
+        return listActiveTokenSummaries(fileId, CloudExternalPlaybackTokenPurpose.EXTERNAL_PLAYBACK)
     }
 
     @Transactional(readOnly = true)
@@ -249,11 +249,14 @@ class CloudExternalPlaybackTokenService(
         fileId: Long,
     ): List<CloudExternalPlaybackTokenSummaryDto> {
         findActiveOwnedFile(ownerMemberId, fileId)
-        return listActiveTokenSummaries(fileId)
+        return listActiveTokenSummaries(fileId, CloudExternalPlaybackTokenPurpose.SHARE_LINK)
     }
 
-    private fun listActiveTokenSummaries(fileId: Long): List<CloudExternalPlaybackTokenSummaryDto> {
-        val activeTokens = cloudExternalPlaybackTokenRepository.findActiveByFileId(fileId, clock.instant())
+    private fun listActiveTokenSummaries(
+        fileId: Long,
+        purpose: CloudExternalPlaybackTokenPurpose,
+    ): List<CloudExternalPlaybackTokenSummaryDto> {
+        val activeTokens = cloudExternalPlaybackTokenRepository.findActiveByFileId(fileId, purpose, clock.instant())
         return activeTokens.map {
             CloudExternalPlaybackTokenSummaryDto(
                 id = it.id,
@@ -272,7 +275,7 @@ class CloudExternalPlaybackTokenService(
         tokenId: Long,
     ) {
         findVideoFile(ownerMemberId, fileId)
-        deleteSingleToken(ownerMemberId, fileId, tokenId)
+        deleteSingleToken(ownerMemberId, fileId, tokenId, CloudExternalPlaybackTokenPurpose.EXTERNAL_PLAYBACK)
     }
 
     @Transactional
@@ -282,19 +285,21 @@ class CloudExternalPlaybackTokenService(
         tokenId: Long,
     ) {
         findActiveOwnedFile(ownerMemberId, fileId)
-        deleteSingleToken(ownerMemberId, fileId, tokenId)
+        deleteSingleToken(ownerMemberId, fileId, tokenId, CloudExternalPlaybackTokenPurpose.SHARE_LINK)
     }
 
     private fun deleteSingleToken(
         ownerMemberId: Long,
         fileId: Long,
         tokenId: Long,
+        purpose: CloudExternalPlaybackTokenPurpose,
     ) {
         val deleted =
             cloudExternalPlaybackTokenRepository.deleteByIdAndFileIdAndMemberId(
                 id = tokenId,
                 fileId = fileId,
                 memberId = ownerMemberId,
+                purpose = purpose,
             )
         if (deleted == 0) {
             throw AppException(ErrorCode.NOT_FOUND, "외부 재생 token을 찾을 수 없습니다.")
@@ -308,7 +313,7 @@ class CloudExternalPlaybackTokenService(
         fileId: Long,
     ): Int {
         findVideoFile(ownerMemberId, fileId)
-        return deleteAllFileTokens(ownerMemberId, fileId)
+        return deleteAllFileTokens(ownerMemberId, fileId, CloudExternalPlaybackTokenPurpose.EXTERNAL_PLAYBACK)
     }
 
     @Transactional
@@ -317,17 +322,19 @@ class CloudExternalPlaybackTokenService(
         fileId: Long,
     ): Int {
         findActiveOwnedFile(ownerMemberId, fileId)
-        return deleteAllFileTokens(ownerMemberId, fileId)
+        return deleteAllFileTokens(ownerMemberId, fileId, CloudExternalPlaybackTokenPurpose.SHARE_LINK)
     }
 
     private fun deleteAllFileTokens(
         ownerMemberId: Long,
         fileId: Long,
+        purpose: CloudExternalPlaybackTokenPurpose,
     ): Int {
         val deleted =
             cloudExternalPlaybackTokenRepository.deleteByFileIdAndMemberId(
                 fileId = fileId,
                 memberId = ownerMemberId,
+                purpose = purpose,
             )
         CloudMediaMetrics.recordTokenOperation(meterRegistry, op = "revoked-all", amount = deleted.toDouble())
         return deleted

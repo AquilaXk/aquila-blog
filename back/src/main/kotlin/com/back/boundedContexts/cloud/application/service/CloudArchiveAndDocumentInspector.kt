@@ -153,6 +153,21 @@ object CloudArchiveAndDocumentInspector {
         extension: String,
         maxEntries: Int,
         maxUncompressedBytes: Long,
+    ): String? =
+        inspectZipOrOffice(
+            file = file,
+            extension = extension,
+            maxEntries = maxEntries,
+            maxUncompressedBytes = maxUncompressedBytes,
+            ratioThresholdBytes = RATIO_ENFORCEMENT_THRESHOLD_BYTES,
+        )
+
+    internal fun inspectZipOrOffice(
+        file: Path,
+        extension: String,
+        maxEntries: Int,
+        maxUncompressedBytes: Long,
+        ratioThresholdBytes: Long,
     ): String? {
         val fileSize = Files.size(file)
         if (fileSize < ZIP_EOCD_MIN_BYTES) return null
@@ -193,6 +208,7 @@ object CloudArchiveAndDocumentInspector {
                 collectedNames = entryNames,
                 maxEntries = maxEntries,
                 maxUncompressedBytes = maxUncompressedBytes,
+                ratioThresholdBytes = ratioThresholdBytes,
             )
         }
 
@@ -229,12 +245,14 @@ object CloudArchiveAndDocumentInspector {
         collectedNames: MutableSet<String>?,
         maxEntries: Int,
         maxUncompressedBytes: Long,
+        ratioThresholdBytes: Long,
     ) {
         if (depth > MAX_ARCHIVE_NESTING_DEPTH) {
             throw AppException(ErrorCode.BAD_REQUEST, "압축 파일 중첩 깊이가 허용 상한을 초과했습니다.")
         }
         val scratch = ByteArray(STREAM_BUFFER_BYTES)
         val zip = ZipInputStream(input, StandardCharsets.UTF_8)
+        var levelUncompressedBytes = 0L
         while (true) {
             val entry = zip.nextEntry ?: break
             state.entryCount += 1
@@ -243,7 +261,19 @@ object CloudArchiveAndDocumentInspector {
             }
             val normalizedName = validateSafeArchiveEntryName(entry.name)
             collectedNames?.add(normalizedName)
-            inspectZipEntryBytes(zip, entry, scratch, compressedBudgetBytes, depth, state, maxEntries, maxUncompressedBytes)
+            levelUncompressedBytes =
+                inspectZipEntryBytes(
+                    zip = zip,
+                    entry = entry,
+                    scratch = scratch,
+                    compressedBudgetBytes = compressedBudgetBytes,
+                    initialLevelUncompressedBytes = levelUncompressedBytes,
+                    depth = depth,
+                    state = state,
+                    maxEntries = maxEntries,
+                    maxUncompressedBytes = maxUncompressedBytes,
+                    ratioThresholdBytes = ratioThresholdBytes,
+                )
             zip.closeEntry()
         }
     }
@@ -253,36 +283,51 @@ object CloudArchiveAndDocumentInspector {
         entry: ZipEntry,
         scratch: ByteArray,
         compressedBudgetBytes: Long,
+        initialLevelUncompressedBytes: Long,
         depth: Int,
         state: ZipInspectionState,
         maxEntries: Int,
         maxUncompressedBytes: Long,
-    ) {
+        ratioThresholdBytes: Long,
+    ): Long {
         val nestedExt = extractLowerExt(entry.name)
         val shouldInspectNested = !entry.isDirectory && nestedExt in setOf("zip", "hwpx", "docx", "xlsx", "pptx")
         val nestedBuffer = if (shouldInspectNested) java.io.ByteArrayOutputStream() else null
+        var nestedOverflowed = false
+        var levelUncompressedBytes = initialLevelUncompressedBytes
 
         while (true) {
             val read = zip.read(scratch)
             if (read < 0) break
             state.totalUncompressedBytes += read
+            levelUncompressedBytes += read
             if (state.totalUncompressedBytes > maxUncompressedBytes) {
                 throw AppException(ErrorCode.BAD_REQUEST, "압축 해제 크기가 허용 상한을 초과했습니다.")
             }
             if (
-                state.totalUncompressedBytes > RATIO_ENFORCEMENT_THRESHOLD_BYTES &&
+                levelUncompressedBytes > ratioThresholdBytes &&
                 compressedBudgetBytes > 0L &&
-                state.totalUncompressedBytes > compressedBudgetBytes * MAX_COMPRESSION_RATIO
+                levelUncompressedBytes > compressedBudgetBytes * MAX_COMPRESSION_RATIO
             ) {
                 throw AppException(ErrorCode.BAD_REQUEST, "압축 비율이 안전 상한을 초과했습니다.")
             }
-            if (nestedBuffer != null && nestedBuffer.size() + read <= RATIO_ENFORCEMENT_THRESHOLD_BYTES) {
-                nestedBuffer.write(scratch, 0, read)
+            if (nestedBuffer != null) {
+                val remaining = (ratioThresholdBytes - nestedBuffer.size().toLong()).coerceAtLeast(0L)
+                val toWrite = minOf(read.toLong(), remaining).toInt()
+                if (toWrite > 0) {
+                    nestedBuffer.write(scratch, 0, toWrite)
+                }
+                if (toWrite < read) {
+                    nestedOverflowed = true
+                }
             }
         }
         if (nestedBuffer != null && nestedBuffer.size() > 0) {
             val nestedBytes = nestedBuffer.toByteArray()
             if (isZipSignature(nestedBytes, nestedBytes.size)) {
+                if (nestedOverflowed) {
+                    throw AppException(ErrorCode.BAD_REQUEST, "중첩 아카이브 크기가 허용 검사 상한을 초과했습니다.")
+                }
                 inspectZipStream(
                     input = nestedBytes.inputStream(),
                     compressedBudgetBytes = nestedBytes.size.toLong(),
@@ -291,9 +336,11 @@ object CloudArchiveAndDocumentInspector {
                     collectedNames = null,
                     maxEntries = maxEntries,
                     maxUncompressedBytes = maxUncompressedBytes,
+                    ratioThresholdBytes = ratioThresholdBytes,
                 )
             }
         }
+        return levelUncompressedBytes
     }
 
     internal fun validateSafeArchiveEntryName(rawName: String): String {

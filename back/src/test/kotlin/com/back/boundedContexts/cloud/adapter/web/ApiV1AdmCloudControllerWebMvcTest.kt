@@ -1201,12 +1201,20 @@ class ApiV1AdmCloudControllerWebMvcTest : BaseAdmCloudControllerWebMvcTest() {
                 status { isOk() }
                 header { string(HttpHeaders.ETAG, "\"abc123-thumb\"") }
                 header { string(HttpHeaders.CACHE_CONTROL, "private, max-age=0, must-revalidate") }
+                header { stringValues("X-Content-Type-Options", "nosniff") }
             }
 
         mvc
             .perform(head("/system/api/v1/adm/cloud/files/51/thumbnail").with(user(admin)))
             .andExpect(status().isOk)
+            .andExpect(header().string(HttpHeaders.ETAG, "\"abc123-thumb\""))
+            .andExpect(header().stringValues("X-Content-Type-Options", "nosniff"))
+
+        mvc
+            .perform(head("/system/api/v1/adm/cloud/files/51/content").with(user(admin)))
+            .andExpect(status().isOk)
             .andExpect(header().string(HttpHeaders.ETAG, "\"abc123\""))
+            .andExpect(header().stringValues("X-Content-Type-Options", "nosniff"))
 
         val svgDto = shaDto.copy(id = 52L, originalFilename = "a\\b[1].svg", contentType = "image/svg+xml")
         given(cloudFileService.get(ownerMemberId = 7L, fileId = 52L)).willReturn(svgDto)

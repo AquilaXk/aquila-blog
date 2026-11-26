@@ -531,6 +531,17 @@ class CloudOverhaulSecurityAndFormatTest {
             }
         assertThat(CloudThumbnailRenderer.renderFromBytes(byteArrayOf(1), interruptedSem)).isNull()
         assertThat(Thread.interrupted()).isTrue()
+        assertThat(interruptedSem.availablePermits()).isEqualTo(2)
+
+        val timeoutSem =
+            object : java.util.concurrent.Semaphore(2, true) {
+                override fun tryAcquire(
+                    timeout: Long,
+                    unit: java.util.concurrent.TimeUnit,
+                ): Boolean = false
+            }
+        assertThat(CloudThumbnailRenderer.renderFromBytes(validRasterImageBytesPngPatched(32, 32), timeoutSem)).isNull()
+        assertThat(timeoutSem.availablePermits()).isEqualTo(2)
 
         val tooManyStream =
             object : java.io.InputStream() {
@@ -665,6 +676,53 @@ class CloudOverhaulSecurityAndFormatTest {
                 maxUncompressedBytes = nestedInnerZipBytes.size.toLong() + 5L,
             )
         }.isInstanceOf(AppException::class.java)
+
+        val randomSibling = ByteArray(40_000).also { java.util.Random(42L).nextBytes(it) }
+        val tinyNestedZip = zipBytes("ok.txt" to "hi")
+        val siblingAndTinyNested =
+            writeTemp(
+                "sibling-nested.zip",
+                zipBytes("pad.bin" to randomSibling, "inner.zip" to tinyNestedZip),
+            )
+        assertThat(
+            CloudArchiveAndDocumentInspector.inspectZipOrOffice(
+                siblingAndTinyNested,
+                "zip",
+                maxEntries = 100,
+                maxUncompressedBytes = 1_000_000L,
+                ratioThresholdBytes = 1_024L,
+            ),
+        ).isEqualTo("application/zip")
+
+        val largeInnerPayload = ByteArray(12_000).also { java.util.Random(7L).nextBytes(it) }
+        val largeNestedZipBytes = zipBytes("inner.bin" to largeInnerPayload)
+        val largeNestedOuterFile = writeTemp("large-nested.zip", zipBytes("nested.zip" to largeNestedZipBytes))
+        assertThatThrownBy {
+            CloudArchiveAndDocumentInspector.inspectZipOrOffice(
+                largeNestedOuterFile,
+                "zip",
+                maxEntries = 100,
+                maxUncompressedBytes = 1_000_000L,
+                ratioThresholdBytes = 1_024L,
+            )
+        }.isInstanceOf(AppException::class.java)
+            .hasMessageContaining("중첩 아카이브 크기가 허용 검사 상한을 초과했습니다.")
+
+        val fakeNestedZipBytes =
+            ByteArray(12_000).apply {
+                java.util.Random(9L).nextBytes(this)
+                this[0] = 0
+            }
+        val fakeNestedOuterFile = writeTemp("fake-nested.zip", zipBytes("fake.zip" to fakeNestedZipBytes))
+        assertThat(
+            CloudArchiveAndDocumentInspector.inspectZipOrOffice(
+                fakeNestedOuterFile,
+                "zip",
+                maxEntries = 100,
+                maxUncompressedBytes = 1_000_000L,
+                ratioThresholdBytes = 1_024L,
+            ),
+        ).isEqualTo("application/zip")
         val smallTar = writeTemp("two.tar", tarBytes("a.txt", "hello".toByteArray()))
         assertThatThrownBy {
             CloudArchiveAndDocumentInspector.inspectTar(smallTar, maxEntries = 0)

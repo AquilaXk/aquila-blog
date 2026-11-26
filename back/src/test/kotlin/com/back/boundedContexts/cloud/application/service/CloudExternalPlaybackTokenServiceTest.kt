@@ -334,6 +334,42 @@ class CloudExternalPlaybackTokenServiceTest {
     }
 
     @Test
+    @DisplayName("동일 동영상의 EXTERNAL_PLAYBACK와 SHARE_LINK 토큰 목록·개별 폐기·일괄 폐기가 서로 격리된다")
+    fun isolatesExternalPlaybackAndShareLinkTokenManagementByPurpose() {
+        files.savedFiles += videoFile(id = 12L, ownerMemberId = 7L)
+        service.issue(ownerMemberId = 7L, fileId = 12L)
+        service.issueShareLink(ownerMemberId = 7L, fileId = 12L, ttlSeconds = 3_600L)
+
+        val playbackTokens = service.listActiveTokens(ownerMemberId = 7L, fileId = 12L)
+        val shareTokens = service.listShareTokens(ownerMemberId = 7L, fileId = 12L)
+
+        assertThat(playbackTokens).hasSize(1)
+        assertThat(playbackTokens.single().purpose).isEqualTo(CloudExternalPlaybackTokenPurpose.EXTERNAL_PLAYBACK)
+        assertThat(shareTokens).hasSize(1)
+        assertThat(shareTokens.single().purpose).isEqualTo(CloudExternalPlaybackTokenPurpose.SHARE_LINK)
+
+        val playbackTokenId = playbackTokens.single().id
+        val shareTokenId = shareTokens.single().id
+
+        assertThatThrownBy { service.revokeToken(ownerMemberId = 7L, fileId = 12L, tokenId = shareTokenId) }
+            .isInstanceOf(AppException::class.java)
+            .hasMessageContaining("외부 재생 token을 찾을 수 없습니다.")
+        assertThatThrownBy { service.revokeShareToken(ownerMemberId = 7L, fileId = 12L, tokenId = playbackTokenId) }
+            .isInstanceOf(AppException::class.java)
+            .hasMessageContaining("외부 재생 token을 찾을 수 없습니다.")
+
+        assertThat(service.revokeAllShareTokens(ownerMemberId = 7L, fileId = 12L)).isEqualTo(1)
+        assertThat(service.listShareTokens(ownerMemberId = 7L, fileId = 12L)).isEmpty()
+        assertThat(service.listActiveTokens(ownerMemberId = 7L, fileId = 12L).map { it.id })
+            .containsExactly(playbackTokenId)
+
+        service.issueShareLink(ownerMemberId = 7L, fileId = 12L, ttlSeconds = 3_600L)
+        assertThat(service.revokeAllTokens(ownerMemberId = 7L, fileId = 12L)).isEqualTo(1)
+        assertThat(service.listActiveTokens(ownerMemberId = 7L, fileId = 12L)).isEmpty()
+        assertThat(service.listShareTokens(ownerMemberId = 7L, fileId = 12L)).hasSize(1)
+    }
+
+    @Test
     @DisplayName("외부 재생 컨트롤러와 스트리밍 서비스 메서드는 DB 트랜잭션 경계 밖에서 스토리지 I/O를 연다")
     fun playbackStreamingMethodsDoNotDeclareTransactionalOrHoldActiveTransactionDuringStorageIo() {
         val controllerMethods =
@@ -527,18 +563,23 @@ class CloudExternalPlaybackTokenServiceTest {
 
         override fun findActiveByFileId(
             fileId: Long,
+            purpose: CloudExternalPlaybackTokenPurpose,
             now: Instant,
         ): List<CloudExternalPlaybackToken> =
             savedTokens
-                .filter { it.fileId == fileId && it.expiresAt.isAfter(now) }
+                .filter { it.fileId == fileId && it.purpose == purpose && it.expiresAt.isAfter(now) }
                 .sortedWith(compareByDescending<CloudExternalPlaybackToken> { it.createdAt }.thenByDescending { it.id })
 
         override fun deleteByIdAndFileIdAndMemberId(
             id: Long,
             fileId: Long,
             memberId: Long,
+            purpose: CloudExternalPlaybackTokenPurpose,
         ): Int {
-            val toRemove = savedTokens.filter { it.id == id && it.fileId == fileId && it.memberId == memberId }
+            val toRemove =
+                savedTokens.filter {
+                    it.id == id && it.fileId == fileId && it.memberId == memberId && it.purpose == purpose
+                }
             savedTokens.removeAll(toRemove.toSet())
             return toRemove.size
         }
@@ -546,8 +587,12 @@ class CloudExternalPlaybackTokenServiceTest {
         override fun deleteByFileIdAndMemberId(
             fileId: Long,
             memberId: Long,
+            purpose: CloudExternalPlaybackTokenPurpose,
         ): Int {
-            val toRemove = savedTokens.filter { it.fileId == fileId && it.memberId == memberId }
+            val toRemove =
+                savedTokens.filter {
+                    it.fileId == fileId && it.memberId == memberId && it.purpose == purpose
+                }
             savedTokens.removeAll(toRemove.toSet())
             return toRemove.size
         }

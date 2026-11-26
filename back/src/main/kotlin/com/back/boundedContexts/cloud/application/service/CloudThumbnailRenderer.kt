@@ -95,8 +95,10 @@ object CloudThumbnailRenderer {
         sourceBytes: ByteArray,
         semaphore: Semaphore = RENDER_SEMAPHORE,
     ): Pair<ByteArray, String>? {
+        var acquired = false
         return try {
-            if (!acquireSemaphore(semaphore)) return null
+            acquired = acquireSemaphore(semaphore)
+            if (!acquired) return null
             val imageInput = ImageIO.createImageInputStream(ByteArrayInputStream(sourceBytes)) ?: return null
             imageInput.use { stream ->
                 val readers = ImageIO.getImageReaders(stream)
@@ -130,7 +132,9 @@ object CloudThumbnailRenderer {
         } catch (_: Exception) {
             null
         } finally {
-            semaphore.release()
+            if (acquired) {
+                semaphore.release()
+            }
         }
     }
 

@@ -302,7 +302,7 @@ class CloudExternalPlaybackTokenService(
                 purpose = purpose,
             )
         if (deleted == 0) {
-            throw AppException(ErrorCode.NOT_FOUND, "외부 재생 token을 찾을 수 없습니다.")
+            throw AppException(ErrorCode.NOT_FOUND, "공유 또는 재생 링크를 찾을 수 없습니다.")
         }
         CloudMediaMetrics.recordTokenOperation(meterRegistry, op = "revoked")
     }
@@ -366,7 +366,7 @@ class CloudExternalPlaybackTokenService(
         val normalizedToken = token.trim()
         if (normalizedToken.isBlank()) {
             CloudMediaMetrics.recordTokenOperation(meterRegistry, op = "denied")
-            throw AppException(ErrorCode.CLOUD_PLAYBACK_DENIED, "외부 재생 token이 올바르지 않거나 만료되었습니다.")
+            throw AppException(ErrorCode.CLOUD_PLAYBACK_DENIED, "공유 또는 재생 링크가 올바르지 않거나 만료되었습니다.")
         }
         val playbackToken =
             cloudExternalPlaybackTokenRepository.findValid(
@@ -377,7 +377,7 @@ class CloudExternalPlaybackTokenService(
             )
         if (playbackToken == null) {
             CloudMediaMetrics.recordTokenOperation(meterRegistry, op = "denied")
-            throw AppException(ErrorCode.CLOUD_PLAYBACK_DENIED, "외부 재생 token이 올바르지 않거나 만료되었습니다.")
+            throw AppException(ErrorCode.CLOUD_PLAYBACK_DENIED, "공유 또는 재생 링크가 올바르지 않거나 만료되었습니다.")
         }
 
         return try {

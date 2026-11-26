@@ -92,7 +92,7 @@
   {
     "code": "403-30",
     "httpStatus": 403,
-    "defaultUserMessage": "외부 재생 token이 올바르지 않거나 만료되었습니다.",
+    "defaultUserMessage": "공유 또는 재생 링크가 올바르지 않거나 만료되었습니다.",
     "kind": "USER"
   },
   {

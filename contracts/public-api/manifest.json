@@ -8,7 +8,7 @@
     },
     "errorCodes": {
       "path": "error-codes.json",
-      "sha256": "1e1446186d61631a89219d00914c1059dff16dad4d0ae0e8e9e7fe815ebe17c3"
+      "sha256": "68fc2bc6c50451260540ff1f80aa63094941dcf0024516248e3338b0ac40007d"
     },
     "summaryFixtures": {
       "path": "summary-fixtures.json",

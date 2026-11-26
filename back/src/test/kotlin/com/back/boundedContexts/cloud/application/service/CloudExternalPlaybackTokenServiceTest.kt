@@ -201,7 +201,7 @@ class CloudExternalPlaybackTokenServiceTest {
     fun blankTokenIsRejectedBeforeStorageAccess() {
         assertThatThrownBy { service.getFile(token = "   ", fileId = 12L) }
             .isInstanceOf(AppException::class.java)
-            .hasMessageContaining("외부 재생 token이 올바르지 않거나 만료되었습니다.")
+            .hasMessageContaining("공유 또는 재생 링크가 올바르지 않거나 만료되었습니다.")
 
         assertThat(storage.openedObjects).isEmpty()
         assertThat(storage.openedRanges).isEmpty()
@@ -217,7 +217,7 @@ class CloudExternalPlaybackTokenServiceTest {
 
         assertThatThrownBy { service.openContentRange(token = expiredToken, fileId = 12L, range = 0L..4L) }
             .isInstanceOf(AppException::class.java)
-            .hasMessageContaining("외부 재생 token이 올바르지 않거나 만료되었습니다.")
+            .hasMessageContaining("공유 또는 재생 링크가 올바르지 않거나 만료되었습니다.")
 
         assertThat(storage.openedRanges).isEmpty()
     }
@@ -295,7 +295,7 @@ class CloudExternalPlaybackTokenServiceTest {
 
         assertThatThrownBy { service.revokeToken(ownerMemberId = 7L, fileId = 12L, tokenId = 999L) }
             .isInstanceOf(AppException::class.java)
-            .hasMessageContaining("외부 재생 token을 찾을 수 없습니다.")
+            .hasMessageContaining("공유 또는 재생 링크를 찾을 수 없습니다.")
     }
 
     @Test
@@ -353,10 +353,10 @@ class CloudExternalPlaybackTokenServiceTest {
 
         assertThatThrownBy { service.revokeToken(ownerMemberId = 7L, fileId = 12L, tokenId = shareTokenId) }
             .isInstanceOf(AppException::class.java)
-            .hasMessageContaining("외부 재생 token을 찾을 수 없습니다.")
+            .hasMessageContaining("공유 또는 재생 링크를 찾을 수 없습니다.")
         assertThatThrownBy { service.revokeShareToken(ownerMemberId = 7L, fileId = 12L, tokenId = playbackTokenId) }
             .isInstanceOf(AppException::class.java)
-            .hasMessageContaining("외부 재생 token을 찾을 수 없습니다.")
+            .hasMessageContaining("공유 또는 재생 링크를 찾을 수 없습니다.")
 
         assertThat(service.revokeAllShareTokens(ownerMemberId = 7L, fileId = 12L)).isEqualTo(1)
         assertThat(service.listShareTokens(ownerMemberId = 7L, fileId = 12L)).isEmpty()

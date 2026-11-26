@@ -962,6 +962,7 @@ class ApiV1AdmCloudControllerWebMvcTest : BaseAdmCloudControllerWebMvcTest() {
             }.andExpect {
                 status { isCreated() }
                 jsonPath("$.resultCode") { value("201-1") }
+                jsonPath("$.msg") { value("게시글에 삽입할 이미지가 준비되었습니다.") }
                 jsonPath("$.data.fileId") { value(15) }
                 jsonPath("$.data.key") { value("post-images/key-123.webp") }
                 jsonPath("$.data.url") { isNotEmpty() }
@@ -997,7 +998,7 @@ class ApiV1AdmCloudControllerWebMvcTest : BaseAdmCloudControllerWebMvcTest() {
             }.andExpect {
                 status { isBadRequest() }
                 jsonPath("$.resultCode") { value("400-1") }
-                jsonPath("$.msg") { value("이미지 파일만 게시글 에셋으로 승격할 수 있습니다.") }
+                jsonPath("$.msg") { value("이미지 파일만 게시글에 삽입할 수 있습니다.") }
             }
     }
 
@@ -1261,7 +1262,7 @@ class ApiV1AdmCloudControllerWebMvcTest : BaseAdmCloudControllerWebMvcTest() {
                 with(user(admin))
             }.andExpect {
                 status { isBadRequest() }
-                jsonPath("$.msg") { value("게시글 에셋 승격은 정적 래스터 이미지(JPEG·PNG·GIF·WebP)만 지원합니다.") }
+                jsonPath("$.msg") { value("게시글 삽입은 JPEG·PNG·GIF·WebP 이미지만 지원합니다.") }
             }
 
         val slashPng = shaDto.copy(id = 53L, originalFilename = "a\\b[1].png")

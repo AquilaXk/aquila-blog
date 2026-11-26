@@ -152,7 +152,7 @@ class ApiV1PublicCloudControllerWebMvcTest : BasePublicCloudControllerWebMvcTest
             .willThrow(
                 AppException(
                     ErrorCode.CLOUD_PLAYBACK_DENIED,
-                    "외부 재생 token이 올바르지 않거나 만료되었습니다.",
+                    "공유 또는 재생 링크가 올바르지 않거나 만료되었습니다.",
                 ),
             )
 

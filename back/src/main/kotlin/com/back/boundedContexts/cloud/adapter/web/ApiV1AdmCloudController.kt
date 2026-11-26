@@ -339,7 +339,7 @@ class ApiV1AdmCloudController(
 
         return ResponseEntity
             .status(HttpStatus.CREATED)
-            .body(RsData("201-1", "외부 재생 token이 발급되었습니다.", issued))
+            .body(RsData("201-1", "외부 재생 링크가 발급되었습니다.", issued))
     }
 
     @GetMapping("/files/{id}/content")
@@ -476,7 +476,7 @@ class ApiV1AdmCloudController(
                 fileId = id,
             )
         if (file.mediaKind != CloudFileMediaKind.PHOTO) {
-            throw AppException(ErrorCode.BAD_REQUEST, "이미지 파일만 게시글 에셋으로 승격할 수 있습니다.")
+            throw AppException(ErrorCode.BAD_REQUEST, "이미지 파일만 게시글에 삽입할 수 있습니다.")
         }
         val normalizedType =
             file.contentType
@@ -484,7 +484,7 @@ class ApiV1AdmCloudController(
                 .trim()
                 .lowercase()
         if (normalizedType !in setOf("image/jpeg", "image/png", "image/gif", "image/webp")) {
-            throw AppException(ErrorCode.BAD_REQUEST, "게시글 에셋 승격은 정적 래스터 이미지(JPEG·PNG·GIF·WebP)만 지원합니다.")
+            throw AppException(ErrorCode.BAD_REQUEST, "게시글 삽입은 JPEG·PNG·GIF·WebP 이미지만 지원합니다.")
         }
         val maxAllowedBytes = minOf(8L * 1024 * 1024, storageProperties?.maxFileSizeBytes ?: (8L * 1024 * 1024))
         if (file.byteSize > maxAllowedBytes) {
@@ -531,7 +531,7 @@ class ApiV1AdmCloudController(
             .body(
                 RsData(
                     "201-1",
-                    "게시글 이미지로 승격되었습니다.",
+                    "게시글에 삽입할 이미지가 준비되었습니다.",
                     PromoteCloudPostAssetResBody(
                         fileId = file.id,
                         key = key,
@@ -595,7 +595,7 @@ class ApiV1AdmCloudController(
             fileId = id,
             tokenId = tokenId,
         )
-        return RsData("200-1", "외부 공유 링크가 폐기되었습니다.")
+        return RsData("200-1", "외부 공유 링크가 해제되었습니다.")
     }
 
     @DeleteMapping("/files/{id}/share-links")
@@ -612,7 +612,7 @@ class ApiV1AdmCloudController(
             )
         return RsData(
             "200-1",
-            "외부 공유 링크가 모두 폐기되었습니다.",
+            "외부 공유 링크가 모두 해제되었습니다.",
             RevokeExternalPlaybackTokensResBody(revokedCount = count),
         )
     }
@@ -648,7 +648,7 @@ class ApiV1AdmCloudController(
             fileId = id,
             tokenId = tokenId,
         )
-        return RsData("200-1", "외부 재생 token이 폐기되었습니다.")
+        return RsData("200-1", "외부 재생 링크가 해제되었습니다.")
     }
 
     @DeleteMapping("/files/{id}/external-playback-tokens")
@@ -665,7 +665,7 @@ class ApiV1AdmCloudController(
             )
         return RsData(
             "200-1",
-            "외부 재생 token이 모두 폐기되었습니다.",
+            "외부 재생 링크가 모두 해제되었습니다.",
             RevokeExternalPlaybackTokensResBody(revokedCount = count),
         )
     }

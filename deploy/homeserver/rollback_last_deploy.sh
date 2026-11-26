@@ -48,7 +48,9 @@ compose_profiles_from_env_file() {
 # blue_green_deploy.sh와 같은 해석을 써야 한다. 롤백이 배포보다 좁은 프로필로 compose를 부르면
 # 배포가 띄운 서비스를 롤백이 보지 못한다.
 resolve_compose_profiles() {
-  local raw="${COMPOSE_PROFILES:-},$(compose_profiles_from_env_file)"
+  local env_profiles
+  env_profiles="$(compose_profiles_from_env_file)"
+  local raw="${COMPOSE_PROFILES:-},${env_profiles}"
   if [[ "${RUNTIME_SPLIT_ENABLED}" == "true" ]]; then
     raw="${raw},runtime-split"
   fi
@@ -803,6 +805,10 @@ set_caddy_upstream_backend() {
     -e "s/back[-_](blue|green|active):8080( +back[-_](blue|green|active):8080)?/${active_host}:8080/g" \
     "${CADDY_FILE}")"
   printf '%s\n' "${rewritten}" > "${CADDY_FILE}"
+  if [[ -d "$(dirname "${CADDY_FILE}")" ]]; then
+    chmod 0755 "$(dirname "${CADDY_FILE}")" 2>/dev/null || true
+  fi
+  chmod 0644 "${CADDY_FILE}" 2>/dev/null || true
   reload_caddy
   echo "rollback caddy upstream -> active=${active_host}:8080"
 }
@@ -896,11 +902,17 @@ if [[ -d "${SCRIPT_DIR}/monitoring" ]]; then
   find "${SCRIPT_DIR}/monitoring" -type d -exec chmod 0755 {} + 2>/dev/null || true
   find "${SCRIPT_DIR}/monitoring" -type f -exec chmod 0644 {} + 2>/dev/null || true
 fi
+if [[ -d "${SCRIPT_DIR}/caddy" ]]; then
+  find "${SCRIPT_DIR}/caddy" -type d -exec chmod 0755 {} + 2>/dev/null || true
+  find "${SCRIPT_DIR}/caddy" -type f -exec chmod 0644 {} + 2>/dev/null || true
+fi
 
 if [[ ! -f "${CADDY_FILE}" ]]; then
   echo "rollback failed: caddy file missing after backup restore (${CADDY_FILE})" >&2
   exit 1
 fi
+chmod 0755 "$(dirname "${CADDY_FILE}")" 2>/dev/null || true
+chmod 0644 "${CADDY_FILE}" 2>/dev/null || true
 
 prepare_worker_rollback_policy
 restore_compose_image_metadata
@@ -916,6 +928,7 @@ restore_compose_image_metadata
 if [[ -f "${CADDY_FILE}" && "${RUNTIME_SPLIT_ENABLED}" != "true" ]]; then
   normalized="$(sed -E "s/back[-_](blue|green|active):8080( +back[-_](blue|green|active):8080)?/back_blue:8080/g" "${CADDY_FILE}")"
   printf '%s\n' "${normalized}" > "${CADDY_FILE}"
+  chmod 0644 "${CADDY_FILE}" 2>/dev/null || true
 fi
 
 target_backend="back_blue"

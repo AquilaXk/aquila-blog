@@ -60,6 +60,7 @@ extracted_functions=(
   prepare_front_runtime_images
   persist_front_caddy_upstream
   front_edge_host
+  ensure_monitoring_bind_mount_permissions
   check_front_health
   write_front_caddy_upstream_literal
   pin_front_caddy_upstream
@@ -768,5 +769,22 @@ printf 'front_green\n' > "${case_dir}/.active_front"
 status="$(run_front_case 'detect_active_front')"
 assert_equals "detect_active_front must not fail" "0" "${status}"
 assert_equals "a stopped-but-recorded colour must win over the blue default" "front_green" "$(cat "${case_dir}/stdout")"
+
+# 10) umask 077 환경에서도 front cutover가 caddy 디렉터리(0755)와 Caddyfile(0644)을 복원한다.
+setup_case "umask-077-caddy-permissions" "runtime-split,front" "blog.aquilaxk.site"
+chmod 0700 "${case_dir}/caddy"
+chmod 0600 "${case_dir}/caddy/Caddyfile"
+printf 'WEB_UPSTREAM=front_blue\n' >> "${case_dir}/.env.prod"
+printf 'front_blue\n' > "${case_dir}/.active_front"
+printf 'front_blue=%s\nfront_green=%s\n' "${old_image}" "${old_image}" > "${case_dir}/container-images"
+printf 'front_blue=healthy\nfront_green=healthy\n' > "${case_dir}/health"
+printf 'front_green/robots.txt=200\nfront_green/=200\nfront_green/company=200\nfront_green/easysubway=200\nfront_green/proxy=200\n' > "${case_dir}/front-http"
+printf 'front_green=%s\n' "${new_sha}" > "${case_dir}/served-sha"
+status="$(run_front_case 'umask 077; STAGED_FRONT_IMAGE="'"${good_image}"'"; STAGED_FRONT_BUILD_SHA="'"${new_sha}"'"; run_front_blue_green_deploy')"
+assert_equals "front deploy under umask 077 must succeed" "0" "${status}"
+caddy_dir_mode="$(stat -c '%a' "${case_dir}/caddy" 2>/dev/null || stat -f '%Lp' "${case_dir}/caddy")"
+caddy_file_mode="$(stat -c '%a' "${case_dir}/caddy/Caddyfile" 2>/dev/null || stat -f '%Lp' "${case_dir}/caddy/Caddyfile")"
+assert_equals "caddy dir must remain world-traversable (755) under umask 077" "755" "${caddy_dir_mode}"
+assert_equals "Caddyfile must remain readable by cap_drop caddy container (644)" "644" "${caddy_file_mode}"
 
 echo "[test] front blue/green cutover contract: PASS"

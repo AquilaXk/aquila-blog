@@ -106,6 +106,23 @@ rotate_guard_log() {
 ensure_monitoring_bind_mount_permissions() {
   find "${SCRIPT_DIR}/monitoring" -type d -exec chmod 0755 {} + 2>/dev/null || true
   find "${SCRIPT_DIR}/monitoring" -type f -exec chmod 0644 {} + 2>/dev/null || true
+  find "${SCRIPT_DIR}/caddy" -type d -exec chmod 0755 {} + 2>/dev/null || true
+  find "${SCRIPT_DIR}/caddy" -type f -exec chmod 0644 {} + 2>/dev/null || true
+  if [[ -d "$(dirname "${CADDY_HOST_FILE}")" ]]; then
+    chmod 0755 "$(dirname "${CADDY_HOST_FILE}")" 2>/dev/null || true
+  fi
+  if [[ -f "${CADDY_HOST_FILE}" ]]; then
+    chmod 0644 "${CADDY_HOST_FILE}" 2>/dev/null || true
+  fi
+  local external_root=""
+  external_root="$(trim_quotes "$(env_value "AQUILA_EXTERNAL_STORAGE_ROOT")")"
+  external_root="${external_root:-/mnt/aquila-blog-data}"
+  if [[ -d "${external_root}" ]]; then
+    chmod 0755 "${external_root}" 2>/dev/null || true
+  fi
+  if [[ -d "${external_root}/minio" ]]; then
+    chmod 0755 "${external_root}/minio" 2>/dev/null || true
+  fi
 }
 
 reset_grafana_admin_password() {

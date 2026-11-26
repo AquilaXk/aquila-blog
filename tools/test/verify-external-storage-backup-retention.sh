@@ -481,5 +481,96 @@ if PATH="${DEDUP_BIN}:${PATH}" \
   exit 1
 fi
 
+# Regression: consecutive create -> prune must retain postgres, minio, and deploy backups,
+# preserve legacy minio/deploy dirs whose metadata.env carried postgres_database=, and
+# keep external_root + external_root/minio world-traversable (0755) for docker_runtime_probe
+# statfsSync while backups/ stays 0700 and backup-encryption.key stays 0600.
+CREATE_PRUNE_ROOT="${WORK_DIR}/create-prune-root"
+CREATE_PRUNE_SCRIPT_DIR="${CREATE_PRUNE_ROOT}/deploy"
+CREATE_PRUNE_EXTERNAL_ROOT="${CREATE_PRUNE_ROOT}/external"
+CREATE_PRUNE_BACKUP_ROOT="${CREATE_PRUNE_EXTERNAL_ROOT}/backups"
+CREATE_PRUNE_BIN="${CREATE_PRUNE_ROOT}/bin"
+mkdir -p "${CREATE_PRUNE_SCRIPT_DIR}/caddy" "${CREATE_PRUNE_BIN}"
+cp "${CREATE_SCRIPT}" "${CREATE_PRUNE_SCRIPT_DIR}/create_external_backup.sh"
+cp "${PRUNE_SCRIPT}" "${CREATE_PRUNE_SCRIPT_DIR}/prune_external_backups.sh"
+chmod +x "${CREATE_PRUNE_SCRIPT_DIR}/create_external_backup.sh" "${CREATE_PRUNE_SCRIPT_DIR}/prune_external_backups.sh"
+printf '#!/usr/bin/env bash\nexit 0\n' > "${CREATE_PRUNE_SCRIPT_DIR}/materialize_service_env.sh"
+chmod +x "${CREATE_PRUNE_SCRIPT_DIR}/materialize_service_env.sh"
+printf 'services: {}\n' > "${CREATE_PRUNE_SCRIPT_DIR}/docker-compose.prod.yml"
+printf 'http://caddy {}\n' > "${CREATE_PRUNE_SCRIPT_DIR}/caddy/Caddyfile"
+cp "${DEDUP_SCRIPT_DIR}/.env.prod" "${CREATE_PRUNE_SCRIPT_DIR}/.env.prod"
+cat > "${CREATE_PRUNE_BIN}/docker" <<SH
+#!/usr/bin/env bash
+if [[ "\$*" == *"ps -q"* && "\$*" == *"minio_1"* ]]; then
+  exit 0
+fi
+if [[ "\$*" == *"volume inspect"* ]]; then
+  exit 1
+fi
+if [[ "\$*" == *"pg_dump"* ]]; then
+  printf '%s\n' '-- postgres dump fixture'
+  exit 0
+fi
+exit 0
+SH
+chmod +x "${CREATE_PRUNE_BIN}/docker"
+
+# Start with non-existent external root + minio dir so create_external_backup.sh creates them under umask 077.
+PATH="${CREATE_PRUNE_BIN}:${PATH}" \
+  AQUILA_BACKUP_TIMESTAMP=20261126-040000 \
+  AQUILA_MINIO_ONLINE_BACKUP=true \
+  AQUILA_EXTERNAL_STORAGE_ALLOW_TEST_ROOT=true \
+  AQUILA_EXTERNAL_STORAGE_SKIP_MOUNT_CHECK=true \
+  AQUILA_EXTERNAL_STORAGE_ROOT="${CREATE_PRUNE_EXTERNAL_ROOT}" \
+  AQUILA_BACKUP_ROOT="${CREATE_PRUNE_BACKUP_ROOT}" \
+  AQUILA_BACKUP_MIN_FREE_PERCENT=0 \
+    "${CREATE_PRUNE_SCRIPT_DIR}/create_external_backup.sh" >/dev/null
+
+# Verify category-scoped metadata (postgres_database= ONLY on postgres).
+grep -qE '^postgres_database=blog_prod$' "${CREATE_PRUNE_BACKUP_ROOT}/postgres/daily/20261126-040000/metadata.env" || { echo "postgres metadata missing postgres_database" >&2; exit 1; }
+if grep -qE '^postgres_database=' "${CREATE_PRUNE_BACKUP_ROOT}/minio/daily/20261126-040000/metadata.env"; then
+  echo "minio metadata unexpectedly emitted postgres_database=" >&2
+  exit 1
+fi
+if grep -qE '^postgres_database=' "${CREATE_PRUNE_BACKUP_ROOT}/deploy/daily/20261126-040000/metadata.env"; then
+  echo "deploy metadata unexpectedly emitted postgres_database=" >&2
+  exit 1
+fi
+
+# Seed legacy minio + deploy backups that still carry postgres_database= alongside valid artifacts,
+# plus an incomplete minio backup missing its ciphertext.
+mkdir -p "${CREATE_PRUNE_BACKUP_ROOT}/minio/daily/20261125-040000"
+printf 'postgres_database=blog_prod\nminio_backup_mode=online-filesystem-copy\n' > "${CREATE_PRUNE_BACKUP_ROOT}/minio/daily/20261125-040000/metadata.env"
+printf 'ciphertext' > "${CREATE_PRUNE_BACKUP_ROOT}/minio/daily/20261125-040000/minio-data.tar.gz.enc"
+mkdir -p "${CREATE_PRUNE_BACKUP_ROOT}/deploy/daily/20261125-040000"
+printf 'postgres_database=blog_prod\n' > "${CREATE_PRUNE_BACKUP_ROOT}/deploy/daily/20261125-040000/metadata.env"
+mkdir -p "${CREATE_PRUNE_BACKUP_ROOT}/minio/daily/20261127-040000"
+printf 'minio_backup_mode=online-filesystem-copy\n' > "${CREATE_PRUNE_BACKUP_ROOT}/minio/daily/20261127-040000/metadata.env"
+
+AQUILA_EXTERNAL_STORAGE_ALLOW_TEST_ROOT=true \
+  AQUILA_EXTERNAL_STORAGE_SKIP_MOUNT_CHECK=true \
+  AQUILA_EXTERNAL_STORAGE_ROOT="${CREATE_PRUNE_EXTERNAL_ROOT}" \
+  AQUILA_BACKUP_ROOT="${CREATE_PRUNE_BACKUP_ROOT}" \
+  AQUILA_BACKUP_RETENTION_DAILY=14 \
+  AQUILA_BACKUP_RETENTION_WEEKLY=8 \
+  AQUILA_BACKUP_RETENTION_MONTHLY=6 \
+  AQUILA_BACKUP_MIN_FREE_PERCENT=0 \
+    "${CREATE_PRUNE_SCRIPT_DIR}/prune_external_backups.sh" >/dev/null
+
+[[ -s "${CREATE_PRUNE_BACKUP_ROOT}/postgres/daily/20261126-040000/dump.sql.enc" ]] || { echo "prune deleted fresh postgres backup" >&2; exit 1; }
+[[ -s "${CREATE_PRUNE_BACKUP_ROOT}/minio/daily/20261126-040000/minio-data.tar.gz.enc" ]] || { echo "prune deleted fresh minio backup" >&2; exit 1; }
+[[ -s "${CREATE_PRUNE_BACKUP_ROOT}/deploy/daily/20261126-040000/caddy/Caddyfile" ]] || { echo "prune deleted fresh deploy backup" >&2; exit 1; }
+[[ -d "${CREATE_PRUNE_BACKUP_ROOT}/minio/daily/20261125-040000" ]] || { echo "prune deleted legacy minio backup carrying postgres_database=" >&2; exit 1; }
+[[ -d "${CREATE_PRUNE_BACKUP_ROOT}/deploy/daily/20261125-040000" ]] || { echo "prune deleted legacy deploy backup carrying postgres_database=" >&2; exit 1; }
+[[ ! -d "${CREATE_PRUNE_BACKUP_ROOT}/minio/daily/20261127-040000" ]] || { echo "prune failed to delete incomplete minio backup" >&2; exit 1; }
+
+mode_of() {
+  stat -c '%a' "$1" 2>/dev/null || stat -f '%Lp' "$1"
+}
+[[ "$(mode_of "${CREATE_PRUNE_EXTERNAL_ROOT}")" == "755" ]] || { echo "external storage root must be 0755 for docker_runtime_probe, got $(mode_of "${CREATE_PRUNE_EXTERNAL_ROOT}")" >&2; exit 1; }
+[[ "$(mode_of "${CREATE_PRUNE_EXTERNAL_ROOT}/minio")" == "755" ]] || { echo "external minio dir must be 0755 for docker_runtime_probe statfsSync, got $(mode_of "${CREATE_PRUNE_EXTERNAL_ROOT}/minio")" >&2; exit 1; }
+[[ "$(mode_of "${CREATE_PRUNE_BACKUP_ROOT}")" == "700" ]] || { echo "external backups dir must remain 0700, got $(mode_of "${CREATE_PRUNE_BACKUP_ROOT}")" >&2; exit 1; }
+[[ "$(mode_of "${CREATE_PRUNE_EXTERNAL_ROOT}/backup-encryption.key")" == "600" ]] || { echo "backup encryption key must remain 0600" >&2; exit 1; }
+
 echo "[external-storage-retention] ok"
 

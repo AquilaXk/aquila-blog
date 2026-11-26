@@ -502,6 +502,18 @@ assert_outside_backup_root() {
   esac
 }
 
+ensure_external_storage_permissions() {
+  if [[ -d "${EXTERNAL_STORAGE_ROOT}" ]]; then
+    chmod 0755 "${EXTERNAL_STORAGE_ROOT}" 2>/dev/null || true
+  fi
+  if [[ -d "${EXTERNAL_STORAGE_ROOT}/minio" ]]; then
+    chmod 0755 "${EXTERNAL_STORAGE_ROOT}/minio" 2>/dev/null || true
+  fi
+  if [[ -d "${BACKUP_ROOT}" ]]; then
+    chmod 0700 "${BACKUP_ROOT}" 2>/dev/null || true
+  fi
+}
+
 validate_backup_encryption_key_file() {
   BACKUP_ENCRYPTION_KEY_FILE="$(env_value AQUILA_BACKUP_ENCRYPTION_KEY_FILE "${EXTERNAL_STORAGE_ROOT}/backup-encryption.key")"
   is_safe_absolute_path "${BACKUP_ENCRYPTION_KEY_FILE}" || fail "unsafe AQUILA_BACKUP_ENCRYPTION_KEY_FILE=${BACKUP_ENCRYPTION_KEY_FILE}"
@@ -510,6 +522,7 @@ validate_backup_encryption_key_file() {
   if [[ ! -e "${BACKUP_ENCRYPTION_KEY_FILE}" ]]; then
     mkdir -p "$(dirname "${BACKUP_ENCRYPTION_KEY_FILE}")"
   fi
+  ensure_external_storage_permissions
   assert_outside_backup_root "AQUILA_BACKUP_ENCRYPTION_KEY_FILE" "${BACKUP_ENCRYPTION_KEY_FILE}"
   if [[ ! -e "${BACKUP_ENCRYPTION_KEY_FILE}" ]]; then
     (umask 077 && openssl rand -hex 32 > "${BACKUP_ENCRYPTION_KEY_FILE}") \
@@ -594,15 +607,17 @@ backup_classes() {
 }
 
 write_metadata() {
-  local class="$1"
-  local target_dir="$2"
-  local minio_mode="${3:-}"
+  local category="$1"
+  local class="$2"
+  local target_dir="$3"
+  local minio_mode="${4:-}"
   local image_key metadata_key image_value
 
   {
     echo "backup_set_id=${TIMESTAMP}"
     echo "manifest_version=2"
     echo "secret_files_copied=false"
+    echo "category=${category}"
     echo "class=${class}"
     echo "created_at=${TIMESTAMP}"
     echo "created_at_utc=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
@@ -614,7 +629,7 @@ write_metadata() {
       echo "backup_kdf_version=2"
       echo "encryption_key_file=${BACKUP_ENCRYPTION_KEY_FILE}"
     fi
-    if [[ -n "${POSTGRES_DB_NAME:-}" ]]; then
+    if [[ "${category}" == "postgres" && -n "${POSTGRES_DB_NAME:-}" ]]; then
       echo "postgres_database=${POSTGRES_DB_NAME}"
     fi
     for image_key in "${COMPOSE_IMAGE_METADATA_KEYS[@]}"; do
@@ -630,7 +645,7 @@ write_metadata() {
         echo "${metadata_key}=${image_value}"
       fi
     done
-    if [[ -n "${minio_mode}" ]]; then
+    if [[ "${category}" == "minio" && -n "${minio_mode}" ]]; then
       echo "minio_backup_mode=${minio_mode}"
     fi
   } > "${target_dir}/metadata.env"
@@ -681,7 +696,7 @@ copy_deploy_config() {
     fi
   done
 
-  write_metadata "${class}" "${target_dir}"
+  write_metadata "deploy" "${class}" "${target_dir}"
 }
 
 backup_postgres() {
@@ -692,13 +707,13 @@ backup_postgres() {
 
   if [[ "${AQUILA_BACKUP_SKIP_POSTGRES:-false}" == "true" ]]; then
     echo "skipped=true" > "${target_dir}/dump.sql.skipped"
-    write_metadata "${class}" "${target_dir}"
+    write_metadata "postgres" "${class}" "${target_dir}"
     return 0
   fi
 
   if [[ -n "${PRIMARY_POSTGRES_BACKUP_DIR}" && -f "${PRIMARY_POSTGRES_BACKUP_DIR}/dump.sql.enc" ]]; then
     reuse_backup_artifact_set "${PRIMARY_POSTGRES_BACKUP_DIR}" "${target_dir}" "dump.sql.enc"
-    write_metadata "${class}" "${target_dir}"
+    write_metadata "postgres" "${class}" "${target_dir}"
     return 0
   fi
 
@@ -707,7 +722,7 @@ backup_postgres() {
     | encrypt_stream_to_file "${target_dir}/dump.sql.enc"
   [[ -s "${target_dir}/dump.sql.enc" ]] || fail "postgres backup produced an empty dump.sql.enc"
   write_backup_artifact_integrity_files "${target_dir}" "dump.sql.enc"
-  write_metadata "${class}" "${target_dir}"
+  write_metadata "postgres" "${class}" "${target_dir}"
   PRIMARY_POSTGRES_BACKUP_DIR="${target_dir}"
 }
 
@@ -848,6 +863,7 @@ prepare_external_minio_dir() {
   local tmp_dir="${EXTERNAL_STORAGE_ROOT}/.minio-migration-${TIMESTAMP}.tmp"
 
   mkdir -p "${minio_dir}"
+  ensure_external_storage_permissions
 
   if ! is_dir_empty "${minio_dir}"; then
     return 0
@@ -878,6 +894,7 @@ prepare_external_minio_dir() {
       fail "failed to activate migrated MinIO directory: ${minio_dir}"
     fi
     MIGRATED_MINIO_DIR_THIS_RUN="${minio_dir}"
+    ensure_external_storage_permissions
     write_stopped_legacy_minio_marker "${minio_dir}"
   fi
 }
@@ -892,13 +909,13 @@ backup_minio() {
 
   if [[ "${AQUILA_BACKUP_SKIP_MINIO:-false}" == "true" ]]; then
     echo "skipped=true" > "${target_dir}/minio.skipped"
-    write_metadata "${class}" "${target_dir}" "skipped"
+    write_metadata "minio" "${class}" "${target_dir}" "skipped"
     return 0
   fi
 
   if [[ -n "${PRIMARY_MINIO_BACKUP_DIR}" && -f "${PRIMARY_MINIO_BACKUP_DIR}/minio-data.tar.gz.enc" ]]; then
     reuse_backup_artifact_set "${PRIMARY_MINIO_BACKUP_DIR}" "${target_dir}" "minio-data.tar.gz.enc"
-    write_metadata "${class}" "${target_dir}" "${PRIMARY_MINIO_BACKUP_MODE}"
+    write_metadata "minio" "${class}" "${target_dir}" "${PRIMARY_MINIO_BACKUP_MODE}"
     return 0
   fi
 
@@ -930,7 +947,7 @@ backup_minio() {
   fi
   [[ -s "${target_dir}/minio-data.tar.gz.enc" ]] || fail "minio backup produced an empty minio-data.tar.gz.enc"
   write_backup_artifact_integrity_files "${target_dir}" "minio-data.tar.gz.enc"
-  write_metadata "${class}" "${target_dir}" "${mode}"
+  write_metadata "minio" "${class}" "${target_dir}" "${mode}"
   PRIMARY_MINIO_BACKUP_DIR="${target_dir}"
   PRIMARY_MINIO_BACKUP_MODE="${mode}"
 }
@@ -944,6 +961,7 @@ POSTGRES_DB_NAME="$(env_value_from_current_file CUSTOM_PROD_DBNAME "${CURRENT_DB
 validate_paths
 validate_backup_encryption_key_file
 mkdir -p "${BACKUP_ROOT}/logs"
+ensure_external_storage_permissions
 BACKUP_LOG_FILE="${BACKUP_ROOT}/logs/${TIMESTAMP}.log"
 check_free_space "${MIN_FREE_PERCENT}"
 

@@ -213,7 +213,9 @@ resolve_runtime_split_from_env_file() {
 # 배포 경로에서는 항상 "runtime-split" 하나만 반환돼 front 프로필이 통째로 유실됐다.
 # 두 출처와 runtime-split 파생을 합집합으로 병합한다.
 resolve_compose_profiles() {
-  local raw="${COMPOSE_PROFILES:-},$(compose_profiles_from_env_file)"
+  local env_profiles
+  env_profiles="$(compose_profiles_from_env_file)"
+  local raw="${COMPOSE_PROFILES:-},${env_profiles}"
   if [[ "${RUNTIME_SPLIT_ENABLED}" == "true" ]]; then
     raw="${raw},runtime-split"
   fi
@@ -1351,8 +1353,18 @@ validate_required_runtime_env() {
 }
 
 ensure_monitoring_bind_mount_permissions() {
-  find "${SCRIPT_DIR}/monitoring" -type d -exec chmod 0755 {} + 2>/dev/null || true
-  find "${SCRIPT_DIR}/monitoring" -type f -exec chmod 0644 {} + 2>/dev/null || true
+  if [[ -n "${SCRIPT_DIR:-}" ]]; then
+    find "${SCRIPT_DIR}/monitoring" -type d -exec chmod 0755 {} + 2>/dev/null || true
+    find "${SCRIPT_DIR}/monitoring" -type f -exec chmod 0644 {} + 2>/dev/null || true
+    find "${SCRIPT_DIR}/caddy" -type d -exec chmod 0755 {} + 2>/dev/null || true
+    find "${SCRIPT_DIR}/caddy" -type f -exec chmod 0644 {} + 2>/dev/null || true
+  fi
+  if [[ -n "${CADDY_FILE:-}" && -d "$(dirname "${CADDY_FILE}")" ]]; then
+    chmod 0755 "$(dirname "${CADDY_FILE}")" 2>/dev/null || true
+  fi
+  if [[ -n "${CADDY_FILE:-}" && -f "${CADDY_FILE}" ]]; then
+    chmod 0644 "${CADDY_FILE}" 2>/dev/null || true
+  fi
 }
 
 reset_grafana_admin_password() {
@@ -1898,6 +1910,7 @@ set_caddy_upstream_backend() {
     -e "s/back[-_](blue|green|active):8080( +back[-_](blue|green|active):8080)?/${active_host}:8080/g" \
     "${CADDY_FILE}")"
   printf '%s\n' "${rewritten}" > "${CADDY_FILE}"
+  ensure_monitoring_bind_mount_permissions
   reload_caddy
   echo "caddy upstream switched to active=${active_host}:8080"
 }
@@ -3006,6 +3019,7 @@ write_front_caddy_upstream_literal() {
     return 1
   fi
   printf '%s\n' "${rewritten}" > "${CADDY_FILE}" || return 1
+  ensure_monitoring_bind_mount_permissions
 }
 
 # env 키와 Caddyfile 리터럴을 함께 고정한다. 둘 중 하나만 맞으면 caddy가 설정을 다시 읽는 시점에
@@ -3401,6 +3415,8 @@ run_front_blue_green_deploy() {
     return 1
   fi
 
+  ensure_monitoring_bind_mount_permissions
+
   if [[ -z "${STAGED_FRONT_IMAGE}" ]]; then
     echo "STAGED_FRONT_IMAGE is empty. refusing front deploy to avoid an unpinned rollout." >&2
     return 1
@@ -3602,6 +3618,7 @@ if is_backend_running "${active_backend}"; then
 else
   echo "skip active-image helper preboot: active backend is not running (${active_backend}); candidate will migrate first"
 fi
+ensure_monitoring_bind_mount_permissions
 edge_services_to_boot=(caddy cloudflared)
 compose_up_with_retry "${edge_services_to_boot[@]}"
 # 프로필만 켜고 boot 목록에 없으면 `compose up`이 front 컨테이너를 아예 만들지 않는다.

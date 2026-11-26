@@ -302,6 +302,7 @@ run_set_caddy_upstream_backend() {
       extract_function "${script}" current_caddy_upstream_host
       extract_function "${script}" expected_caddy_upstream_host
       extract_function "${script}" report_caddy_split_literal_drift
+      extract_function "${script}" ensure_monitoring_bind_mount_permissions
     fi
     extract_function "${script}" set_caddy_upstream_backend
     printf '%s\n' 'set_caddy_upstream_backend "$1"'
@@ -1091,6 +1092,7 @@ ROLLBACK_STUBS
     extract_function "${deploy_script}" is_healthy_http_code
     extract_function "${deploy_script}" caddy_file_has_literal_colour_upstream
     extract_function "${deploy_script}" report_caddy_split_literal_drift
+    extract_function "${deploy_script}" ensure_monitoring_bind_mount_permissions
     extract_function "${deploy_script}" set_caddy_upstream_backend
     extract_function "${deploy_script}" switch_caddy_upstream
     extract_function "${deploy_script}" verify_caddy_route
@@ -1484,6 +1486,7 @@ run_recover_switch_harness() {
     extract_function "${recover_script}" "env_value"
     extract_function "${recover_script}" "trim_quotes"
     extract_function "${recover_script}" "upsert_env_key"
+    extract_function "${recover_script}" "ensure_bind_mount_permissions"
     extract_function "${recover_script}" "switch_upstream"
     printf 'switch_upstream %q\n' "${target_upstream}"
   } > "${harness}"

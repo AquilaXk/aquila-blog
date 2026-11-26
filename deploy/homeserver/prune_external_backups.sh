@@ -154,14 +154,43 @@ retention_for_class() {
 
 is_complete_backup_dir() {
   local candidate="$1"
+  local category="${2:-}"
   [[ -s "${candidate}/metadata.env" ]] || return 1
-  if grep -qE '^postgres_database=' "${candidate}/metadata.env" 2>/dev/null; then
-    [[ -s "${candidate}/dump.sql.enc" || -s "${candidate}/dump.sql.skipped" ]] || return 1
-  fi
-  if grep -qE '^minio_backup_mode=' "${candidate}/metadata.env" 2>/dev/null; then
-    [[ -s "${candidate}/minio-data.tar.gz.enc" || -s "${candidate}/minio.skipped" ]] || return 1
-  fi
+  case "${category}" in
+    postgres)
+      if grep -qE '^postgres_database=' "${candidate}/metadata.env" 2>/dev/null; then
+        [[ -s "${candidate}/dump.sql.enc" || -s "${candidate}/dump.sql.skipped" ]] || return 1
+      fi
+      ;;
+    minio)
+      if grep -qE '^minio_backup_mode=' "${candidate}/metadata.env" 2>/dev/null; then
+        [[ -s "${candidate}/minio-data.tar.gz.enc" || -s "${candidate}/minio.skipped" ]] || return 1
+      fi
+      ;;
+    deploy)
+      ;;
+    *)
+      if grep -qE '^postgres_database=' "${candidate}/metadata.env" 2>/dev/null; then
+        [[ -s "${candidate}/dump.sql.enc" || -s "${candidate}/dump.sql.skipped" ]] || return 1
+      fi
+      if grep -qE '^minio_backup_mode=' "${candidate}/metadata.env" 2>/dev/null; then
+        [[ -s "${candidate}/minio-data.tar.gz.enc" || -s "${candidate}/minio.skipped" ]] || return 1
+      fi
+      ;;
+  esac
   return 0
+}
+
+ensure_external_storage_permissions() {
+  if [[ -d "${EXTERNAL_STORAGE_ROOT}" ]]; then
+    chmod 0755 "${EXTERNAL_STORAGE_ROOT}" 2>/dev/null || true
+  fi
+  if [[ -d "${EXTERNAL_STORAGE_ROOT}/minio" ]]; then
+    chmod 0755 "${EXTERNAL_STORAGE_ROOT}/minio" 2>/dev/null || true
+  fi
+  if [[ -d "${BACKUP_ROOT}" ]]; then
+    chmod 0700 "${BACKUP_ROOT}" 2>/dev/null || true
+  fi
 }
 
 delete_backup_entry() {
@@ -198,7 +227,7 @@ prune_class_dir() {
 
   local complete_entries=()
   for candidate in "${entries[@]}"; do
-    if is_complete_backup_dir "${candidate}"; then
+    if is_complete_backup_dir "${candidate}" "${category}"; then
       complete_entries+=("${candidate}")
     else
       delete_backup_entry "${candidate}"
@@ -247,6 +276,7 @@ MIN_FREE_PERCENT="$(env_value AQUILA_BACKUP_MIN_FREE_PERCENT "15")"
 
 validate_paths
 mkdir -p "${BACKUP_ROOT}"
+ensure_external_storage_permissions
 
 for category in postgres minio deploy; do
   for class in daily weekly monthly; do

@@ -79,3 +79,16 @@ test("production compose drops all Linux capabilities and sets no-new-privileges
     assert.match(block, /cap_drop:\s*\*cap-drop-all/, `${name} missing cap_drop: *cap-drop-all`)
   }
 })
+
+test("uptime_kuma grants the minimal chown/setpriv capabilities required under cap_drop ALL", () => {
+  const compose = readFileSync(path.join(repoRoot, "deploy/homeserver/docker-compose.prod.yml"), "utf8")
+  const servicesSection = compose.slice(compose.indexOf("\nservices:\n") + 1, compose.indexOf("\nvolumes:\n"))
+  const blocks = servicesSection.split(/\n(?=  [a-z0-9_]+:\n)/).filter((block) => /^  [a-z0-9_]+:/m.test(block))
+  const uptimeKumaBlock = blocks.find((block) => /^  uptime_kuma:/m.test(block))
+  assert.ok(uptimeKumaBlock, "uptime_kuma service block must exist")
+  assert.match(uptimeKumaBlock, /security_opt:\s*\*no-new-privileges/)
+  assert.match(uptimeKumaBlock, /cap_drop:\s*\*cap-drop-all/)
+  for (const cap of ["CHOWN", "DAC_OVERRIDE", "FOWNER", "SETGID", "SETUID"]) {
+    assert.match(uptimeKumaBlock, new RegExp(`^\\s*-\\s*${cap}$`, "m"), `uptime_kuma missing cap_add ${cap}`)
+  }
+})

@@ -23,7 +23,9 @@ compose_profiles_from_env_file() {
 }
 
 resolve_compose_profiles() {
-  local raw="${COMPOSE_PROFILES:-},$(compose_profiles_from_env_file)"
+  local env_profiles
+  env_profiles="$(compose_profiles_from_env_file)"
+  local raw="${COMPOSE_PROFILES:-},${env_profiles}"
   local split_enabled
   split_enabled="$(normalize_bool "${RUNTIME_SPLIT_ENABLED:-$(trim_quotes "$(env_value "RUNTIME_SPLIT_ENABLED")")}")"
   if [[ "${split_enabled}" == "true" ]]; then
@@ -249,6 +251,21 @@ active_upstream() {
     bash "${SCRIPT_DIR}/caddy_upstream_probe.sh" host 2>/dev/null || true
 }
 
+ensure_bind_mount_permissions() {
+  if [[ -n "${SCRIPT_DIR:-}" ]]; then
+    find "${SCRIPT_DIR}/monitoring" -type d -exec chmod 0755 {} + 2>/dev/null || true
+    find "${SCRIPT_DIR}/monitoring" -type f -exec chmod 0644 {} + 2>/dev/null || true
+    find "${SCRIPT_DIR}/caddy" -type d -exec chmod 0755 {} + 2>/dev/null || true
+    find "${SCRIPT_DIR}/caddy" -type f -exec chmod 0644 {} + 2>/dev/null || true
+  fi
+  if [[ -n "${CADDY_HOST_FILE:-}" && -d "$(dirname "${CADDY_HOST_FILE}")" ]]; then
+    chmod 0755 "$(dirname "${CADDY_HOST_FILE}")" 2>/dev/null || true
+  fi
+  if [[ -n "${CADDY_HOST_FILE:-}" && -f "${CADDY_HOST_FILE}" ]]; then
+    chmod 0644 "${CADDY_HOST_FILE}" 2>/dev/null || true
+  fi
+}
+
 sync_active_backend_state() {
   local target="$1"
   if [[ "${target}" != "back_blue" && "${target}" != "back_green" ]]; then
@@ -304,6 +321,7 @@ switch_upstream() {
     -e "s/back[-_](blue|green|active):8080( +back[-_](blue|green|active):8080)?/${target}:8080/g" \
     "${CADDY_HOST_FILE}")"
   printf '%s\n' "${rewritten}" > "${CADDY_HOST_FILE}"
+  ensure_bind_mount_permissions
   sync_active_backend_state "${target}"
   compose up -d --force-recreate caddy
 }
@@ -332,6 +350,7 @@ main() {
   require_runtime_back_images
 
   section "0" "start core services"
+  ensure_bind_mount_permissions
   local core_services=(
     back_blue back_green caddy cloudflared uptime_kuma
     loki promtail prometheus grafana

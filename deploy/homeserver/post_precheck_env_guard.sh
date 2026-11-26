@@ -67,9 +67,6 @@ require_digest_image_value() {
 
 main() {
   local staged_back_image
-  local enabled_value
-  local api_key_value
-  local api_key_present="false"
 
   if [[ ! -f "${ENV_FILE}" ]]; then
     post_precheck_env_fail "env_file_missing" "missing env file=${ENV_FILE}"

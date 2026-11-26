@@ -59,6 +59,9 @@ if ! preflight_profile_workspace_cutover_source_floor front; then
 fi
 git checkout --force "${HOME_DEPLOY_SHA}"
 
+find deploy/homeserver/caddy deploy/homeserver/monitoring -type d -exec chmod 0755 {} + 2>/dev/null || true
+find deploy/homeserver/caddy deploy/homeserver/monitoring -type f -exec chmod 0644 {} + 2>/dev/null || true
+
 chmod +x \
   deploy/homeserver/blue_green_deploy.sh \
   deploy/homeserver/materialize_service_env.sh

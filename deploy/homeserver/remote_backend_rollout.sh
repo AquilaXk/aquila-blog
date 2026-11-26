@@ -181,6 +181,9 @@ restore_backup_files_minimally() {
       git archive "${rollback_mon_sha}" deploy/homeserver/monitoring | tar -x
     fi
   fi
+
+  find deploy/homeserver/caddy deploy/homeserver/monitoring -type d -exec chmod 0755 {} + 2>/dev/null || true
+  find deploy/homeserver/caddy deploy/homeserver/monitoring -type f -exec chmod 0644 {} + 2>/dev/null || true
 }
 
 run_backup_rollback() {

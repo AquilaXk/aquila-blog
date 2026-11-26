@@ -106,6 +106,12 @@ services:
       - uptime_kuma_data:/app/data
     security_opt: *no-new-privileges
     cap_drop: *cap-drop-all
+    cap_add:
+      - CHOWN
+      - DAC_OVERRIDE
+      - FOWNER
+      - SETGID
+      - SETUID
     networks:
       - observe
 

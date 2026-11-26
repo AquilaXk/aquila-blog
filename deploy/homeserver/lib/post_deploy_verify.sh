@@ -3,6 +3,8 @@
 ensure_monitoring_bind_mount_permissions() {
   find deploy/homeserver/monitoring -type d -exec chmod 0755 {} + 2>/dev/null || true
   find deploy/homeserver/monitoring -type f -exec chmod 0644 {} + 2>/dev/null || true
+  find deploy/homeserver/caddy -type d -exec chmod 0755 {} + 2>/dev/null || true
+  find deploy/homeserver/caddy -type f -exec chmod 0644 {} + 2>/dev/null || true
 }
 
 emit_post_deploy_diagnostics() {

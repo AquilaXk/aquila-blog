@@ -861,6 +861,7 @@ class ApiV1AdmCloudControllerWebMvcTest : BaseAdmCloudControllerWebMvcTest() {
                 videoBytes = 40960L,
                 documentCount = 2L,
                 documentBytes = 10240L,
+                folders = listOf("docs", "docs/2026", "photos"),
             )
         given(cloudFileService.getFacets(7L)).willReturn(facets)
 
@@ -877,9 +878,26 @@ class ApiV1AdmCloudControllerWebMvcTest : BaseAdmCloudControllerWebMvcTest() {
                 jsonPath("$.videoBytes") { value(40960) }
                 jsonPath("$.documentCount") { value(2) }
                 jsonPath("$.documentBytes") { value(10240) }
+                jsonPath("$.folders.length()") { value(3) }
+                jsonPath("$.folders[0]") { value("docs") }
+                jsonPath("$.folders[1]") { value("docs/2026") }
+                jsonPath("$.folders[2]") { value("photos") }
             }
 
         then(cloudFileService).should().getFacets(7L)
+        assertThat(
+            ApiV1AdmCloudController
+                .CloudFileFacetsResBody(
+                    allCount = 0L,
+                    allBytes = 0L,
+                    photoCount = 0L,
+                    photoBytes = 0L,
+                    videoCount = 0L,
+                    videoBytes = 0L,
+                    documentCount = 0L,
+                    documentBytes = 0L,
+                ).folders,
+        ).isEmpty()
     }
 
     @Test
@@ -1170,7 +1188,7 @@ class ApiV1AdmCloudControllerWebMvcTest : BaseAdmCloudControllerWebMvcTest() {
                 checksumSha256 = "abc123",
             )
         given(cloudFileService.get(ownerMemberId = 7L, fileId = 51L)).willReturn(shaDto)
-        given(cloudFileService.openContent(ownerMemberId = 7L, fileId = 51L)).willReturn(
+        given(cloudFileService.openContent(ownerMemberId = 7L, fileId = 51L)).willAnswer {
             CloudFileContent(
                 file = shaDto,
                 storedObject =
@@ -1180,8 +1198,8 @@ class ApiV1AdmCloudControllerWebMvcTest : BaseAdmCloudControllerWebMvcTest() {
                         contentLength = 10L,
                         originalFilename = "photo.png",
                     ),
-            ),
-        )
+            )
+        }
 
         mvc
             .get("/system/api/v1/adm/cloud/files/51/thumbnail") {
@@ -1202,18 +1220,38 @@ class ApiV1AdmCloudControllerWebMvcTest : BaseAdmCloudControllerWebMvcTest() {
                 header { string(HttpHeaders.ETAG, "\"abc123-thumb\"") }
                 header { string(HttpHeaders.CACHE_CONTROL, "private, max-age=0, must-revalidate") }
                 header { stringValues("X-Content-Type-Options", "nosniff") }
+                header { doesNotExist(HttpHeaders.ACCEPT_RANGES) }
             }
+
+        mvc
+            .get("/system/api/v1/adm/cloud/files/51/thumbnail") {
+                header(HttpHeaders.RANGE, "bytes=0-3")
+                with(user(admin))
+            }.andExpect {
+                status { isOk() }
+                header { string(HttpHeaders.ETAG, "\"abc123-thumb\"") }
+                header { string(HttpHeaders.CACHE_CONTROL, "private, max-age=0, must-revalidate") }
+                header { doesNotExist(HttpHeaders.ACCEPT_RANGES) }
+                header { doesNotExist(HttpHeaders.CONTENT_RANGE) }
+                content { bytes("0123456789".toByteArray()) }
+            }
+        then(cloudFileService).should(never()).openContentRange(file = shaDto, range = 0L..3L)
 
         mvc
             .perform(head("/system/api/v1/adm/cloud/files/51/thumbnail").with(user(admin)))
             .andExpect(status().isOk)
             .andExpect(header().string(HttpHeaders.ETAG, "\"abc123-thumb\""))
+            .andExpect(header().string(HttpHeaders.CACHE_CONTROL, "private, max-age=0, must-revalidate"))
             .andExpect(header().stringValues("X-Content-Type-Options", "nosniff"))
+            .andExpect(header().doesNotExist(HttpHeaders.ACCEPT_RANGES))
+            .andExpect(header().doesNotExist(HttpHeaders.CONTENT_LENGTH))
 
         mvc
             .perform(head("/system/api/v1/adm/cloud/files/51/content").with(user(admin)))
             .andExpect(status().isOk)
             .andExpect(header().string(HttpHeaders.ETAG, "\"abc123\""))
+            .andExpect(header().string(HttpHeaders.ACCEPT_RANGES, "bytes"))
+            .andExpect(header().longValue(HttpHeaders.CONTENT_LENGTH, 10L))
             .andExpect(header().stringValues("X-Content-Type-Options", "nosniff"))
 
         val svgDto = shaDto.copy(id = 52L, originalFilename = "a\\b[1].svg", contentType = "image/svg+xml")
@@ -1309,6 +1347,64 @@ class ApiV1AdmCloudControllerWebMvcTest : BaseAdmCloudControllerWebMvcTest() {
                 status { isOk() }
                 jsonPath("$.data.revokedCount") { value(2) }
             }
+    }
+
+    @Test
+    @DisplayName("thumbnail HEAD는 Accept-Ranges와 원본 Content-Length를 생략하고, GET thumbnail은 Range 헤더를 무시해 썸네일을 반환한다")
+    fun `thumbnail HEAD omits Accept-Ranges and byteSize and GET thumbnail ignores Range header`() {
+        val admin = adminUser(id = 7L)
+        val sourceImage = java.awt.image.BufferedImage(800, 600, java.awt.image.BufferedImage.TYPE_INT_RGB)
+        val pngBytes =
+            java.io.ByteArrayOutputStream().use { out ->
+                javax.imageio.ImageIO.write(sourceImage, "png", out)
+                out.toByteArray()
+            }
+        val photoDto =
+            sampleDto(
+                id = 55L,
+                ownerMemberId = 7L,
+                originalFilename = "large-photo.png",
+                contentType = "image/png",
+                byteSize = pngBytes.size.toLong(),
+                mediaKind = CloudFileMediaKind.PHOTO,
+            ).copy(checksumSha256 = "thumbsha55")
+        given(cloudFileService.get(ownerMemberId = 7L, fileId = 55L)).willReturn(photoDto)
+        given(cloudFileService.openContent(ownerMemberId = 7L, fileId = 55L)).willReturn(
+            CloudFileContent(
+                file = photoDto,
+                storedObject =
+                    CloudStoragePort.StoredObject(
+                        inputStream = ByteArrayInputStream(pngBytes),
+                        contentType = "image/png",
+                        contentLength = pngBytes.size.toLong(),
+                        originalFilename = "large-photo.png",
+                    ),
+            ),
+        )
+
+        mvc
+            .perform(head("/system/api/v1/adm/cloud/files/55/thumbnail").with(user(admin)))
+            .andExpect(status().isOk)
+            .andExpect(header().string(HttpHeaders.CONTENT_TYPE, "image/png"))
+            .andExpect(header().string(HttpHeaders.ETAG, "\"thumbsha55-thumb\""))
+            .andExpect(header().doesNotExist(HttpHeaders.ACCEPT_RANGES))
+            .andExpect(header().doesNotExist(HttpHeaders.CONTENT_LENGTH))
+
+        val result =
+            mvc
+                .get("/system/api/v1/adm/cloud/files/55/thumbnail") {
+                    header(HttpHeaders.RANGE, "bytes=0-15")
+                    with(user(admin))
+                }.andExpect {
+                    status { isOk() }
+                    header { string(HttpHeaders.ETAG, "\"thumbsha55-thumb\"") }
+                    header { doesNotExist(HttpHeaders.ACCEPT_RANGES) }
+                    header { doesNotExist(HttpHeaders.CONTENT_RANGE) }
+                }.andReturn()
+
+        assertThat(result.response.contentAsByteArray).isNotEmpty()
+        assertThat(result.response.contentAsByteArray).isNotEqualTo(pngBytes.copyOfRange(0, 16))
+        then(cloudFileService).should(never()).openContentRange(file = photoDto, range = 0L..15L)
     }
 
     private fun anyInputStream(): InputStream = ArgumentMatchers.any(InputStream::class.java) ?: ByteArrayInputStream(ByteArray(0))

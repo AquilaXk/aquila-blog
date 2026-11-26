@@ -42,8 +42,11 @@ object CloudContentWebSupport {
             ResponseEntity
                 .ok()
                 .contentType(safeMediaType(file.contentType))
+        if (!thumbnail) {
+            builder
                 .header(HttpHeaders.ACCEPT_RANGES, "bytes")
                 .contentLength(file.byteSize)
+        }
         applySecurityHeaders(builder, file.contentType)
         applyCacheHeaders(builder, file, thumbnail = thumbnail)
         return builder.build()
@@ -78,7 +81,7 @@ object CloudContentWebSupport {
         openRange: (CloudFileDto, LongRange) -> CloudFileContent,
         openFull: () -> CloudFileContent,
     ): ResponseEntity<Resource> {
-        val rangeHeader = request.getHeader(HttpHeaders.RANGE)
+        val rangeHeader = if (thumbnail) null else request.getHeader(HttpHeaders.RANGE)
 
         return try {
             // 동영상 seek 호환을 위해 단일 byte range만 허용하고 multi-range는 거절한다.
@@ -162,11 +165,13 @@ object CloudContentWebSupport {
                     ResponseEntity
                         .ok()
                         .contentType(safeMediaType(storedObject.contentType))
-                        .header(HttpHeaders.ACCEPT_RANGES, "bytes")
                         .header(
                             HttpHeaders.CONTENT_DISPOSITION,
                             resolveDisposition(storedObject.contentType, content.file.originalFilename, download),
                         )
+                if (!thumbnail) {
+                    responseBuilder.header(HttpHeaders.ACCEPT_RANGES, "bytes")
+                }
                 applySecurityHeaders(responseBuilder, storedObject.contentType)
                 applyCacheHeaders(responseBuilder, content.file, thumbnail = thumbnail)
                 if (totalLength >= 0L) {

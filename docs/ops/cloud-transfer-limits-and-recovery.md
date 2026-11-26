@@ -48,7 +48,7 @@
 출시 전 측정·정책 초안은 [`perf/k6/cloud-launch-criteria.md`](../../perf/k6/cloud-launch-criteria.md)를 정본으로 한다.
 
 - Provisional 동시 시청 soft cap: **5명** (실측 후 조정).
-- `Cache-Control: no-store` 유지 여부, 직렬 part 수용 여부는 실측 후 [#1233](https://github.com/AquilaXk/aquila-blog/issues/1233)에 회신.
+- 응답 캐시는 체크섬 보유 full 응답(`content`, `thumbnail`, `playback`, `share`)에 조건부 `ETag`(`If-None-Match` → `304`)와 `Cache-Control: private, max-age=0, must-revalidate`를 적용하며, 체크섬 미보유·`206 Partial Content`·`416` 응답은 `Cache-Control: private, no-store, max-age=0`를 유지한다. 스트림 읽기 경로(`/adm/cloud/files/*/content`, `thumbnail`, `/public/cloud/files/*/playback`, `share`)는 `ApiRateLimitBackstopFilter`의 `stream-read` 버킷(`600/min`)으로 분리해 일반 read 버킷과 격리하며, 직렬 part 수용은 유지한다. ([#1233](https://github.com/AquilaXk/aquila-blog/issues/1233))
 - 본 runbook은 한도 정합·장애 복구만 다루며, 최종 ToS 승격 결정은 #1233 owner가 확정한다.
 
 ### 대응 옵션 (정책 메뉴)

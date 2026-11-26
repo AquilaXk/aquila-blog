@@ -106,6 +106,14 @@ class InMemoryCloudFileRepository : CloudFileRepositoryPort {
         val photos = active.filter { it.mediaKind == CloudFileMediaKind.PHOTO }
         val videos = active.filter { it.mediaKind == CloudFileMediaKind.VIDEO }
         val docs = active.filter { it.mediaKind == CloudFileMediaKind.DOCUMENT }
+        val folders =
+            active
+                .asSequence()
+                .map { it.folderPath.trim() }
+                .filter { it.isNotEmpty() }
+                .distinct()
+                .sorted()
+                .toList()
         return ApiV1AdmCloudController.CloudFileFacetsResBody(
             allCount = active.size.toLong(),
             allBytes = active.sumOf { it.byteSize },
@@ -115,6 +123,7 @@ class InMemoryCloudFileRepository : CloudFileRepositoryPort {
             videoBytes = videos.sumOf { it.byteSize },
             documentCount = docs.size.toLong(),
             documentBytes = docs.sumOf { it.byteSize },
+            folders = folders,
         )
     }
 

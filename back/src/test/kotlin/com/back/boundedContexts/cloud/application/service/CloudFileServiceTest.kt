@@ -1401,6 +1401,7 @@ class CloudFileServiceTest {
         assertThat(facets.photoCount).isEqualTo(1L)
         assertThat(facets.documentCount).isEqualTo(1L)
         assertThat(facets.videoCount).isZero()
+        assertThat(facets.folders).containsExactly("docs", "photos")
     }
 
     @Test

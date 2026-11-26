@@ -82,6 +82,7 @@ class ApiV1AdmCloudController(
         val videoBytes: Long,
         val documentCount: Long,
         val documentBytes: Long,
+        val folders: List<String> = emptyList(),
     )
 
     data class BulkDeleteCloudFilesReqBody(

@@ -5956,6 +5956,12 @@
           "documentBytes": {
             "type": "integer",
             "format": "int64"
+          },
+          "folders": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
           }
         }
       },

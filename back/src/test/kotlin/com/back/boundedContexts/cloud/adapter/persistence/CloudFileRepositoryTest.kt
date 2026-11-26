@@ -205,7 +205,7 @@ class CloudFileRepositoryTest : BaseRepositoryIntegrationTest() {
     }
 
     @Test
-    @DisplayName("getFacets는 관리자 활성 파일의 미디어 종류별 개수와 바이트 합계를 단일 집계한다")
+    @DisplayName("getFacets는 관리자 활성 파일의 미디어 종류별 개수·바이트 합계와 고유 폴더 목록을 집계한다")
     fun `getFacets는 관리자 활성 파일의 미디어 종류별 개수와 바이트 합계를 단일 집계한다`() {
         val owner = memberRepository.saveAndFlush(Member(0, "cloud-facets-admin", "1234", "클라우드 패싯 관리자"))
         val other = memberRepository.saveAndFlush(Member(0, "cloud-facets-other", "1234", "다른 패싯 관리자"))
@@ -216,6 +216,7 @@ class CloudFileRepositoryTest : BaseRepositoryIntegrationTest() {
         assertThat(emptyFacets.photoCount).isZero()
         assertThat(emptyFacets.videoCount).isZero()
         assertThat(emptyFacets.documentCount).isZero()
+        assertThat(emptyFacets.folders).isEmpty()
 
         cloudFileRepository.saveAndFlush(
             CloudFile.create(
@@ -253,16 +254,64 @@ class CloudFileRepositoryTest : BaseRepositoryIntegrationTest() {
                 checksumSha256 = null,
             ),
         )
+        cloudFileRepository.saveAndFlush(
+            CloudFile.create(
+                ownerMemberId = owner.id,
+                objectKey = "cloud/${owner.id}/docs/2026/d2.pdf",
+                originalFilename = "d2.pdf",
+                contentType = "application/pdf",
+                byteSize = 20L,
+                mediaKind = CloudFileMediaKind.DOCUMENT,
+                folderPath = "docs/2026",
+                checksumSha256 = null,
+            ),
+        )
+        cloudFileRepository.saveAndFlush(
+            CloudFile.create(
+                ownerMemberId = owner.id,
+                objectKey = "cloud/${owner.id}/docs/2026/d3.pdf",
+                originalFilename = "d3.pdf",
+                contentType = "application/pdf",
+                byteSize = 10L,
+                mediaKind = CloudFileMediaKind.DOCUMENT,
+                folderPath = "docs/2026",
+                checksumSha256 = null,
+            ),
+        )
+        cloudFileRepository.saveAndFlush(
+            CloudFile.create(
+                ownerMemberId = owner.id,
+                objectKey = "cloud/${owner.id}/root/r1.txt",
+                originalFilename = "r1.txt",
+                contentType = "text/plain",
+                byteSize = 5L,
+                mediaKind = CloudFileMediaKind.DOCUMENT,
+                folderPath = "",
+                checksumSha256 = null,
+            ),
+        )
+        cloudFileRepository.saveAndFlush(
+            CloudFile.create(
+                ownerMemberId = owner.id,
+                objectKey = "cloud/${owner.id}/blank/r2.txt",
+                originalFilename = "r2.txt",
+                contentType = "text/plain",
+                byteSize = 5L,
+                mediaKind = CloudFileMediaKind.DOCUMENT,
+                folderPath = "   ",
+                checksumSha256 = null,
+            ),
+        )
         val deleted =
             cloudFileRepository.saveAndFlush(
                 CloudFile.create(
                     ownerMemberId = owner.id,
-                    objectKey = "cloud/${owner.id}/photos/deleted.png",
+                    objectKey = "cloud/${owner.id}/deleted-only/deleted.png",
                     originalFilename = "deleted.png",
                     contentType = "image/png",
                     byteSize = 999L,
                     mediaKind = CloudFileMediaKind.PHOTO,
-                    folderPath = "photos",
+                    folderPath = "deleted-only",
                     checksumSha256 = null,
                 ),
             )
@@ -272,25 +321,26 @@ class CloudFileRepositoryTest : BaseRepositoryIntegrationTest() {
         cloudFileRepository.saveAndFlush(
             CloudFile.create(
                 ownerMemberId = other.id,
-                objectKey = "cloud/${other.id}/docs/other.pdf",
+                objectKey = "cloud/${other.id}/other-secret/other.pdf",
                 originalFilename = "other.pdf",
                 contentType = "application/pdf",
                 byteSize = 555L,
                 mediaKind = CloudFileMediaKind.DOCUMENT,
-                folderPath = "docs",
+                folderPath = "other-secret",
                 checksumSha256 = null,
             ),
         )
 
         val facets = cloudFileRepository.getFacets(owner.id)
-        assertThat(facets.allCount).isEqualTo(3L)
-        assertThat(facets.allBytes).isEqualTo(500L)
+        assertThat(facets.allCount).isEqualTo(7L)
+        assertThat(facets.allBytes).isEqualTo(540L)
         assertThat(facets.photoCount).isEqualTo(1L)
         assertThat(facets.photoBytes).isEqualTo(120L)
         assertThat(facets.videoCount).isEqualTo(1L)
         assertThat(facets.videoBytes).isEqualTo(300L)
-        assertThat(facets.documentCount).isEqualTo(1L)
-        assertThat(facets.documentBytes).isEqualTo(80L)
+        assertThat(facets.documentCount).isEqualTo(5L)
+        assertThat(facets.documentBytes).isEqualTo(120L)
+        assertThat(facets.folders).containsExactly("docs", "docs/2026", "photos", "videos")
     }
 
     private fun cloudFile(

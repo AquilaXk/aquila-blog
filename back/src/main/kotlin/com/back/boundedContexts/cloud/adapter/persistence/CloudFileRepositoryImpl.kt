@@ -36,6 +36,20 @@ class CloudFileRepositoryImpl(
                 ).setParameter("ownerMemberId", ownerMemberId)
 
         val result = query.singleResult as Array<*>
+        val folders =
+            entityManager
+                .createQuery(
+                    """
+                    SELECT DISTINCT f.folderPath
+                    FROM CloudFile f
+                    WHERE f.ownerMemberId = :ownerMemberId
+                      AND f.deletedAt IS NULL
+                      AND TRIM(f.folderPath) <> ''
+                    ORDER BY f.folderPath ASC
+                    """.trimIndent(),
+                    String::class.java,
+                ).setParameter("ownerMemberId", ownerMemberId)
+                .resultList
         return CloudFileFacetsResBody(
             allCount = (result[0] as Number).toLong(),
             allBytes = (result[1] as Number).toLong(),
@@ -45,6 +59,7 @@ class CloudFileRepositoryImpl(
             videoBytes = (result[5] as Number).toLong(),
             documentCount = (result[6] as Number).toLong(),
             documentBytes = (result[7] as Number).toLong(),
+            folders = folders,
         )
     }
 

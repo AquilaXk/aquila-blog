@@ -416,7 +416,7 @@ class CloudExternalPlaybackTokenService(
 
     companion object {
         private val TOKEN_TTL: Duration = Duration.ofHours(6)
-        val ALLOWED_SHARE_TTL_SECONDS: Set<Long> = setOf(3_600L, 21_600L, 86_400L, 604_800L)
+        private val ALLOWED_SHARE_TTL_SECONDS: Set<Long> = setOf(3_600L, 21_600L, 86_400L, 604_800L)
         private val secureRandom = SecureRandom()
 
         fun hashToken(token: String): String =

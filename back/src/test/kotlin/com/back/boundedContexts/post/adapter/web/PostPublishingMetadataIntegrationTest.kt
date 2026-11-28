@@ -97,16 +97,17 @@ class PostPublishingMetadataIntegrationTest : BaseControllerIntegrationTest() {
         val secondId = JsonPath.read<Int>(secondRes.response.contentAsString, "$.data.id").toLong()
 
         // 비목록(unlisted) 및 미발행 글은 공개 시리즈 목록에서 제외
-        postFacade.write(
-            author = adminActor(),
-            title = "비목록 번외편",
-            content = "비목록 본문",
-            published = true,
-            listed = false,
-            summaryMode = PostSummaryMode.AUTO,
-            seriesName = "Compiler Architecture",
-            seriesOrder = 99,
-        )
+        val unlistedSeriesPost =
+            postFacade.write(
+                author = adminActor(),
+                title = "비목록 번외편",
+                content = "비목록 본문",
+                published = true,
+                listed = false,
+                summaryMode = PostSummaryMode.AUTO,
+                seriesName = "Compiler Architecture",
+                seriesOrder = 99,
+            )
 
         val seriesRes =
             mvc
@@ -159,6 +160,33 @@ class PostPublishingMetadataIntegrationTest : BaseControllerIntegrationTest() {
                 jsonPath("$.data.seriesName") { value(null as String?) }
                 jsonPath("$.data.seriesOrder") { value(null as Int?) }
                 jsonPath("$.data.canonicalUrl") { value("https://mirror.example.com/posts/parser-v2") }
+            }
+
+        // 비목록 글·시리즈 미지정 글의 시리즈 조회는 빈 시리즈 응답을, 미존재 글 조회는 404를 반환한다
+        mvc
+            .get("/post/api/v1/posts/${unlistedSeriesPost.id}/series")
+            .andExpect {
+                status { isOk() }
+                jsonPath("$.seriesName") { value(null as String?) }
+                jsonPath("$.items.length()") { value(0) }
+            }
+        cacheManager.getCache(PostQueryCacheNames.DETAIL_PUBLIC_META)?.evict(secondId)
+        mvc
+            .get("/post/api/v1/posts/$secondId/series")
+            .andExpect {
+                status { isOk() }
+                jsonPath("$.seriesName") { value(null as String?) }
+                jsonPath("$.items.length()") { value(0) }
+            }
+        mvc
+            .get("/post/api/v1/posts/999999/series")
+            .andExpect {
+                status { isNotFound() }
+            }
+        mvc
+            .get("/post/api/v1/posts/999999/series")
+            .andExpect {
+                status { isNotFound() }
             }
     }
 
@@ -271,6 +299,32 @@ class PostPublishingMetadataIntegrationTest : BaseControllerIntegrationTest() {
             .andExpect {
                 status { isOk() }
                 jsonPath("$.resultCode") { value("200-1") }
+            }
+
+        // 이미 삭제됐거나 임시초안이 아닌 글 삭제는 Fail-Closed 거부된다
+        mvc
+            .delete("/post/api/v1/adm/posts/temp/$d1Id")
+            .andExpect {
+                status { isNotFound() }
+            }
+        mvc
+            .delete("/post/api/v1/adm/posts/temp/999999")
+            .andExpect {
+                status { isNotFound() }
+            }
+        val nonTempPost =
+            postFacade.write(
+                author = adminActor(),
+                title = "일반 공개 글",
+                content = "임시초안 삭제 대상이 아닌 글입니다.",
+                published = true,
+                listed = true,
+                summaryMode = PostSummaryMode.AUTO,
+            )
+        mvc
+            .delete("/post/api/v1/adm/posts/temp/${nonTempPost.id}")
+            .andExpect {
+                status { isBadRequest() }
             }
 
         val dueFuture = Instant.now().plus(2, ChronoUnit.HOURS).truncatedTo(ChronoUnit.SECONDS)

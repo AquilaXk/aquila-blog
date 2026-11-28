@@ -50,8 +50,6 @@ class CloudExternalPlaybackTokenServiceTest {
             )
 
         assertThat(defaultClockService).isNotNull()
-        assertThat(CloudExternalPlaybackTokenService.ALLOWED_SHARE_TTL_SECONDS)
-            .containsExactlyInAnyOrder(3_600L, 21_600L, 86_400L, 604_800L)
     }
 
     @Test
@@ -88,6 +86,8 @@ class CloudExternalPlaybackTokenServiceTest {
             )
 
         val share1h = service.issueShareLink(ownerMemberId = 7L, fileId = 20L, ttlSeconds = 3_600L)
+        val share24h = service.issueShareLink(ownerMemberId = 7L, fileId = 20L, ttlSeconds = 86_400L)
+        assertThat(share24h.expiresAt).isEqualTo(Instant.parse("2026-06-27T12:00:00Z"))
         val playback1h =
             service
                 .apply {
@@ -118,13 +118,13 @@ class CloudExternalPlaybackTokenServiceTest {
             .hasMessageContaining("올바르지 않거나 만료")
 
         val listed = service.listShareTokens(ownerMemberId = 7L, fileId = 20L)
-        assertThat(listed).hasSize(2)
+        assertThat(listed).hasSize(3)
         assertThat(listed.map { it.purpose }).containsOnly(CloudExternalPlaybackTokenPurpose.SHARE_LINK)
 
         service.revokeShareToken(ownerMemberId = 7L, fileId = 20L, tokenId = listed.first().id)
-        assertThat(service.listShareTokens(ownerMemberId = 7L, fileId = 20L)).hasSize(1)
+        assertThat(service.listShareTokens(ownerMemberId = 7L, fileId = 20L)).hasSize(2)
 
-        assertThat(service.revokeAllShareTokens(ownerMemberId = 7L, fileId = 20L)).isEqualTo(1)
+        assertThat(service.revokeAllShareTokens(ownerMemberId = 7L, fileId = 20L)).isEqualTo(2)
         assertThat(service.listShareTokens(ownerMemberId = 7L, fileId = 20L)).isEmpty()
     }
 

@@ -363,6 +363,51 @@ class PostApplicationUseCaseCollaboratorTest {
         assertThat(service.findTemp(author)).isNull()
     }
 
+    @Test
+    @DisplayName("createNewTempDraft는 선택 의존성 유무와 관계없이 새 임시초안을 저장하고 마커를 갱신한다")
+    fun `createNewTempDraft persists new draft with and without optional collaborators`() {
+        val postRepository = mock(PostRepositoryPort::class.java)
+        val memberAttrRepository = mock(MemberAttrRepositoryPort::class.java)
+        val postHydrationService = mock(PostHydrationService::class.java)
+        val postCounterService = mock(PostCounterService::class.java)
+        val memberRepository = mock(MemberRepositoryPort::class.java)
+        val author = testMember(5L)
+
+        given(postRepository.save(anyPost())).willAnswer {
+            val saved = it.arguments[0] as Post
+            testPost(id = 501L, author = saved.author).apply {
+                title = saved.title
+                content = saved.content
+                published = saved.published
+                listed = saved.listed
+                isTempDraft = saved.isTempDraft
+            }
+        }
+        given(memberAttrRepository.findBySubjectAndName(author, "activeTempDraftPostId")).willReturn(null)
+        given(memberAttrRepository.save(anyMemberAttr())).willAnswer { it.arguments[0] as MemberAttr }
+
+        val minimalService = PostTempDraftService(postRepository, memberAttrRepository, postHydrationService)
+        val createdMinimal = minimalService.createNewTempDraft(author)
+        assertThat(createdMinimal.id).isEqualTo(501L)
+        assertThat(createdMinimal.isTempDraft).isTrue()
+        then(postCounterService).shouldHaveNoInteractions()
+        then(memberRepository).shouldHaveNoInteractions()
+
+        given(memberRepository.findByIdForUpdate(author.id)).willReturn(Optional.of(author))
+        val wiredService =
+            PostTempDraftService(
+                postRepository = postRepository,
+                memberAttrRepository = memberAttrRepository,
+                postHydrationService = postHydrationService,
+                postCounterService = postCounterService,
+                memberRepository = memberRepository,
+            )
+        val createdWired = wiredService.createNewTempDraft(author)
+        assertThat(createdWired.id).isEqualTo(501L)
+        then(memberRepository).should().findByIdForUpdate(author.id)
+        then(postCounterService).should().incrementMemberPostsCount(author)
+    }
+
     private fun testMember(id: Long = 1): Member =
         Member(id = id, username = "user-$id", nickname = "작성자$id", apiKey = "api-key-$id").also {
             val now = Instant.now()

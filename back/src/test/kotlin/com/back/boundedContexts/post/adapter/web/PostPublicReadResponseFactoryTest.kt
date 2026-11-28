@@ -3,7 +3,9 @@ package com.back.boundedContexts.post.adapter.web
 import com.back.boundedContexts.post.application.support.PostCacheTags
 import com.back.boundedContexts.post.dto.CursorFeedPageDto
 import com.back.boundedContexts.post.dto.FeedPostDto
+import com.back.boundedContexts.post.dto.PublicPostSeriesResBody
 import com.back.boundedContexts.post.dto.PublicPostsBootstrapDto
+import com.back.boundedContexts.post.dto.PublicSeriesPostItemDto
 import com.back.boundedContexts.post.dto.PublicSitemapPostItemDto
 import com.back.boundedContexts.post.dto.PublicSitemapPostsResBody
 import com.back.boundedContexts.post.dto.TagCountDto
@@ -789,6 +791,45 @@ class PostPublicReadResponseFactoryTest {
         assertThat(oneItemTag).isNotEqualTo(emptyTag)
         assertThat(multiItemTag).isNotEqualTo(oneItemTag)
         assertThat(differentLimitTag).isNotEqualTo(multiItemTag)
+
+        val emptySeries = PublicPostSeriesResBody(seriesName = null, items = emptyList())
+        val unorderedSeriesItem =
+            PublicSeriesPostItemDto(
+                id = 1L,
+                title = "첫 글",
+                seriesOrder = null,
+                createdAt = createdAt,
+            )
+        val orderedSeriesItem =
+            PublicSeriesPostItemDto(
+                id = 1L,
+                title = "첫 글",
+                seriesOrder = 1,
+                createdAt = createdAt,
+            )
+        val emptySeriesTag = responseFactory.buildSeriesWeakEtag(1L, emptySeries)
+        val unorderedSeriesTag =
+            seedBuilder.buildSeriesWeakEtag(
+                1L,
+                PublicPostSeriesResBody(seriesName = "Series", items = listOf(unorderedSeriesItem)),
+            )
+        val orderedSeriesTag =
+            responseFactory.buildSeriesWeakEtag(
+                1L,
+                PublicPostSeriesResBody(seriesName = "Series", items = listOf(orderedSeriesItem)),
+            )
+        val renamedTitleSeriesTag =
+            responseFactory.buildSeriesWeakEtag(
+                1L,
+                PublicPostSeriesResBody(
+                    seriesName = "Series",
+                    items = listOf(orderedSeriesItem.copy(title = "개정 첫 글")),
+                ),
+            )
+        assertThat(emptySeriesTag).startsWith("W/\"").endsWith("\"")
+        assertThat(unorderedSeriesTag).isNotEqualTo(emptySeriesTag)
+        assertThat(orderedSeriesTag).isNotEqualTo(unorderedSeriesTag)
+        assertThat(renamedTitleSeriesTag).isNotEqualTo(orderedSeriesTag)
     }
 
     private fun feedPost(

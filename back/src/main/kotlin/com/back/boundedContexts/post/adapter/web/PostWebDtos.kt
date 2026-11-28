@@ -65,10 +65,10 @@ data class PostWriteResultDto(
     val listed: Boolean,
     val summary: String,
     val summarySource: PostSummarySource,
-    val scheduledAt: Instant? = null,
-    val seriesName: String? = null,
-    val seriesOrder: Int? = null,
-    val canonicalUrl: String? = null,
+    val scheduledAt: Instant?,
+    val seriesName: String?,
+    val seriesOrder: Int?,
+    val canonicalUrl: String?,
 )
 
 data class PostHitResBody(

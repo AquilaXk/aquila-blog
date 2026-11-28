@@ -3,16 +3,11 @@ package com.back.boundedContexts.post.application.service
 import com.back.boundedContexts.member.domain.shared.Member
 import com.back.boundedContexts.member.domain.shared.memberMixin.MemberProfileWorkspaceContent
 import com.back.boundedContexts.post.adapter.scheduler.PostScheduledPublishScheduledJob
-import com.back.boundedContexts.post.adapter.web.PostPublicReadEtagSeedBuilder
-import com.back.boundedContexts.post.adapter.web.PostWriteResultDto
 import com.back.boundedContexts.post.application.port.input.PostScheduledPublishUseCase
 import com.back.boundedContexts.post.application.port.output.PostRepositoryPort
 import com.back.boundedContexts.post.application.port.output.PostRevisionRepositoryPort
-import com.back.boundedContexts.post.dto.PublicPostSeriesResBody
-import com.back.boundedContexts.post.dto.PublicSeriesPostItemDto
 import com.back.boundedContexts.post.event.PostWrittenEvent
 import com.back.boundedContexts.post.model.Post
-import com.back.boundedContexts.post.model.PostSummarySource
 import com.back.global.app.AppConfig
 import com.back.global.exception.application.AppException
 import com.back.global.exception.application.ErrorCode
@@ -100,6 +95,8 @@ class PostPublishingMetadataValidatorAndSchedulerTest {
             .isEqualTo("http://origin.example.com/a")
         assertThat(PostPublishingMetadataValidator.normalizeCanonicalUrl("https://example.com/@author/post"))
             .isEqualTo("https://example.com/@author/post")
+        assertThat(PostPublishingMetadataValidator.normalizeCanonicalUrl("https://example.com/한글"))
+            .isEqualTo("https://example.com/%ED%95%9C%EA%B8%80")
 
         val tooLongUrl = "https://example.com/" + "a".repeat(PostPublishingMetadataValidator.MAX_CANONICAL_URL_LENGTH)
         listOf(
@@ -111,7 +108,9 @@ class PostPublishingMetadataValidatorAndSchedulerTest {
             "javascript:alert(1)",
             "ftp://example.com/file",
             "https://user:pass@example.com/post",
+            "https://user@example.com/post",
             "https://@example.com/post",
+            "https://:8080/post",
             "https:///missing-host",
             "/posts/local",
             "//protocol-relative.example.com/posts/1",
@@ -194,6 +193,13 @@ class PostPublishingMetadataValidatorAndSchedulerTest {
                 now = fixedNow,
             ),
         ).isEqualTo(futureAt)
+        assertThatThrownBy {
+            PostPublishingMetadataValidator.normalizeSchedule(
+                published = false,
+                requestedScheduledAt = pastAt,
+                now = fixedNow,
+            )
+        }.isInstanceOf(AppException::class.java)
 
         val defaultExistingNormalized =
             PostPublishingMetadataValidator.normalizeAll(
@@ -208,6 +214,16 @@ class PostPublishingMetadataValidatorAndSchedulerTest {
         assertThat(defaultExistingNormalized.seriesName).isEqualTo("Spring Boot")
         assertThat(defaultExistingNormalized.seriesOrder).isEqualTo(1)
         assertThat(defaultExistingNormalized.canonicalUrl).isNull()
+        assertThatThrownBy {
+            PostPublishingMetadataValidator.normalizeAll(
+                published = false,
+                scheduledAt = pastAt,
+                seriesName = "Spring Boot",
+                seriesOrder = 1,
+                canonicalUrl = null,
+                now = fixedNow,
+            )
+        }.isInstanceOf(AppException::class.java)
     }
 
     @Test
@@ -446,7 +462,7 @@ class PostPublishingMetadataValidatorAndSchedulerTest {
     }
 
     @Test
-    fun `예약 발행 실행기는 선택적 의존성 없이도 동작하고 결과 DTO와 시리즈 ETag 기본값을 검증한다`() {
+    fun `예약 발행 실행기는 선택적 캐시 무효화기와 리비전 저장소 없이도 발행을 완료한다`() {
         val postRepository = mock(PostRepositoryPort::class.java)
         val postTempDraftService = mock(PostTempDraftService::class.java)
         val postTagIndexService = mock(PostTagIndexService::class.java)
@@ -476,7 +492,22 @@ class PostPublishingMetadataValidatorAndSchedulerTest {
         `when`(postTagIndexService.syncPostTags(post)).thenReturn(emptyList())
 
         assertThat(executorWithoutOptional.publishDuePost(31L, fixedNow)).isTrue()
+        assertThat(post.published).isTrue()
+        assertThat(post.listed).isTrue()
+        assertThat(post.scheduledAt).isNull()
+        verify(postRepository).flush()
+        assertThat(
+            mockingDetails(taskFacade).invocations.filter { it.method.name == "addToQueue" },
+        ).hasSize(1)
+    }
 
+    @Test
+    fun `트랜잭션 동기화가 비활성인 예약 발행 실행기에서도 즉시 캐시 무효화 실패를 격리한다`() {
+        val postRepository = mock(PostRepositoryPort::class.java)
+        val postTempDraftService = mock(PostTempDraftService::class.java)
+        val postTagIndexService = mock(PostTagIndexService::class.java)
+        val postHydrationService = mock(PostHydrationService::class.java)
+        val taskFacade = mock(TaskFacade::class.java)
         val failingCacheManager = mock(CacheManager::class.java)
         `when`(failingCacheManager.getCache(anyString())).thenThrow(RuntimeException("cache offline"))
         val nonTxExecutor =
@@ -489,6 +520,7 @@ class PostPublishingMetadataValidatorAndSchedulerTest {
                 objectMapper = jacksonObjectMapper(),
                 postReadCacheInvalidator = PostReadCacheInvalidator(failingCacheManager),
             )
+        val author = buildMember(9L)
         val secondPost =
             buildPost(
                 id = 32L,
@@ -503,41 +535,12 @@ class PostPublishingMetadataValidatorAndSchedulerTest {
         `when`(postTagIndexService.syncPostTags(secondPost)).thenReturn(emptyList())
 
         assertThat(nonTxExecutor.publishDuePost(32L, fixedNow)).isTrue()
-
-        val defaultResultDto =
-            PostWriteResultDto(
-                id = 31L,
-                title = "기본 메타 DTO",
-                version = 0L,
-                published = true,
-                listed = true,
-                summary = "",
-                summarySource = PostSummarySource.NONE,
-            )
-        assertThat(defaultResultDto.scheduledAt).isNull()
-        assertThat(defaultResultDto.seriesName).isNull()
-        assertThat(defaultResultDto.seriesOrder).isNull()
-        assertThat(defaultResultDto.canonicalUrl).isNull()
-
-        val seedBuilder = PostPublicReadEtagSeedBuilder()
-        val emptySeriesEtag = seedBuilder.buildSeriesWeakEtag(1L, PublicPostSeriesResBody(null, emptyList()))
-        val unorderedItemSeriesEtag =
-            seedBuilder.buildSeriesWeakEtag(
-                1L,
-                PublicPostSeriesResBody(
-                    seriesName = "Series",
-                    items =
-                        listOf(
-                            PublicSeriesPostItemDto(
-                                id = 1L,
-                                title = "첫 글",
-                                seriesOrder = null,
-                                createdAt = fixedNow,
-                            ),
-                        ),
-                ),
-            )
-        assertThat(emptySeriesEtag).startsWith("W/\"").isNotEqualTo(unorderedItemSeriesEtag)
+        assertThat(secondPost.published).isTrue()
+        assertThat(secondPost.scheduledAt).isNull()
+        verify(failingCacheManager).getCache(PostQueryCacheNames.ADMIN_POSTS_FIRST_PAGE)
+        assertThat(
+            mockingDetails(taskFacade).invocations.filter { it.method.name == "addToQueue" },
+        ).hasSize(1)
     }
 
     private fun buildMember(id: Long): Member =

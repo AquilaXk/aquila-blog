@@ -4,7 +4,7 @@ import java.time.Instant
 
 interface PostScheduledPublishUseCase {
     fun publishDueScheduledPosts(
-        now: Instant? = null,
-        batchSize: Int = 50,
+        now: Instant?,
+        batchSize: Int,
     ): Int
 }

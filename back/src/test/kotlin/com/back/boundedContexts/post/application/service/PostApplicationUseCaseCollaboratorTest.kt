@@ -322,6 +322,47 @@ class PostApplicationUseCaseCollaboratorTest {
         then(memberAttrRepository).should(org.mockito.Mockito.never()).findBySubjectAndName(author2, "activeTempDraftPostId")
     }
 
+    @Test
+    @DisplayName("임시초안 목록·마커 승계·소유권 불일치 폴백을 처리한다")
+    fun `temp draft list empty and clear tracked marker transitions cleanly`() {
+        val postRepository = mock(PostRepositoryPort::class.java)
+        val memberAttrRepository = mock(MemberAttrRepositoryPort::class.java)
+        val postHydrationService = mock(PostHydrationService::class.java)
+        val service = PostTempDraftService(postRepository, memberAttrRepository, postHydrationService)
+        val author = testMember(1L)
+        val otherAuthor = testMember(2L)
+
+        given(postRepository.findTempDraftsByAuthor(1L, 50)).willReturn(emptyList())
+        assertThat(service.listTempDrafts(author)).isEmpty()
+        then(postHydrationService).shouldHaveNoInteractions()
+
+        val draft1 = testPost(id = 10L, author = author).apply { isTempDraft = false }
+        val draft2 = testPost(id = 11L, author = author).apply { isTempDraft = true }
+        val marker = MemberAttr(1L, author, "activeTempDraftPostId", "10")
+        given(memberAttrRepository.findBySubjectAndName(author, "activeTempDraftPostId")).willReturn(marker)
+        given(memberAttrRepository.save(marker)).willReturn(marker)
+        assertThat(service.isTempDraft(draft1)).isTrue()
+
+        service.clearTrackedTempDraftIfMatches(author, 999L)
+        assertThat(marker.strValue).isEqualTo("10")
+
+        given(postRepository.findTempDraftsByAuthor(1L, 2)).willReturn(listOf(draft1, draft2))
+        service.clearTrackedTempDraftIfMatches(author, 10L)
+        assertThat(marker.strValue).isEqualTo("11")
+
+        given(postRepository.findTempDraftsByAuthor(1L, 2)).willReturn(listOf(draft2))
+        service.clearTrackedTempDraftIfMatches(author, 11L)
+        assertThat(marker.strValue).isEmpty()
+
+        marker.strValue = "77"
+        given(postRepository.findById(77L)).willReturn(Optional.empty())
+        assertThat(service.findTemp(author)).isNull()
+
+        val foreignPost = testPost(id = 77L, author = otherAuthor)
+        given(postRepository.findById(77L)).willReturn(Optional.of(foreignPost))
+        assertThat(service.findTemp(author)).isNull()
+    }
+
     private fun testMember(id: Long = 1): Member =
         Member(id = id, username = "user-$id", nickname = "작성자$id", apiKey = "api-key-$id").also {
             val now = Instant.now()

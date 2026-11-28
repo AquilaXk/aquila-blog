@@ -80,5 +80,5 @@ interface PostPublicReadQueryUseCase {
 
     fun getPublicBacklinks(id: Long): PublicPostBacklinksResBody
 
-    fun getPostSeries(id: Long): PublicPostSeriesResBody = PublicPostSeriesResBody(null, emptyList())
+    fun getPostSeries(id: Long): PublicPostSeriesResBody
 }

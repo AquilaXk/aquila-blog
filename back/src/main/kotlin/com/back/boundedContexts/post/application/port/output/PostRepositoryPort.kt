@@ -194,21 +194,21 @@ interface PostRepositoryPort {
 
     fun findTempDraftsByAuthor(
         authorId: Long,
-        limit: Int = 50,
+        limit: Int,
     ): List<Post>
 
     fun findDueScheduledDraftIds(
         now: Instant,
-        limit: Int = 50,
+        limit: Int,
     ): List<Long>
 
     fun findPublishedSeriesPosts(
         seriesName: String,
-        limit: Int = 100,
+        limit: Int,
     ): List<PublicSeriesPostItemDto>
 
     fun findDistinctSeriesNamesByAuthor(
         authorId: Long,
-        limit: Int = 100,
+        limit: Int,
     ): List<String>
 }

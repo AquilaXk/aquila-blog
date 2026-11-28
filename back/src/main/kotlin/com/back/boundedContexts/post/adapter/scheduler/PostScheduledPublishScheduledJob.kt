@@ -25,7 +25,7 @@ class PostScheduledPublishScheduledJob(
     @Scheduled(fixedDelayString = "\${custom.post.scheduledPublish.fixedDelayMs:30000}")
     @SchedulerLock(name = "publishScheduledPosts", lockAtLeastFor = "PT10S")
     fun publishDuePosts() {
-        val count = postScheduledPublishUseCase.publishDueScheduledPosts(batchSize = batchSize)
+        val count = postScheduledPublishUseCase.publishDueScheduledPosts(now = null, batchSize = batchSize)
         if (count > 0) {
             logger.info("Published {} scheduled posts", count)
         }

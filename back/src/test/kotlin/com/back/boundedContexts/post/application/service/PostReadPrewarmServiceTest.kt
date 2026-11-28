@@ -7,6 +7,7 @@ import com.back.boundedContexts.post.dto.FeedPostDto
 import com.back.boundedContexts.post.dto.PostDto
 import com.back.boundedContexts.post.dto.PostWithContentDto
 import com.back.boundedContexts.post.dto.PublicPostBacklinksResBody
+import com.back.boundedContexts.post.dto.PublicPostSeriesResBody
 import com.back.boundedContexts.post.dto.PublicPostsBootstrapDto
 import com.back.boundedContexts.post.dto.PublicSitemapPostsResBody
 import com.back.boundedContexts.post.dto.PublicWikilinkCatalogResBody
@@ -171,5 +172,7 @@ class PostReadPrewarmServiceTest {
         override fun getPublicWikilinkCatalog(): PublicWikilinkCatalogResBody = PublicWikilinkCatalogResBody()
 
         override fun getPublicBacklinks(id: Long): PublicPostBacklinksResBody = PublicPostBacklinksResBody()
+
+        override fun getPostSeries(id: Long): PublicPostSeriesResBody = PublicPostSeriesResBody(null, emptyList())
     }
 }

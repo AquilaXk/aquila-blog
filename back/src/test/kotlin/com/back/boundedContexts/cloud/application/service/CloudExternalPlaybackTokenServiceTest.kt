@@ -50,6 +50,8 @@ class CloudExternalPlaybackTokenServiceTest {
             )
 
         assertThat(defaultClockService).isNotNull()
+        assertThat(CloudExternalPlaybackTokenService.ALLOWED_SHARE_TTL_SECONDS)
+            .containsExactlyInAnyOrder(3_600L, 21_600L, 86_400L, 604_800L)
     }
 
     @Test

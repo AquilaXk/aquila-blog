@@ -3,11 +3,16 @@ package com.back.boundedContexts.post.application.service
 import com.back.boundedContexts.member.domain.shared.Member
 import com.back.boundedContexts.member.domain.shared.memberMixin.MemberProfileWorkspaceContent
 import com.back.boundedContexts.post.adapter.scheduler.PostScheduledPublishScheduledJob
+import com.back.boundedContexts.post.adapter.web.PostPublicReadEtagSeedBuilder
+import com.back.boundedContexts.post.adapter.web.PostWriteResultDto
 import com.back.boundedContexts.post.application.port.input.PostScheduledPublishUseCase
 import com.back.boundedContexts.post.application.port.output.PostRepositoryPort
 import com.back.boundedContexts.post.application.port.output.PostRevisionRepositoryPort
+import com.back.boundedContexts.post.dto.PublicPostSeriesResBody
+import com.back.boundedContexts.post.dto.PublicSeriesPostItemDto
 import com.back.boundedContexts.post.event.PostWrittenEvent
 import com.back.boundedContexts.post.model.Post
+import com.back.boundedContexts.post.model.PostSummarySource
 import com.back.global.app.AppConfig
 import com.back.global.exception.application.AppException
 import com.back.global.exception.application.ErrorCode
@@ -20,7 +25,9 @@ import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.BeforeAll
 import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Test
+import org.mockito.ArgumentMatchers.any
 import org.mockito.ArgumentMatchers.anyString
+import org.mockito.ArgumentMatchers.eq
 import org.mockito.Mockito.mock
 import org.mockito.Mockito.mockingDetails
 import org.mockito.Mockito.never
@@ -106,6 +113,8 @@ class PostPublishingMetadataValidatorAndSchedulerTest {
             "https://user:pass@example.com/post",
             "https://@example.com/post",
             "https:///missing-host",
+            "/posts/local",
+            "//protocol-relative.example.com/posts/1",
         ).forEach { invalidUrl ->
             assertThatThrownBy { PostPublishingMetadataValidator.normalizeCanonicalUrl(invalidUrl) }
                 .describedAs("invalidUrl=%s", invalidUrl)
@@ -177,6 +186,28 @@ class PostPublishingMetadataValidatorAndSchedulerTest {
         assertThat(normalized.seriesName).isEqualTo("Spring Boot")
         assertThat(normalized.seriesOrder).isEqualTo(4)
         assertThat(normalized.canonicalUrl).isEqualTo("https://external.example.com/spring-4")
+
+        assertThat(
+            PostPublishingMetadataValidator.normalizeSchedule(
+                published = false,
+                requestedScheduledAt = futureAt,
+                now = fixedNow,
+            ),
+        ).isEqualTo(futureAt)
+
+        val defaultExistingNormalized =
+            PostPublishingMetadataValidator.normalizeAll(
+                published = false,
+                scheduledAt = futureAt,
+                seriesName = "Spring Boot",
+                seriesOrder = 1,
+                canonicalUrl = null,
+                now = fixedNow,
+            )
+        assertThat(defaultExistingNormalized.scheduledAt).isEqualTo(futureAt)
+        assertThat(defaultExistingNormalized.seriesName).isEqualTo("Spring Boot")
+        assertThat(defaultExistingNormalized.seriesOrder).isEqualTo(1)
+        assertThat(defaultExistingNormalized.canonicalUrl).isNull()
     }
 
     @Test
@@ -403,10 +434,110 @@ class PostPublishingMetadataValidatorAndSchedulerTest {
 
         val jobUseCase = mock(PostScheduledPublishUseCase::class.java)
         val job = PostScheduledPublishScheduledJob(jobUseCase, 50)
-        `when`(jobUseCase.publishDueScheduledPosts(batchSize = 50)).thenReturn(0).thenReturn(2)
+        `when`(jobUseCase.publishDueScheduledPosts(now = null, batchSize = 50)).thenReturn(0).thenReturn(2)
         job.publishDuePosts()
         job.publishDuePosts()
-        verify(jobUseCase, org.mockito.Mockito.times(2)).publishDueScheduledPosts(batchSize = 50)
+        verify(jobUseCase, org.mockito.Mockito.times(2)).publishDueScheduledPosts(now = null, batchSize = 50)
+
+        val defaultClockService = PostScheduledPublishService(postRepository, executor)
+        `when`(postRepository.findDueScheduledDraftIds(any(Instant::class.java) ?: fixedNow, eq(10)))
+            .thenReturn(emptyList())
+        assertThat(defaultClockService.publishDueScheduledPosts(now = null, batchSize = 10)).isZero()
+    }
+
+    @Test
+    fun `예약 발행 실행기는 선택적 의존성 없이도 동작하고 결과 DTO와 시리즈 ETag 기본값을 검증한다`() {
+        val postRepository = mock(PostRepositoryPort::class.java)
+        val postTempDraftService = mock(PostTempDraftService::class.java)
+        val postTagIndexService = mock(PostTagIndexService::class.java)
+        val postHydrationService = mock(PostHydrationService::class.java)
+        val taskFacade = mock(TaskFacade::class.java)
+        val executorWithoutOptional =
+            PostScheduledPublishExecutor(
+                postRepository = postRepository,
+                postTempDraftService = postTempDraftService,
+                postTagIndexService = postTagIndexService,
+                postHydrationService = postHydrationService,
+                taskFacade = taskFacade,
+                objectMapper = jacksonObjectMapper(),
+            )
+        val author = buildMember(9L)
+        val post =
+            buildPost(
+                id = 31L,
+                author = author,
+                published = false,
+                listed = true,
+                isTempDraft = false,
+                scheduledAt = fixedNow.minusSeconds(1),
+            )
+        `when`(postRepository.findByIdForUpdate(31L)).thenReturn(Optional.of(post))
+        `when`(postTempDraftService.isTempDraft(post)).thenReturn(false)
+        `when`(postTagIndexService.syncPostTags(post)).thenReturn(emptyList())
+
+        assertThat(executorWithoutOptional.publishDuePost(31L, fixedNow)).isTrue()
+
+        val failingCacheManager = mock(CacheManager::class.java)
+        `when`(failingCacheManager.getCache(anyString())).thenThrow(RuntimeException("cache offline"))
+        val nonTxExecutor =
+            PostScheduledPublishExecutor(
+                postRepository = postRepository,
+                postTempDraftService = postTempDraftService,
+                postTagIndexService = postTagIndexService,
+                postHydrationService = postHydrationService,
+                taskFacade = taskFacade,
+                objectMapper = jacksonObjectMapper(),
+                postReadCacheInvalidator = PostReadCacheInvalidator(failingCacheManager),
+            )
+        val secondPost =
+            buildPost(
+                id = 32L,
+                author = author,
+                published = false,
+                listed = true,
+                isTempDraft = false,
+                scheduledAt = fixedNow.minusSeconds(1),
+            )
+        `when`(postRepository.findByIdForUpdate(32L)).thenReturn(Optional.of(secondPost))
+        `when`(postTempDraftService.isTempDraft(secondPost)).thenReturn(false)
+        `when`(postTagIndexService.syncPostTags(secondPost)).thenReturn(emptyList())
+
+        assertThat(nonTxExecutor.publishDuePost(32L, fixedNow)).isTrue()
+
+        val defaultResultDto =
+            PostWriteResultDto(
+                id = 31L,
+                title = "기본 메타 DTO",
+                version = 0L,
+                published = true,
+                listed = true,
+                summary = "",
+                summarySource = PostSummarySource.NONE,
+            )
+        assertThat(defaultResultDto.scheduledAt).isNull()
+        assertThat(defaultResultDto.seriesName).isNull()
+        assertThat(defaultResultDto.seriesOrder).isNull()
+        assertThat(defaultResultDto.canonicalUrl).isNull()
+
+        val seedBuilder = PostPublicReadEtagSeedBuilder()
+        val emptySeriesEtag = seedBuilder.buildSeriesWeakEtag(1L, PublicPostSeriesResBody(null, emptyList()))
+        val unorderedItemSeriesEtag =
+            seedBuilder.buildSeriesWeakEtag(
+                1L,
+                PublicPostSeriesResBody(
+                    seriesName = "Series",
+                    items =
+                        listOf(
+                            PublicSeriesPostItemDto(
+                                id = 1L,
+                                title = "첫 글",
+                                seriesOrder = null,
+                                createdAt = fixedNow,
+                            ),
+                        ),
+                ),
+            )
+        assertThat(emptySeriesEtag).startsWith("W/\"").isNotEqualTo(unorderedItemSeriesEtag)
     }
 
     private fun buildMember(id: Long): Member =

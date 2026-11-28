@@ -29,7 +29,7 @@
   <a href="#주요-기능"><b>주요 기능</b></a> ·
   <a href="#아키텍처"><b>아키텍처</b></a> ·
   <a href="#빠른-시작"><b>빠른 시작</b></a> ·
-  <a href="docs/README.md"><b>문서</b></a> ·
+  <a href="#문서"><b>문서</b></a> ·
   <a href="https://github.com/AquilaXk/aquila-blog-web"><b>Web 저장소 ↗</b></a>
 </p>
 
@@ -37,11 +37,11 @@
 
 ## 주요 기능
 
-- **도메인 경계와 커밋 후 후속 처리** — `post`, `member`, `cloud`, `home` 모듈로 나누고 DB 커밋 이후(`AFTER_COMMIT`)에만 캐시 무효화, 첨부 파일 보존 주기 동기화, 추천 피처 갱신, 위키링크 색인을 실행합니다.
-- **글 작성·발행 백엔드** — 비관적 락 기반 예약 발행 스케줄러, 연재 시리즈 순서 관리, 정본 URL(`canonicalUrl`) 검증, 다중 임시초안(`temp`), 리비전 이력, 위키링크 카탈로그와 역링크 API를 제공합니다.
+- **도메인 경계와 커밋 후 후속 처리** — `post`, `member`, `cloud`, `home` 모듈로 나누고 DB 커밋 이후(`AFTER_COMMIT`)에만 캐시 무효화, 첨부 파일 보존 주기 동기화, 추천 피처 갱신, 도메인 이벤트 발행을 실행합니다.
+- **글 작성·발행 백엔드** — 비관적 락 기반 예약 발행 스케줄러, 연재 시리즈 순서 관리, 정본 URL 검증, 다중 임시초안, 리비전 이력, 위키링크 카탈로그와 역링크 API를 제공합니다.
 - **공개 읽기 캐시와 전문 검색** — PostgreSQL PGroonga 전문 검색과 `page + cursor` 하이브리드 피드를 지원하며 응답별 Weak ETag(`304`)와 `Cache-Tag`·`Surrogate-Key` 무효화로 읽기 지연을 낮춥니다.
 - **클라우드 드라이브와 미디어 방어** — 이미지 매직바이트·픽셀 차원 선검증, ZIP·TAR·TGZ·SVG·AVIF 검사, 멀티파트 이어올리기, 서명된 외부 재생·공유 토큰, 썸네일 렌더링을 처리합니다.
-- **단일 관리자 인증과 Fail-Closed 경계** — 이메일 8자리 코드 검증과 서버 세션(`AdminSessionPrincipal`) 토큰 회전을 사용하며 미공개 글(`/post/api/v1/adm/**`)과 프로메테우스 메트릭을 엣지에서 차단합니다.
+- **단일 관리자 인증과 Fail-Closed 경계** — 이메일 8자리 코드 검증과 서버 세션(`AdminSessionPrincipal`) 토큰 회전으로 `/post/api/v1/adm/**` 등 관리자 경로를 보호하고 공개 상세 경로(`/post/api/v1/posts/{id}`)의 미공개 글 노출과 엣지 내부 엔드포인트(`/actuator/prometheus`, `/api/internal/metrics`) 접근을 차단합니다.
 - **계약 주도 저장소 동기화** — OpenAPI 명세, 에러 코드, 요약 픽스처를 `contracts/public-api/`에 내보내고 SHA-256 매니페스트 검증 뒤 웹 저장소 `main`에 직접 전달합니다.
 - **불변 GHCR 블루/그린 배포와 백업** — 동일 커밋 SHA에서 `CI`와 `Security`(OWASP·CodeQL·Trivy·SBOM)를 통과한 이미지만 승격하고 홈서버 원격 롤아웃, 자동 롤백, 암호화 백업 복원 드릴을 실행합니다.
 
@@ -70,6 +70,8 @@
 
 ```
 aquila-blog/
+├── .githooks/                # 사전 커밋·푸시·계약 동기화 훅
+├── README.assets/            # README 아이콘 및 아키텍처 다이어그램
 ├── back/                     # Spring Boot + Kotlin API 서버
 ├── contracts/public-api/     # OpenAPI 명세·에러 코드·매니페스트 정본
 ├── deploy/homeserver/        # Caddy, Blue/Green 롤아웃, 모니터링, 백업 스크립트
@@ -88,7 +90,6 @@ aquila-blog/
 git config core.hooksPath .githooks                        # 저장소 Git 훅 연결
 docker compose -f back/devInfra/docker-compose.yml up -d   # 로컬 PostgreSQL·Redis·MinIO 실행
 ./back/gradlew -p back bootRun                             # 백엔드 API 실행 (http://localhost:8080)
-./back/gradlew -p back exportOpenApiContract               # 공개 API OpenAPI 계약 생성
 ```
 
 <details>
@@ -97,9 +98,13 @@ docker compose -f back/devInfra/docker-compose.yml up -d   # 로컬 PostgreSQL·
 ```sh
 ./back/gradlew -p back ktlintCheck                         # Kotlin 코드 스타일 검사
 ./back/gradlew -p back check                               # 전체 단위·통합 테스트
+./back/gradlew -p back test \
+  --tests "com.back.global.springDoc.OpenApiContractExportTest" \
+  --tests "com.back.global.contracts.ErrorCodeContractExportTest" \
+  --rerun-tasks
+node tools/contracts/check-public-contracts.mjs            # 공개 API 계약 동기화·드리프트 검증
 bash tools/guards/check-forbidden-tracked-files.sh         # 비허용 문서·메타데이터 검사
 node tools/repo-boundary/check-platform-boundary.mjs       # 플랫폼-웹 저장소 경계 검사
-node tools/contracts/check-public-contracts.mjs            # 공개 API 계약 매니페스트 검증
 node tools/ci/verify-test-execution-inventory.mjs          # 테스트 실행 인벤토리 검증
 ```
 
@@ -124,7 +129,7 @@ node tools/ci/verify-test-execution-inventory.mjs          # 테스트 실행 �
 
 ## 후원
 
-Aquila Blog Platform은 오픈소스로 공개합니다. 후원금은 개발 시간과 홈서버 운영·테스트 비용에 쓰입니다. [github.com/sponsors/AquilaXk](https://github.com/sponsors/AquilaXk)
+Aquila Blog Platform은 무료 오픈소스입니다. 후원금은 개발 시간과 홈서버 운영·테스트 비용에 쓰입니다. [github.com/sponsors/AquilaXk](https://github.com/sponsors/AquilaXk)
 
 ### 후원해 주신 분들
 
